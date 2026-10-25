@@ -1,0 +1,138 @@
+name: "Setup Environment"
+description: "Sets up the build environment including .NET, libmpv, and dependencies"
+inputs:
+  version:
+    description: "Version number"
+    required: true
+  sideload:
+    description: "Is sideload build"
+    required: false
+    default: "false"
+  platform:
+    description: "Target platform (x64/arm64)"
+    required: true
+  configuration:
+    description: "Build configuration"
+    required: true
+  solution-name:
+    description: "Solution file path"
+    required: true
+  manifest-path:
+    description: "Manifest file path"
+    required: true
+  gh-token:
+    description: "GitHub Token for downloading libmpv"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Update Manifest
+      shell: pwsh
+      run: |
+        $version = "${{ inputs.version }}"
+        $sideload = "${{ inputs.sideload }}"
+        $manifestPath = "${{ inputs.manifest-path }}"
+
+        # Ensure version format x.x.x.x if user inputs x.x.x
+        if ($version -match '^\d+\.\d+\.\d+$') {
+            $version = "$version.0"
+        }
+
+        Write-Host "Updating manifest version to: $version"
+
+        # Update Version
+        (Get-Content $manifestPath) -replace '(?<!Min)Version="\d+\.\d+\.\d+\.\d+"', "Version=""$version""" | Set-Content $manifestPath
+
+        # Update Publisher if Sideload
+        if ($sideload -eq "true") {
+            Write-Host "Sideload mode enabled. Updating Publisher to CN=Richasy"
+            # Replace Publisher in Identity tag
+            (Get-Content $manifestPath) -replace 'Publisher="CN=[A-F0-9-]+"', 'Publisher="CN=Richasy"' | Set-Content $manifestPath
+        }
+
+        # Verify change
+        Get-Content $manifestPath | Select-String "Version="
+        Get-Content $manifestPath | Select-String "Publisher="
+
+    - name: Install .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Download and Setup Dependencies
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+      run: |
+        $platform = "${{ inputs.platform }}"
+        $mpvArch = if ($platform -eq "x64") { "x86_64" } else { "aarch64" }
+
+        # --- libmpv setup ---
+        $mpvPattern = "mpv-dev-$mpvArch-*-git-*.7z"
+        $mpvTargetDir = "src/Desktop/BiliCopilot.UI/Assets/libmpv/$platform"
+
+        Write-Host "Mapping platform $platform to mpv arch $mpvArch"
+
+        # Create target directory
+        New-Item -ItemType Directory -Force -Path $mpvTargetDir
+
+        # Download latest release asset
+        Write-Host "Downloading libmpv from shinchiro/mpv-winbuild-cmake..."
+        gh release download --repo shinchiro/mpv-winbuild-cmake --pattern $mpvPattern --clobber
+
+        # Find the downloaded file
+        $mpvArchive = Get-ChildItem -Filter $mpvPattern | Select-Object -First 1
+
+        if ($mpvArchive) {
+            Write-Host "Found archive: $($mpvArchive.Name)"
+            # Extract libmpv-2.dll
+            7z e "$($mpvArchive.FullName)" -o"$mpvTargetDir" libmpv-2.dll -r -y
+            
+            if (Test-Path "$mpvTargetDir\libmpv-2.dll") {
+                Write-Host "Successfully extracted libmpv-2.dll to $mpvTargetDir"
+            } else {
+                Write-Error "Failed to extract libmpv-2.dll"
+                exit 1
+            }
+        } else {
+            Write-Error "No archive found matching pattern $mpvPattern"
+            exit 1
+        }
+
+        # --- ffmpeg setup ---
+        $ffmpegPattern = "ffmpeg-$mpvArch-git-*.7z"
+        $ffmpegTargetDir = "src/Desktop/BiliCopilot.UI/Assets/ffmpeg/$platform"
+
+        # Create target directory
+        New-Item -ItemType Directory -Force -Path $ffmpegTargetDir
+
+        # Download latest release asset
+        Write-Host "Downloading ffmpeg from shinchiro/mpv-winbuild-cmake..."
+        gh release download --repo shinchiro/mpv-winbuild-cmake --pattern $ffmpegPattern --clobber
+
+        # Find the downloaded file
+        $ffmpegArchive = Get-ChildItem -Filter $ffmpegPattern | Select-Object -First 1
+
+        if ($ffmpegArchive) {
+            Write-Host "Found archive: $($ffmpegArchive.Name)"
+            # Extract ffmpeg.exe
+            7z e "$($ffmpegArchive.FullName)" -o"$ffmpegTargetDir" ffmpeg.exe -r -y
+            
+            if (Test-Path "$ffmpegTargetDir\ffmpeg.exe") {
+                Write-Host "Successfully extracted ffmpeg.exe to $ffmpegTargetDir"
+            } else {
+                Write-Error "Failed to extract ffmpeg.exe"
+                exit 1
+            }
+        } else {
+            Write-Error "No archive found matching pattern $ffmpegPattern"
+            exit 1
+        }
+
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Restore dependencies
+      shell: pwsh
+      run: msbuild ${{ inputs.solution-name }} /t:Restore /p:Configuration=${{ inputs.configuration }}

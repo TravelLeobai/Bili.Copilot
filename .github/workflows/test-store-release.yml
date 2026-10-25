@@ -1,0 +1,147 @@
+name: Test Store Release Path
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g. 1.0.0.0)"
+        required: true
+        default: "1.0.0.0"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  generate-notes:
+    runs-on: self-hosted
+    if: github.actor == 'Richasy'
+    outputs:
+      notes_zh: ${{ steps.gen_notes.outputs.release_notes_zh }}
+      success: ${{ steps.gen_notes.outcome == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Notes
+        id: gen_notes
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          ./.github/scripts/generate-release-notes.ps1 `
+            -Endpoint "${{ secrets.OAI_ENDPOINT }}" `
+            -ApiKey "${{ secrets.OAI_KEY }}" `
+            -Model "${{ secrets.OAI_MODEL }}"
+
+  build-store:
+    needs: generate-notes
+    name: Build Store Package (x64)
+    runs-on: self-hosted
+    if: github.actor == 'Richasy'
+    env:
+      Solution_Name: src/Bili.Copilot.sln
+      Project_Path: src/Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj
+      Manifest_Path: src/Desktop/BiliCopilot.UI/Package.appxmanifest
+      Configuration: Release
+      Platform: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+        with:
+          version: ${{ inputs.version }}
+          sideload: "false"
+          platform: ${{ env.Platform }}
+          configuration: ${{ env.Configuration }}
+          solution-name: ${{ env.Solution_Name }}
+          manifest-path: ${{ env.Manifest_Path }}
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Store Package
+        shell: pwsh
+        run: |
+          $manifestPath = "${{ env.Manifest_Path }}"
+          $projectDir = Split-Path -Parent $manifestPath
+          $assocPath = Join-Path $projectDir "Package.StoreAssociation.xml"
+
+          # Create Package.StoreAssociation.xml
+          $assocContent = '${{ secrets.PACKAGE_STORE_ASSOCIATION }}'
+          Set-Content -Path $assocPath -Value $assocContent
+
+          # Update Package.appxmanifest
+          $packageId = "${{ secrets.PACKAGE_ID }}"
+          $publisherId = "${{ secrets.PUBLISHER_ID }}"
+
+          Write-Host "Updating Identity Name to $packageId and Publisher to $publisherId"
+
+          (Get-Content $manifestPath) -replace 'Name="[^"]+"', "Name=""$packageId""" `
+                                      -replace 'Publisher="[^"]+"', "Publisher=""$publisherId""" | Set-Content $manifestPath
+
+      - name: Build Application
+        uses: ./.github/actions/build-app
+        with:
+          project-path: ${{ env.Project_Path }}
+          configuration: ${{ env.Configuration }}
+          platform: ${{ env.Platform }}
+          sideload: "false"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BiliCopilot.UI-Store-${{ inputs.version }}-${{ env.Platform }}-${{ env.Configuration }}
+          path: ${{ github.workspace }}\FinalPackages\*
+
+  publish-store:
+    needs: [build-store, generate-notes]
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Store Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: BiliCopilot.UI-Store-*
+          path: ${{ github.workspace }}/FinalPackages/Store
+          merge-multiple: true
+
+      - name: Publish to Microsoft Store
+        shell: pwsh
+        run: |
+          $skipCommit = "${{ needs.generate-notes.outputs.success }}" -ne "true"
+          ./.github/scripts/publish-store.ps1 `
+            -TenantId "${{ secrets.MS_TENANT_ID }}" `
+            -ClientId "${{ secrets.MS_CLIENT_ID }}" `
+            -ClientSecret "${{ secrets.MS_CLIENT_SECRET }}" `
+            -AppId "${{ secrets.MS_APP_ID }}" `
+            -PackagePath "${{ github.workspace }}/FinalPackages/Store" `
+            -NotesZh "${{ needs.generate-notes.outputs.notes_zh }}" `
+            -SkipCommit:$skipCommit
+
+  notify:
+    needs:
+      - build-store
+      - publish-store
+    runs-on: self-hosted
+    if: always() && github.actor == 'Richasy'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Notify Telegram
+        uses: ./.github/actions/notify-telegram
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat-id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          status: ${{ (needs.build-store.result == 'cancelled') && 'cancelled' || (needs.build-store.result == 'failure' || needs.publish-store.result == 'failure') && 'failure' || 'success' }}
+          version: ${{ inputs.version }}
+          platform: "x64"
+          build-type: "Test Store Release"
+          github-token: ${{ secrets.GITHUB_TOKEN }}

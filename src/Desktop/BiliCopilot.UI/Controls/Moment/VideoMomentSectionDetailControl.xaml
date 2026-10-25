@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<local:VideoMomentSectionDetailControlBase
+    x:Class="BiliCopilot.UI.Controls.Moment.VideoMomentSectionDetailControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
+    xmlns:components="using:BiliCopilot.UI.Controls.Components"
+    xmlns:controls="using:BiliCopilot.UI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ext="using:BiliCopilot.UI.Extensions"
+    xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
+    xmlns:local="using:BiliCopilot.UI.Controls.Moment"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
+    mc:Ignorable="d">
+
+    <Grid x:Name="LayoutRoot" SizeChanged="OnSectionSizeChanged">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="12" />
+            <ColumnDefinition x:Name="WatchedColumn" Width="320" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <base:ColumnSplitter
+            x:Name="ColumnResizer"
+            Grid.RowSpan="2"
+            Grid.Column="1"
+            Width="12"
+            Margin="0,16,0,12"
+            AutomationProperties.Name="{ext:Locale Name=MomentResizePanes}"
+            DoubleTapped="OnSplitterDoubleTapped"
+            IsHideButtonEnabled="False"
+            IsTabStop="True"
+            KeyDown="OnSplitterKeyDown"
+            ToolTipService.ToolTip="{ext:Locale Name=MomentResizePanesDescription}" />
+
+        <controls:IncrementVerticalScrollControl
+            x:Name="View"
+            Grid.Row="1"
+            LoadMoreCommand="{x:Bind ViewModel.LoadUnwatchedItemsCommand, Mode=OneWay}"
+            ScrollPositionChanged="OnScrollPositionChanged">
+            <controls:IncrementVerticalScrollControl.Element>
+                <Grid Margin="0,16">
+                    <repeater:AppRepeater
+                        x:Name="MomentRepeater"
+                        ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
+                        Layout="{StaticResource MomentLayout}"
+                        LayoutUpdated="OnMomentLayoutUpdated">
+                        <repeater:AppRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="items:MomentItemViewModel">
+                                <components:MomentCardControl Style="{StaticResource VideoMomentCardStyle}" ViewModel="{x:Bind}" />
+                            </DataTemplate>
+                        </repeater:AppRepeater.ItemTemplate>
+                    </repeater:AppRepeater>
+                </Grid>
+            </controls:IncrementVerticalScrollControl.Element>
+        </controls:IncrementVerticalScrollControl>
+
+        <TextBlock
+            Grid.Row="1"
+            Margin="24,40"
+            HorizontalAlignment="Center"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="{ext:Locale Name=MomentAllWatched}"
+            TextWrapping="Wrap"
+            Visibility="{x:Bind ViewModel.IsUnwatchedEmpty, Mode=OneWay}" />
+
+        <Border
+            Grid.RowSpan="2"
+            Grid.Column="2"
+            Margin="0,12,20,12"
+            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="12">
+            <Border.Transitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition
+                        FromHorizontalOffset="16"
+                        FromVerticalOffset="0"
+                        IsStaggeringEnabled="False" />
+                </TransitionCollection>
+            </Border.Transitions>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <StackPanel Padding="16" Spacing="6">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon
+                            FontSize="16"
+                            Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                            Glyph="&#xE73E;" />
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="{ext:Locale Name=MomentWatched}" />
+                    </StackPanel>
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{ext:Locale Name=MomentWatchedDescription}"
+                        TextWrapping="Wrap" />
+                    <TextBlock
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        MaxLines="1"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{x:Bind ViewModel.TimelineTip, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        ToolTipService.ToolTip="{ext:Locale Name=MomentWatchedTimeline}" />
+                    <ProgressBar IsIndeterminate="True" Visibility="{x:Bind ViewModel.IsHistoryLoading, Mode=OneWay}" />
+                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.HasHistoryError, Mode=OneWay}">
+                        <TextBlock
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{ext:Locale Name=MomentHistorySyncFailed}"
+                            TextWrapping="Wrap" />
+                        <HyperlinkButton
+                            Command="{x:Bind ViewModel.SynchronizeHistoryCommand, Mode=OneWay}"
+                            Content="{ext:Locale Name=MomentHistoryRetry}" />
+                    </StackPanel>
+                </StackPanel>
+                <ScrollView
+                    x:Name="WatchedView"
+                    Grid.Row="1"
+                    Padding="12,0,12,12"
+                    Style="{StaticResource PageScrollViewStyle}"
+                    ViewChanged="OnWatchedViewChanged">
+                    <repeater:AppRepeater x:Name="WatchedRepeater" ItemsSource="{x:Bind ViewModel.WatchedItems, Mode=OneWay}">
+                        <repeater:AppRepeater.Layout>
+                            <StackLayout Spacing="12" />
+                        </repeater:AppRepeater.Layout>
+                        <repeater:AppRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="items:MomentItemViewModel">
+                                <components:MomentCardControl
+                                    PreserveCoverAspectRatio="True"
+                                    Style="{StaticResource VideoMomentCardStyle}"
+                                    ViewModel="{x:Bind}" />
+                            </DataTemplate>
+                        </repeater:AppRepeater.ItemTemplate>
+                    </repeater:AppRepeater>
+                </ScrollView>
+                <TextBlock
+                    Grid.Row="1"
+                    Margin="20,32"
+                    HorizontalAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{ext:Locale Name=MomentWatchedEmpty}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.IsWatchedEmpty, Mode=OneWay}" />
+            </Grid>
+        </Border>
+
+        <base:EmptyHolder
+            Grid.Row="1"
+            Description="{ext:Locale Name=NoSpecificData}"
+            Emoji="&#x1F440;"
+            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+        <base:LoadingWidget Grid.Row="1" Text="{ext:Locale Name=LoadingAndWait}" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
+    </Grid>
+</local:VideoMomentSectionDetailControlBase>

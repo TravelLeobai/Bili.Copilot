@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<local:SettingsPageControlBase
+    x:Class="BiliCopilot.UI.Controls.Settings.LayoutSettingSection"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
+    xmlns:constants="using:BiliCopilot.UI.Models.Constants"
+    xmlns:converters="using:BiliCopilot.UI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ext="using:BiliCopilot.UI.Extensions"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:local="using:BiliCopilot.UI.Controls.Settings"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <converters:MomentVideoOpenedMarkStyleConverter x:Key="MomentVideoOpenedMarkStyleConverter" />
+    </UserControl.Resources>
+
+    <StackPanel Spacing="4">
+        <base:SettingsCard Description="{ext:Locale Name=TopNavVisibilityDescription}" Header="{ext:Locale Name=TopNavVisibility}">
+            <base:SettingsCard.HeaderIcon>
+                <ic:SymbolIcon Symbol="LayoutColumnTwo" />
+            </base:SettingsCard.HeaderIcon>
+            <ToggleSwitch IsOn="{x:Bind ViewModel.IsTopNavShown, Mode=TwoWay}" />
+        </base:SettingsCard>
+        <base:SettingsCard Description="{ext:Locale Name=MomentVideoLayoutDensityDescription}" Header="{ext:Locale Name=MomentVideoLayoutDensity}">
+            <base:SettingsCard.HeaderIcon>
+                <ic:SymbolIcon Symbol="Grid" />
+            </base:SettingsCard.HeaderIcon>
+            <ComboBox
+                MinWidth="160"
+                SelectedIndex="{x:Bind ViewModel.MomentVideoLayoutPreset, Mode=TwoWay}">
+                <ComboBoxItem Content="{ext:Locale Name=MomentVideoLayoutDefault}" />
+                <ComboBoxItem Content="{ext:Locale Name=MomentVideoLayoutRelaxed1}" />
+                <ComboBoxItem Content="{ext:Locale Name=MomentVideoLayoutRelaxed2}" />
+                <ComboBoxItem Content="{ext:Locale Name=MomentVideoLayoutRelaxed3}" />
+                <ComboBoxItem Content="{ext:Locale Name=MomentVideoLayoutRelaxed4}" />
+            </ComboBox>
+        </base:SettingsCard>
+        <base:SettingsCard Description="{ext:Locale Name=MomentVideoOpenedMarkDescription}" Header="{ext:Locale Name=MomentVideoOpenedMark}">
+            <base:SettingsCard.HeaderIcon>
+                <ic:SymbolIcon Symbol="CheckmarkCircle" />
+            </base:SettingsCard.HeaderIcon>
+            <ComboBox
+                MinWidth="160"
+                ItemsSource="{x:Bind ViewModel.MomentVideoOpenedMarkStyleCollection, Mode=OneWay}"
+                SelectedItem="{x:Bind ViewModel.MomentVideoOpenedMarkStyle, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="constants:MomentVideoOpenedMarkStyle">
+                        <TextBlock Text="{x:Bind Converter={StaticResource MomentVideoOpenedMarkStyleConverter}}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+        </base:SettingsCard>
+    </StackPanel>
+</local:SettingsPageControlBase>

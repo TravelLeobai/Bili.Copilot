@@ -1,0 +1,102 @@
+name: Build Store Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g. 1.0.0.0)"
+        required: true
+        default: "1.0.0.0"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    runs-on: self-hosted
+    if: github.actor == 'Richasy'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Release]
+        platform: [x64, arm64]
+
+    env:
+      Solution_Name: src/Bili.Copilot.sln
+      Project_Path: src/Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj
+      Manifest_Path: src/Desktop/BiliCopilot.UI/Package.appxmanifest
+      Configuration: ${{ matrix.configuration }}
+      Platform: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+        with:
+          version: ${{ inputs.version }}
+          sideload: "false"
+          platform: ${{ env.Platform }}
+          configuration: ${{ env.Configuration }}
+          solution-name: ${{ env.Solution_Name }}
+          manifest-path: ${{ env.Manifest_Path }}
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Store Package
+        shell: pwsh
+        run: |
+          $manifestPath = "${{ env.Manifest_Path }}"
+          $projectDir = Split-Path -Parent $manifestPath
+          $assocPath = Join-Path $projectDir "Package.StoreAssociation.xml"
+
+          # Create Package.StoreAssociation.xml
+          $assocContent = '${{ secrets.PACKAGE_STORE_ASSOCIATION }}'
+          Set-Content -Path $assocPath -Value $assocContent
+
+          # Update Package.appxmanifest
+          $packageId = "${{ secrets.PACKAGE_ID }}"
+          $publisherId = "${{ secrets.PUBLISHER_ID }}"
+
+          Write-Host "Updating Identity Name to $packageId and Publisher to $publisherId"
+
+          (Get-Content $manifestPath) -replace 'Name="[^"]+"', "Name=""$packageId""" `
+                                      -replace 'Publisher="[^"]+"', "Publisher=""$publisherId""" | Set-Content $manifestPath
+
+      - name: Build Application
+        uses: ./.github/actions/build-app
+        with:
+          project-path: ${{ env.Project_Path }}
+          configuration: ${{ env.Configuration }}
+          platform: ${{ env.Platform }}
+          sideload: "false"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BiliCopilot.UI-Store-${{ inputs.version }}-${{ env.Platform }}-${{ env.Configuration }}
+          path: ${{ github.workspace }}\FinalPackages\*
+
+  notify:
+    needs: build
+    runs-on: self-hosted
+    if: always() && github.actor == 'Richasy'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Notify Telegram
+        uses: ./.github/actions/notify-telegram
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat-id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          status: ${{ needs.build.result }}
+          version: ${{ inputs.version }}
+          platform: "x64, arm64"
+          build-type: "Store"
+          github-token: ${{ secrets.GITHUB_TOKEN }}

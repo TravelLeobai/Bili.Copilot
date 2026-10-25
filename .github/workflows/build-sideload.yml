@@ -1,0 +1,160 @@
+name: Build Sideload Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number (e.g. 1.0.0.0)"
+        required: true
+        default: "1.0.0.0"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  generate-notes:
+    if: github.actor == 'Richasy'
+    runs-on: self-hosted
+    outputs:
+      notes_zh: ${{ steps.gen_notes.outputs.release_notes_zh }}
+      success: ${{ steps.gen_notes.outcome == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Notes
+        id: gen_notes
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          ./.github/scripts/generate-release-notes.ps1 `
+            -Endpoint "${{ secrets.OAI_ENDPOINT }}" `
+            -ApiKey "${{ secrets.OAI_KEY }}" `
+            -Model "${{ secrets.OAI_MODEL }}"
+
+  build:
+    needs: generate-notes
+    runs-on: self-hosted
+    if: github.actor == 'Richasy'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Release]
+        platform: [x64, arm64]
+
+    env:
+      Solution_Name: src/Bili.Copilot.sln
+      Project_Path: src/Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj
+      Manifest_Path: src/Desktop/BiliCopilot.UI/Package.appxmanifest
+      Configuration: ${{ matrix.configuration }}
+      Platform: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+        with:
+          version: ${{ inputs.version }}
+          sideload: "true"
+          platform: ${{ env.Platform }}
+          configuration: ${{ env.Configuration }}
+          solution-name: ${{ env.Solution_Name }}
+          manifest-path: ${{ env.Manifest_Path }}
+          gh-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Application
+        uses: ./.github/actions/build-app
+        with:
+          project-path: ${{ env.Project_Path }}
+          configuration: ${{ env.Configuration }}
+          platform: ${{ env.Platform }}
+          sideload: "true"
+
+      - name: Compress Artifacts
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          $platform = "${{ env.Platform }}"
+          $repoName = "BiliCopilot"
+          $sourceDir = "${{ github.workspace }}\FinalPackages"
+          $zipName = "${repoName}_${version}_${platform}.zip"
+          $zipPath = Join-Path $sourceDir $zipName
+
+          # Copy Guide
+          Copy-Item "docs/sideload-guide.txt" -Destination (Join-Path $sourceDir "安装说明.txt")
+
+          # Copy Install Script
+          Copy-Item "scripts/Install.ps1" -Destination (Join-Path $sourceDir "Install.ps1")
+
+          Write-Host "Compressing files in $sourceDir to $zipPath"
+          $files = Get-ChildItem $sourceDir -File
+          if ($files.Count -gt 0) {
+              Compress-Archive -Path $files.FullName -DestinationPath $zipPath
+              # 删除原始文件，只保留 zip
+              $files | Remove-Item
+          } else {
+              Write-Warning "No files found to compress."
+          }
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BiliCopilot.UI-Sideload-${{ inputs.version }}-${{ env.Platform }}-${{ env.Configuration }}
+          path: ${{ github.workspace }}\FinalPackages\*
+
+  publish-github:
+    needs: [build, generate-notes]
+    runs-on: self-hosted
+    if: github.actor == 'Richasy'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Sideload Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: BiliCopilot.UI-Sideload-*
+          path: ${{ github.workspace }}/FinalPackages/Sideload
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: ${{ inputs.version }}
+          body: ${{ needs.generate-notes.outputs.notes_zh }}
+          files: ${{ github.workspace }}/FinalPackages/Sideload/*
+          draft: ${{ needs.generate-notes.outputs.success != 'true' }}
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    needs:
+      - build
+      - publish-github
+    runs-on: self-hosted
+    if: always() && github.actor == 'Richasy'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Notify Telegram
+        uses: ./.github/actions/notify-telegram
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat-id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          status: ${{ (needs.build.result == 'cancelled') && 'cancelled' || (needs.build.result == 'failure' || needs.publish-github.result == 'failure') && 'failure' || 'success' }}
+          version: ${{ inputs.version }}
+          platform: "x64, arm64"
+          build-type: "Sideload (Pre-release)"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
