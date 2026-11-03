@@ -22,6 +22,16 @@ public sealed class MediaSnapshot
         IsPrivate = isPrivate;
     }
 
+    /// <summary>
+    /// 初始化直播快照.
+    /// </summary>
+    public MediaSnapshot(LiveInformation live)
+    {
+        Live = live;
+        Type = BiliMediaType.Live;
+        IsPrivate = false;
+    }
+
     public MediaSnapshot(SeasonInformation? season, EpisodeInformation? episode)
     {
         Season = season;
@@ -34,6 +44,11 @@ public sealed class MediaSnapshot
     /// 视频信息.
     /// </summary>
     public VideoInformation? Video { get; }
+
+    /// <summary>
+    /// 直播信息.
+    /// </summary>
+    public LiveInformation? Live { get; }
 
     /// <summary>
     /// 电视剧.

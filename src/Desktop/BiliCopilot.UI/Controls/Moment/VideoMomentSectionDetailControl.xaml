@@ -9,6 +9,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
+    xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Moment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
@@ -37,6 +38,70 @@
             IsTabStop="True"
             KeyDown="OnSplitterKeyDown"
             ToolTipService.ToolTip="{ext:Locale Name=MomentResizePanesDescription}" />
+
+        <!--  顶部关注 UP 主头像条：最左侧为全部动态，右侧按最新更新排开  -->
+        <ScrollViewer
+            Grid.Row="0"
+            Grid.Column="0"
+            Height="76"
+            Padding="16,6,16,0"
+            HorizontalScrollBarVisibility="Hidden"
+            HorizontalScrollMode="Auto"
+            VerticalScrollBarVisibility="Disabled"
+            VerticalScrollMode="Disabled">
+            <ItemsView
+                x:Name="UperView"
+                ItemsSource="{x:Bind ViewModel.Upers, Mode=OneWay}"
+                SelectionMode="Single">
+                <ItemsView.ItemTemplate>
+                    <DataTemplate x:DataType="items:MomentUperSectionViewModel">
+                        <ItemContainer
+                            Width="64"
+                            Height="70"
+                            Padding="0"
+                            Background="Transparent"
+                            Style="{StaticResource AppItemContainerStyle}"
+                            ToolTipService.ToolTip="{x:Bind Name, Mode=OneWay}">
+                            <Grid RowSpacing="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid
+                                    Width="44"
+                                    Height="44"
+                                    HorizontalAlignment="Center">
+                                    <ic:SymbolIcon
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        FontSize="18"
+                                        Symbol="BubbleMultiple"
+                                        Visibility="{x:Bind IsTotal, Mode=OneWay}" />
+                                    <controls:BasicCoverImage
+                                        Width="44"
+                                        Height="44"
+                                        CornerRadius="22"
+                                        DecodeWidth="100"
+                                        Source="{x:Bind Avatar, Mode=OneWay}"
+                                        Visibility="{x:Bind IsTotal, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+                                </Grid>
+                                <TextBlock
+                                    Grid.Row="1"
+                                    HorizontalAlignment="Center"
+                                    FontSize="10"
+                                    MaxLines="1"
+                                    Opacity="0.7"
+                                    Text="{x:Bind Name, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                        </ItemContainer>
+                    </DataTemplate>
+                </ItemsView.ItemTemplate>
+                <ItemsView.Layout>
+                    <StackLayout Orientation="Horizontal" Spacing="4" />
+                </ItemsView.Layout>
+            </ItemsView>
+        </ScrollViewer>
 
         <controls:IncrementVerticalScrollControl
             x:Name="View"

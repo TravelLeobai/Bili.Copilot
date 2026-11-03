@@ -6,6 +6,8 @@ namespace BiliCopilot.UI.Models.Constants;
 public enum SettingNames
 {
     AppTheme,
+    EnableAcrylicBackdrop,
+    EnableSponsorBlock,
     HideWhenCloseWindow,
     ShouldAskBeforeWindowClosed,
     ShouldSkipStartup,
@@ -146,3 +148,4 @@ public enum SettingNames
     MomentVideoOpenedMarkStyle,
     MomentVideoLeftPaneRatio,
 }
+

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Resolvers;
@@ -124,6 +124,7 @@ internal static class GlobalDependencies
             .AddTransient<VideoMediaSourceResolver>()
             .AddTransient<VideoMediaHistoryResolver>()
             .AddTransient<PgcMediaSourceResolver>()
+            .AddTransient<LiveMediaSourceResolver>()
             .AddTransient<PgcMediaHistoryResolver>()
             .AddTransient<PlayerViewModel>()
             .AddTransient<DanmakuSendViewModel>()

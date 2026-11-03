@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <local:SettingsPageControlBase
     x:Class="BiliCopilot.UI.Controls.Settings.ThemeSettingControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -11,23 +11,43 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <base:SettingsExpander Description="{ext:Locale Name=AppThemeDescription}" Header="{ext:Locale Name=AppTheme}">
-        <base:SettingsExpander.HeaderIcon>
-            <ic:SymbolIcon Symbol="Color" />
-        </base:SettingsExpander.HeaderIcon>
-        <TextBlock Text="{x:Bind ViewModel.AppThemeText, Mode=OneWay}" />
+    <StackPanel Spacing="8">
+        <base:SettingsExpander Description="{ext:Locale Name=AppThemeDescription}" Header="{ext:Locale Name=AppTheme}">
+            <base:SettingsExpander.HeaderIcon>
+                <ic:SymbolIcon Symbol="Color" />
+            </base:SettingsExpander.HeaderIcon>
+            <TextBlock Text="{x:Bind ViewModel.AppThemeText, Mode=OneWay}" />
 
-        <base:SettingsExpander.Items>
-            <base:SettingsCard ContentAlignment="Left">
-                <RadioButtons
-                    x:Name="ThemePicker"
-                    Margin="0,0,0,8"
-                    SelectionChanged="OnThemeSelectionChanged">
-                    <RadioButton Content="{ext:Locale Name=LightTheme}" />
-                    <RadioButton Content="{ext:Locale Name=DarkTheme}" />
-                    <RadioButton Content="{ext:Locale Name=SystemDefault}" />
-                </RadioButtons>
-            </base:SettingsCard>
-        </base:SettingsExpander.Items>
-    </base:SettingsExpander>
+            <base:SettingsExpander.Items>
+                <base:SettingsCard ContentAlignment="Left">
+                    <RadioButtons
+                        x:Name="ThemePicker"
+                        Margin="0,0,0,8"
+                        SelectionChanged="OnThemeSelectionChanged">
+                        <RadioButton Content="{ext:Locale Name=LightTheme}" />
+                        <RadioButton Content="{ext:Locale Name=DarkTheme}" />
+                        <RadioButton Content="{ext:Locale Name=SystemDefault}" />
+                    </RadioButtons>
+                </base:SettingsCard>
+            </base:SettingsExpander.Items>
+        </base:SettingsExpander>
+
+        <base:SettingsExpander Description="使用系统亚克力材质作为窗口背景，可透出桌面内容" Header="亚克力背景">
+            <base:SettingsExpander.HeaderIcon>
+                <ic:SymbolIcon Symbol="Color" />
+            </base:SettingsExpander.HeaderIcon>
+            <ToggleSwitch
+                IsOn="{x:Bind ViewModel.IsAcrylicBackdropEnabled, Mode=TwoWay}"
+                OffContent="关"
+                OnContent="开" />
+        </base:SettingsExpander>
+        <base:SettingsExpander Description="自动跳过视频中的赞助、片头、片尾等片段（数据来自 SponsorBlock）" Header="跳过赞助片段">
+            <base:SettingsExpander.HeaderIcon>
+                <ic:SymbolIcon Symbol="FastForward" />
+            </base:SettingsExpander.HeaderIcon>
+            <ToggleSwitch
+                IsOn="{x:Bind ViewModel.IsSponsorBlockEnabled, Mode=TwoWay}"
+                OffContent="关"
+                OnContent="开" />
+        </base:SettingsExpander>    </StackPanel>
 </local:SettingsPageControlBase>

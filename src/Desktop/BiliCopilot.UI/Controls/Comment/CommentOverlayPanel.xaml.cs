@@ -1,4 +1,9 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
+
+using BiliCopilot.UI.Reactor;
+using BiliCopilot.UI.ViewModels.Components;
+using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Xaml;
 
 namespace BiliCopilot.UI.Controls.Comment;
 
@@ -7,6 +12,9 @@ namespace BiliCopilot.UI.Controls.Comment;
 /// </summary>
 public sealed partial class CommentOverlayPanel : CommentMainPanelBase
 {
+    private ReactorHostControl? _reactorHost;
+    private CommentMainViewModel? _mountedViewModel;
+
     /// <summary>
     /// <see cref="IsPanelOpened"/> 依赖属性.
     /// </summary>
@@ -25,6 +33,38 @@ public sealed partial class CommentOverlayPanel : CommentMainPanelBase
     {
         get => (bool)GetValue(IsPanelOpenedProperty);
         set => SetValue(IsPanelOpenedProperty, value);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnControlLoaded() => MountPanel(ViewModel);
+
+    /// <inheritdoc/>
+    protected override void OnControlUnloaded()
+    {
+        _reactorHost?.Dispose();
+        _reactorHost = null;
+        _mountedViewModel = null;
+        CommentHostGrid.Children.Clear();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnViewModelChanged(CommentMainViewModel? oldValue, CommentMainViewModel? newValue)
+        => MountPanel(newValue);
+
+    private void MountPanel(CommentMainViewModel? viewModel)
+    {
+        if (viewModel is null || ReferenceEquals(viewModel, _mountedViewModel))
+        {
+            return;
+        }
+
+        _reactorHost?.Dispose();
+        CommentHostGrid.Children.Clear();
+
+        _mountedViewModel = viewModel;
+        _reactorHost = new ReactorHostControl();
+        CommentHostGrid.Children.Add(_reactorHost);
+        _reactorHost.Mount(new CommentPanel(viewModel));
     }
 
     private void OnHolderTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)

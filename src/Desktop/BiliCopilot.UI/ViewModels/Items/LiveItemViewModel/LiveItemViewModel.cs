@@ -52,7 +52,8 @@ public sealed partial class LiveItemViewModel : ViewModelBase<LiveInformation>
     [RelayCommand]
     private async Task PlayAsync()
     {
-        await Launcher.LaunchUriAsync(new Uri(GetWebUrl()));
+        this.Get<AppViewModel>().OpenPlayerCommand.Execute(new MediaSnapshot(Data));
+        await Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -81,6 +82,4 @@ public sealed partial class LiveItemViewModel : ViewModelBase<LiveInformation>
         this.Get<PinnerViewModel>().AddItemCommand.Execute(pinItem);
     }
 
-    private string GetWebUrl()
-        => $"https://live.bilibili.com/{Data.Identifier.Id}";
 }

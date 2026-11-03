@@ -10,7 +10,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="16,0" ColumnSpacing="12">
+    <Grid
+        Height="56"
+        Padding="16,0"
+        ColumnSpacing="12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition />
@@ -21,7 +24,8 @@
         </Grid.ChildrenTransitions>
         <TextBlock
             VerticalAlignment="Center"
-            Style="{StaticResource BodyStrongTextBlockStyle}"
+            FontSize="18"
+            FontWeight="SemiBold"
             Text="{ext:Locale Name=DynamicFeed}" />
         <SelectorBar
             x:Name="Selector"

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
@@ -498,6 +498,7 @@ public sealed partial class PlayerViewModel
             IsPreviewProgressChanging = false;
             PositionText = TimeSpan.FromSeconds(Player.Position).ToString(@"hh\:mm\:ss");
             ProgressChanged?.Invoke(this, Player.Position);
+            CheckSponsorBlock();
             Danmaku.UpdatePosition(Convert.ToInt32(Player.Position));
             foreach (var chapter in Chapters)
             {

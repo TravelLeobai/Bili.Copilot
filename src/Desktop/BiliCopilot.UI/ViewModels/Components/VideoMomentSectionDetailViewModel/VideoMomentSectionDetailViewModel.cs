@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
@@ -42,6 +42,7 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
         }
 
         await LoadItemsAsync();
+        await LoadUpersAsync();
         SaveLastTenMomentIds();
     }
 
@@ -137,6 +138,41 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
         => this.Get<MomentPageViewModel>().ShowCommentCommand.Execute(item.Data);
 
     /// <summary>
+    /// 切换头像条选中的 UP 主，null 或全部动态表示不过滤.
+    /// </summary>
+    [RelayCommand]
+    private void SelectUper(MomentUperSectionViewModel? item)
+        => SelectedAuthor = item is null || item.IsTotal ? null : item.Name;
+
+    partial void OnSelectedAuthorChanged(string? value)
+        => SynchronizeWatchedItems();
+
+    private async Task LoadUpersAsync()
+    {
+        if (Upers.Count > 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Upers.Add(new MomentUperSectionViewModel(default));
+            var response = await _service.GetComprehensiveMomentsAsync();
+            if (response?.Users is not null)
+            {
+                foreach (var user in response.Users)
+                {
+                    Upers.Add(new MomentUperSectionViewModel(user));
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "加载关注 UP 主头像列表失败.");
+        }
+    }
+
+    /// <summary>
     /// 更新最近打开标记的显示样式.
     /// </summary>
     public void SetOpenedMarkStyle(Models.Constants.MomentVideoOpenedMarkStyle style)
@@ -190,6 +226,11 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
         for (var i = 0; i < _allItems.Count; i++)
         {
             var item = _allItems[i];
+            if (SelectedAuthor is not null && !string.Equals(item.Author, SelectedAuthor, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             if (IsWatched(item))
             {
                 _watchedTimeline.Add((item, i));

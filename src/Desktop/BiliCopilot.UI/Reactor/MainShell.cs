@@ -1,0 +1,228 @@
+// Copyright (c) Bili Copilot. All rights reserved.
+
+using BiliCopilot.UI.Controls;
+using BiliCopilot.UI.Controls.Components;
+using BiliCopilot.UI.Pages.Overlay;
+using BiliCopilot.UI.ViewModels.Core;
+using BiliCopilot.UI.ViewModels.Components;
+using BiliCopilot.UI.ViewModels.View;
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Input;
+using Microsoft.UI.Text;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using static Microsoft.UI.Reactor.Factories;
+
+namespace BiliCopilot.UI.Reactor;
+
+/// <summary>
+/// 使用 Microsoft.UI.Reactor 声明式外壳重写的主界面.
+/// 负责标题栏、搜索栏、顶部导航、侧边导航与内容宿主.
+/// </summary>
+public sealed class MainShell : Component
+{
+    private readonly NavigationViewModel _viewModel;
+    private readonly AccountViewModel _accountViewModel;
+    private readonly Grid _contentHost;
+    private readonly AppSearchBox _searchBox = new()
+    {
+        MinWidth = 320,
+        MaxWidth = 520,
+        HorizontalAlignment = HorizontalAlignment.Center,
+    };
+
+    private readonly HeaderAccountControl _accountControl = new();
+    private readonly Button _paneToggleButton = CreateFlatIconButton("\uE700", "切换导航栏");
+    private readonly Button _favoriteButton = CreateFlatIconButton("\uE734", "我的收藏");
+    private readonly Button _viewLaterButton = CreateFlatIconButton("\uE823", "稍后再看");
+    private readonly Button _historyButton = CreateFlatIconButton("\uE81C", "历史记录");
+    private Action? _togglePaneAction;
+    private ElementRef<FrameworkElement>? _titleBarRef;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainShell"/> class.
+    /// </summary>
+    public MainShell(
+        NavigationViewModel viewModel,
+        MainFrame mainFrame,
+        OverlayFrame overlayFrame,
+        AccountViewModel accountViewModel)
+    {
+        _viewModel = viewModel;
+        _accountViewModel = accountViewModel;
+        _accountControl.AvatarSize = 20;
+        _contentHost = new Grid();
+        _contentHost.Children.Add(mainFrame);
+        _contentHost.Children.Add(overlayFrame);
+        _paneToggleButton.Click += (_, _) => _togglePaneAction?.Invoke();
+        _favoriteButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(FavoritesPage), default);
+        _viewLaterButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
+        _historyButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(HistoryPage), default);
+    }
+
+    /// <summary>
+    /// 标题栏元素，供窗口设置拖拽区域.
+    /// </summary>
+    public FrameworkElement? TitleBarElement => _titleBarRef?.Current;
+
+    /// <inheritdoc/>
+    public override Element Render()
+    {
+        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+        _togglePaneAction = () => setIsPaneOpen(!isPaneOpen);
+        var titleBarRef = this.UseElementRef<FrameworkElement>();
+        _titleBarRef = titleBarRef;
+        var viewModel = UseObservableTree(_viewModel);
+        var account = UseObservableTree(_accountViewModel);
+        _ = viewModel.NavItemsVersion;
+
+        var menu = viewModel.MenuItems
+            .Where(item => item.IsVisible)
+            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
+            .ToArray();
+        var footer = viewModel.FooterItems
+            .Where(item => item.IsVisible && !item.PageKey.Contains("SettingsPage"))
+            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
+            .ToArray();
+
+        Element accountRow = HStack(
+            9.7,
+            new XamlHostElement(() => _accountControl, _ => { }),
+            isPaneOpen
+                ? TextBlock(account.MyProfile?.User?.Name ?? string.Empty)
+                    .FontSize(14)
+                    .VAlign(VerticalAlignment.Center)
+                : (Element)TextBlock(string.Empty))
+            .Padding(4.7, 0, 12, 0)
+            .Height(36);
+
+        Element accountPanel = Button(accountRow, () => _accountControl.ShowAccountFlyout())
+            .AutomationName(account.MyProfile?.User?.Name ?? "我的")
+            .SubtleButton()
+            .Padding(0)
+            .Height(36)
+            .Margin(4, 0, 4, 0)
+            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+            .HAlign(HorizontalAlignment.Stretch)
+            .VAlign(VerticalAlignment.Center);
+
+        var navigation = (NavigationView(menu) with
+        {
+            Content = new XamlHostElement(() => _contentHost, _ => { }),
+            FooterMenuItems = footer,
+            IsBackEnabled = viewModel.IsOverlayOpen,
+            IsBackButtonVisible = viewModel.IsOverlayOpen
+                ? NavigationViewBackButtonVisible.Visible
+                : NavigationViewBackButtonVisible.Collapsed,
+            OnBackRequested = () => viewModel.Back(),
+            OnItemInvoked = tag => NavigateByTag(tag),
+            OnSettingsSelected = () => NavigateToSettings(),
+            IsPaneOpen = isPaneOpen,
+            IsPaneToggleButtonVisible = false,
+            PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+        })
+            .PaneFooter(accountPanel)
+            .Background("Transparent")
+            .Grid(row: 1);
+
+        var titleContent = HStack(
+            4,
+            new XamlHostElement(() => _paneToggleButton, _ => { })
+                .Size(40, 40)
+                .Margin(3.5, 0, 0, 0)
+                .HAlign(HorizontalAlignment.Left)
+                .VAlign(VerticalAlignment.Center),
+            TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
+            .VAlign(VerticalAlignment.Center)
+            .Grid(row: 0, column: 0);
+
+        var navButtons = viewModel.IsTopNavBarShown
+            ? HStack(
+                6,
+                new XamlHostElement(() => _favoriteButton, _ => { }).Size(40, 40),
+                new XamlHostElement(() => _viewLaterButton, _ => { }).Size(40, 40),
+                new XamlHostElement(() => _historyButton, _ => { }).Size(40, 40))
+                .Margin(124, 0, 0, 0)
+                .HAlign(HorizontalAlignment.Left)
+                .VAlign(VerticalAlignment.Center)
+            : (Element)TextBlock(string.Empty);
+
+        var searchHost = new XamlHostElement(() => _searchBox, _ => { })
+            .MaxWidth(520)
+            .MinWidth(320)
+            .HAlign(HorizontalAlignment.Center)
+            .VAlign(VerticalAlignment.Center);
+
+        var titleBar = Grid(
+            columns: [GridSize.Star()],
+            rows: [GridSize.Star()],
+            titleContent,
+            navButtons,
+            searchHost,
+            HStack(0, TextBlock(string.Empty))
+                .Padding(0, 0, 12, 0)
+                .HAlign(HorizontalAlignment.Right)
+                .VAlign(VerticalAlignment.Center))
+            .Height(48)
+            .Ref(titleBarRef);
+
+        return Grid(
+            columns: [GridSize.Star()],
+            rows: [GridSize.Auto, GridSize.Star()],
+            titleBar.Grid(row: 0),
+            navigation);
+    }
+
+    private static Button CreateFlatIconButton(string glyph, string automationName)
+    {
+        var button = new Button
+        {
+            Width = 40,
+            Height = 40,
+            MinWidth = 0,
+            MinHeight = 0,
+            Padding = new Thickness(0),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Content = new FontIcon { Glyph = glyph, FontSize = 16 },
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, automationName);
+        return button;
+    }
+
+    private static string? GetSymbolName(string pageKey) => pageKey switch
+    {
+        _ when pageKey.Contains("PopularPage") => "Home",
+        _ when pageKey.Contains("MomentPage") => "Message",
+        _ when pageKey.Contains("VideoPartitionPage") => "Video",
+        _ when pageKey.Contains("LivePartitionPage") => "Camera",
+        _ when pageKey.Contains("AnimePage") => "Play",
+        _ when pageKey.Contains("CinemaPage") => "Pictures",
+        _ when pageKey.Contains("ArticlePartitionPage") => "Page",
+        _ when pageKey.Contains("MessagePage") => "Message",
+        _ when pageKey.Contains("SettingsPage") => "Setting",
+        _ when pageKey.Contains("DownloadPage") => "Download",
+        _ when pageKey.Contains("LivePlayerPage") => "Camera",
+        _ => "Document",
+    };
+
+    private void NavigateToSettings()
+    {
+        var item = _viewModel.FooterItems.FirstOrDefault(entry => entry.PageKey.Contains("SettingsPage"));
+        item?.NavigateCommand.Execute(default);
+    }
+
+    private void NavigateByTag(string tag)
+    {
+        var item = _viewModel.MenuItems.Concat(_viewModel.FooterItems)
+            .FirstOrDefault(entry => entry.PageKey == tag);
+        item?.NavigateCommand.Execute(default);
+    }
+}

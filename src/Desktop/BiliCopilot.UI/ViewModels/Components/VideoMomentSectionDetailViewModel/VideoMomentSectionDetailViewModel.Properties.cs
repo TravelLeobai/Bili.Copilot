@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.ViewModels.Items;
@@ -53,6 +53,17 @@ public sealed partial class VideoMomentSectionDetailViewModel
 
     [ObservableProperty]
     private bool _hasHistoryError;
+
+    /// <summary>
+    /// 当前按 UP 主过滤的作者名，为空表示全部动态.
+    /// </summary>
+    [ObservableProperty]
+    private string? _selectedAuthor;
+
+    /// <summary>
+    /// 关注 UP 主头像条，第一条为全部动态.
+    /// </summary>
+    public ObservableCollection<MomentUperSectionViewModel> Upers { get; } = new();
 
     /// <summary>
     /// 列表已完成更新.

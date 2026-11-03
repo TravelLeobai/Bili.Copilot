@@ -1,7 +1,8 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Reactor;
 using BiliCopilot.UI.ViewModels.View;
-using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml.Navigation;
 using Richasy.WinUIKernel.Share.Base;
 
@@ -12,58 +13,26 @@ namespace BiliCopilot.UI.Pages;
 /// </summary>
 public sealed partial class SettingsPage : SettingsPageBase
 {
+    private readonly ReactorHostControl _host;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsPage"/> class.
     /// </summary>
-    public SettingsPage() => InitializeComponent();
+    public SettingsPage()
+    {
+        InitializeComponent();
+        _host = new ReactorHostControl();
+        RootGrid.Children.Add(_host);
+        _host.Mount(new SettingsShell(ViewModel));
+    }
 
     /// <inheritdoc/>
     protected override void OnPageLoaded()
-    {
-        ViewModel.InitializeCommand.Execute(default);
-        SectionSelector.SelectedItem = SectionSelector.Items[0];
-    }
+        => ViewModel.InitializeCommand.Execute(default);
 
     /// <inheritdoc/>
     protected override async void OnNavigatingFrom(NavigatingCancelEventArgs e)
         => await ViewModel.CheckSaveServicesAsync();
-
-    private void OnJoinGroupButtonClick(object sender, RoutedEventArgs e)
-        => FlyoutBase.ShowAttachedFlyout(sender as FrameworkElement);
-
-    private async void OnSectionSelectorChangedAsync(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
-    {
-        var index = Convert.ToInt32(sender.SelectedItem.Tag);
-        if (index == 0)
-        {
-            GenericContainer.Visibility = Visibility.Visible;
-            AIContainer.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            GenericContainer.Visibility = Visibility.Collapsed;
-            AIContainer.Visibility = Visibility.Visible;
-            await ViewModel.InitializeChatServicesAsync();
-            if (AIPanel.Children.Count == 0)
-            {
-                await LoadChatControlsAsync();
-            }
-        }
-    }
-
-    private async Task LoadChatControlsAsync()
-    {
-        foreach (var vm in ViewModel.ChatServices)
-        {
-            var control = vm.GetSettingControl();
-
-            if (control != null)
-            {
-                await vm.InitializeCommand.ExecuteAsync(default);
-                AIPanel.Children.Add(control);
-            }
-        }
-    }
 }
 
 /// <summary>

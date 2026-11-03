@@ -88,7 +88,6 @@ public sealed partial class VideoConnectorViewModel
         }
 
         sections.Add(_comments);
-        sections.Add(new VideoPlayerAISectionDetailViewModel(AI));
 
         Sections = sections;
         SelectSection(Sections[0]);

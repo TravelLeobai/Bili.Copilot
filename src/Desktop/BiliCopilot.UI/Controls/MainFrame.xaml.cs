@@ -59,6 +59,11 @@ public sealed partial class MainFrame : LayoutUserControlBase
             var instance = Activator.CreateInstance(pageType);
             if (instance is UIElement element)
             {
+                if (element is Microsoft.UI.Xaml.Controls.Page page)
+                {
+                    page.Background = null;
+                }
+
                 targetElement = element;
                 // 如果实现了 IMainFramePage，则调用 SetParameter
                 if (element is IParameterPage mainFramePage)

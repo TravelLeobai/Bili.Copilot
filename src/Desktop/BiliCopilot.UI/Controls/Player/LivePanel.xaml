@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Player.LivePanel"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:core="using:BiliCopilot.UI.ViewModels.Core"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid HorizontalAlignment="Right" Width="340">
+        <Border
+            Margin="0,16,16,16"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+            CornerRadius="8"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1">
+            <Grid Padding="12" RowSpacing="10">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="10">
+                    <Image
+                        Width="40"
+                        Height="40"
+                        Source="{x:Bind ViewModel.LiveUser.Avatar.Uri, Mode=OneWay, Converter={StaticResource BitmapConverter}}" />
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock
+                            MaxWidth="150"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Text="{x:Bind ViewModel.LiveUser.Name, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            FontSize="11"
+                            Opacity="0.7"
+                            Text="{x:Bind ViewModel.LiveOnlineText, Mode=OneWay}" />
+                    </StackPanel>
+                    <Button
+                        HorizontalAlignment="Right"
+                        Click="OnFollowClick"
+                        Content="关注" />
+                </StackPanel>
+
+                <ListView
+                    Grid.Row="1"
+                    IsItemClickEnabled="False"
+                    ItemsSource="{x:Bind ViewModel.LiveDanmakus, Mode=OneWay}"
+                    SelectionMode="None">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="core:LiveDanmakuItem">
+                            <TextBlock
+                                FontSize="12"
+                                TextWrapping="Wrap">
+                                <Run Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind UserName}" />
+                                <Run Text=": " />
+                                <Run Text="{x:Bind Text}" />
+                            </TextBlock>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <Grid
+                    Grid.Row="2"
+                    ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox
+                        x:Name="DanmakuBox"
+                        MaxLength="30"
+                        PlaceholderText="发个弹幕…"
+                        Text="{x:Bind ViewModel.LiveDanmakuInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button
+                        Grid.Column="1"
+                        Click="OnSendClick"
+                        Content="发送" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
