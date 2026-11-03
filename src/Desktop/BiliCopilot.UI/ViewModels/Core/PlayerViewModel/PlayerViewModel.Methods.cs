@@ -4,6 +4,7 @@ using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Resolvers;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
 using Humanizer;
@@ -359,6 +360,15 @@ public sealed partial class PlayerViewModel
         else if (Player.Duration < 1 && !_isBroken)
         {
             _isBroken = true;
+
+            // 卡顿时按候选池轮换 CDN 节点，再重试一次.
+            if (CdnAccelerator.StallRecovery && CdnAccelerator.IsEnabled && !_isCdnRotated)
+            {
+                _isCdnRotated = true;
+                var nextHost = CdnAccelerator.RotateHost();
+                logger.LogInformation("播放失败，切换 CDN 节点到 {Host}", nextHost);
+            }
+
             await Player.ReplayAsync();
             return;
         }

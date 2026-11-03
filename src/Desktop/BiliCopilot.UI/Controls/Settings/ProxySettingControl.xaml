@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<local:SettingsPageControlBase
+    x:Class="BiliCopilot.UI.Controls.Settings.ProxySettingControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:BiliCopilot.UI.Controls.Settings"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <base:SettingsExpander
+        Description="解析服务器与 CDN 节点，播放不流畅时可以在这里换节点"
+        Header="播放代理与加速">
+        <base:SettingsExpander.Items>
+
+            <base:SettingsCard Description="把取播放地址的请求发到解析服务器，用于解锁港澳台等区域内容" Header="启用播放代理">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.ProxyEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="默认服务器不稳定，建议换成自己信任的解析服务器" Header="首选代理服务器">
+                <TextBox MinWidth="280" Text="{x:Bind ViewModel.ProxyServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="留空则使用首选代理服务器" Header="自定义港澳代理服务器">
+                <TextBox MinWidth="280" Text="{x:Bind ViewModel.ProxyServerHk, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="留空则使用首选代理服务器" Header="自定义台湾代理服务器">
+                <TextBox MinWidth="280" Text="{x:Bind ViewModel.ProxyServerTw, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="留空则使用首选代理服务器" Header="自定义大陆代理服务器">
+                <TextBox MinWidth="280" Text="{x:Bind ViewModel.ProxyServerCn, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="把播放地址的主机名换成更快的 CDN 节点" Header="替换 CDN 链接">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.ReplaceCdnEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="只想修复卡顿时选「仅替换 PCDN 视频」" Header="替换模式">
+                <ComboBox MinWidth="200" SelectedIndex="{x:Bind ViewModel.CdnReplaceModeIndex, Mode=TwoWay}">
+                    <ComboBoxItem Content="不替换" />
+                    <ComboBoxItem Content="替换全部视频" />
+                    <ComboBoxItem Content="仅替换 PCDN 视频" />
+                    <ComboBoxItem Content="仅替换代理视频" />
+                </ComboBox>
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="用当前视频实测候选节点速度并自动选最快的，卡顿时会自动换线" Header="自动优选与切换">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.CdnAutoSelect, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="把非标准端口的地址判定为 PCDN 并替换掉" Header="过滤异常端口（防 PCDN）">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.CdnFilterPort, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="把 Akamai 节点也纳入替换范围，国内一般建议关闭" Header="改写 Akamai 节点">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.CdnRewriteAkamai, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="播放卡住时自动切换到下一个 CDN 节点" Header="卡顿自动切节点">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.CdnStallSwitch, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="替换后使用的 CDN 节点，可先测试延迟再选" Header="替换 CDN 服务器">
+                <ComboBox MinWidth="320" ItemsSource="{x:Bind ViewModel.CdnServerCollection}" SelectedIndex="{x:Bind ViewModel.CdnServerIndex, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="测试各候选节点的响应延迟" Header="CDN 节点延迟">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Command="{x:Bind ViewModel.TestCdnLatencyCommand}" Content="测试服务器延迟" />
+                    <TextBlock MaxWidth="620" VerticalAlignment="Center" Text="{x:Bind ViewModel.CdnLatencyText, Mode=OneWay}" TextWrapping="Wrap" />
+                </StackPanel>
+            </base:SettingsCard>
+
+        </base:SettingsExpander.Items>
+    </base:SettingsExpander>
+</local:SettingsPageControlBase>

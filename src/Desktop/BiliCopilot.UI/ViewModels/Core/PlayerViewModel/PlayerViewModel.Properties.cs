@@ -30,6 +30,7 @@ public sealed partial class PlayerViewModel
     private bool _uiElementSetted;
     private bool _isDanmakuInitialized;
     private double _lastSpeed;
+    private bool _isCdnRotated;
     private double? _continuePosition;
     private Windows.Media.Playback.MediaPlayer? _nativeMp;
     private SystemMediaTransportControls? _smtc;

@@ -2,8 +2,9 @@
 
 using BiliCopilot.UI.Controls.AI;
 using BiliCopilot.UI.Models.Constants;
-using BiliCopilot.UI.Pages;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.Toolkits;
+using BiliCopilot.UI.Pages;
 using BiliCopilot.UI.ViewModels.Core;
 using CommunityToolkit.Mvvm.Input;
 using Humanizer;
@@ -59,6 +60,22 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
+        ProxyEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyEnabled, false);
+        ProxyServer = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServer, "https://bili.nepnep.moe");
+        ProxyServerHk = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerHk, string.Empty);
+        ProxyServerTw = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerTw, string.Empty);
+        ProxyServerCn = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerCn, string.Empty);
+        ReplaceCdnEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ReplaceCdnEnabled, true);
+        CdnReplaceMode = SettingsToolkit.ReadLocalSetting(SettingNames.CdnReplaceMode, CdnReplaceMode.PcdnOnly);
+        CdnAutoSelect = SettingsToolkit.ReadLocalSetting(SettingNames.CdnAutoSelect, true);
+        CdnFilterPort = SettingsToolkit.ReadLocalSetting(SettingNames.CdnFilterPort, true);
+        CdnRewriteAkamai = SettingsToolkit.ReadLocalSetting(SettingNames.CdnRewriteAkamai, false);
+        CdnStallSwitch = SettingsToolkit.ReadLocalSetting(SettingNames.CdnStallSwitch, true);
+        CdnReplaceModeCollection = Enum.GetValues<CdnReplaceMode>().ToList();
+        CdnServerCollection = new List<string> { PlayUrlOptimizer.DefaultCdnHost }.Concat(CdnAccelerator.CandidatePool).Distinct().ToList();
+        CdnServerSelected = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, PlayUrlOptimizer.DefaultCdnHost);
+        CdnReplaceModeIndex = (int)CdnReplaceMode;
+        CdnServerIndex = Math.Max(0, CdnServerCollection.IndexOf(CdnServerSelected));
         PlayerDisplayModeCollection = Enum.GetValues<PlayerDisplayMode>().ToList();
         PreferCodecCollection = Enum.GetValues<PreferCodecType>().ToList();
         PreferQualityCollection = Enum.GetValues<PreferQualityType>().ToList();
@@ -465,6 +482,85 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnPreferWebEngineChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerEngine, value ? PlayerEngineType.Web : PlayerEngineType.Mpv);
+
+    partial void OnProxyEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyEnabled, value);
+
+    partial void OnProxyServerChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyServer, value);
+
+    partial void OnProxyServerHkChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyServerHk, value);
+
+    partial void OnProxyServerTwChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyServerTw, value);
+
+    partial void OnProxyServerCnChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyServerCn, value);
+
+    partial void OnReplaceCdnEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.ReplaceCdnEnabled, value);
+
+    partial void OnCdnReplaceModeChanged(CdnReplaceMode value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.CdnReplaceMode, value);
+
+    partial void OnCdnAutoSelectChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.CdnAutoSelect, value);
+
+    partial void OnCdnFilterPortChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.CdnFilterPort, value);
+
+    partial void OnCdnRewriteAkamaiChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.CdnRewriteAkamai, value);
+
+    partial void OnCdnStallSwitchChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.CdnStallSwitch, value);
+
+    partial void OnCdnServerSelectedChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerCdnServer, value);
+
+    partial void OnCdnReplaceModeIndexChanged(int value)
+    {
+        if (value < 0 || value > 3)
+        {
+            return;
+        }
+
+        CdnReplaceMode = (CdnReplaceMode)value;
+    }
+
+    partial void OnCdnServerIndexChanged(int value)
+    {
+        if (CdnServerCollection is null || value < 0 || value >= CdnServerCollection.Count)
+        {
+            return;
+        }
+
+        CdnServerSelected = CdnServerCollection[value];
+    }
+
+    [RelayCommand]
+    private async Task TestCdnLatencyAsync()
+    {
+        CdnLatencyText = "测试中…";
+        var tasks = CdnAccelerator.CandidatePool
+            .Select(async host =>
+            {
+                var ms = await CdnAccelerator.TestLatencyAsync(
+                    host,
+                    $"{SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, PlayUrlOptimizer.DefaultCdnHost)}",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    "https://www.bilibili.com");
+                return (host, ms);
+            })
+            .ToList();
+
+        var results = await Task.WhenAll(tasks);
+        var text = string.Join("　", results
+            .OrderBy(p => p.ms < 0 ? int.MaxValue : p.ms)
+            .Select(p => p.ms < 0 ? $"{p.host}: 不可用" : $"{p.host}: {p.ms}ms"));
+        CdnLatencyText = text;
+    }
 
     partial void OnDefaultDownloadPathChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.DownloadFolder, value);

@@ -41,6 +41,7 @@ public sealed class SettingsShell : Component
             new NotificationSettingControl(),
             new LoggerSettingControl(),
             new AboutSettingControl(),
+            new ProxySettingControl(),
         });
     }
 
@@ -60,6 +61,8 @@ public sealed class SettingsShell : Component
         {
             SectionTitle("播放器"),
             Control(0), Control(1), Control(2), Control(3), Control(4),
+            SectionTitle("网络与加速"),
+            Control(14),
             SectionTitle("通用"),
             Control(5), Control(6), Control(7), Control(8), Control(9), Control(10), Control(11), Control(12),
             SectionTitle("关于"),

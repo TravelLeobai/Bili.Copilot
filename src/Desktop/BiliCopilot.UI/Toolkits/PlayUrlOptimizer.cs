@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Services;
 using Microsoft.Extensions.Logging;
 using Richasy.WinUIKernel.Share.Toolkits;
 
@@ -50,6 +51,30 @@ internal static class PlayUrlOptimizer
         if (backupUrls is not null)
         {
             allUrls.AddRange(backupUrls.Where(p => !string.IsNullOrWhiteSpace(p)));
+        }
+
+        // CDN 加速：先按用户设置做主机替换，再按候选池实测排名挑节点.
+        if (CdnAccelerator.IsEnabled)
+        {
+            try
+            {
+                await CdnAccelerator.RankHostsAsync(baseUrl, logger);
+                var accelerated = allUrls
+                    .Select(p => CdnAccelerator.Rewrite(p))
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .ToList();
+                foreach (var url in accelerated)
+                {
+                    if (!allUrls.Contains(url))
+                    {
+                        allUrls.Insert(0, url);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "CDN 加速处理失败，使用原始地址");
+            }
         }
 
         var mirrorUrls = allUrls.Where(p => !AppToolkit.IsP2PUrl(p)).Distinct().ToList();

@@ -108,6 +108,60 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     private bool _preferWebEngine;
+    [ObservableProperty]
+    private bool _proxyEnabled;
+
+    [ObservableProperty]
+    private string _proxyServer;
+
+    [ObservableProperty]
+    private string _proxyServerHk;
+
+    [ObservableProperty]
+    private string _proxyServerTw;
+
+    [ObservableProperty]
+    private string _proxyServerCn;
+
+    [ObservableProperty]
+    private bool _replaceCdnEnabled;
+
+    [ObservableProperty]
+    private CdnReplaceMode _cdnReplaceMode;
+
+    [ObservableProperty]
+    private bool _cdnAutoSelect;
+
+    [ObservableProperty]
+    private bool _cdnFilterPort;
+
+    [ObservableProperty]
+    private bool _cdnRewriteAkamai;
+
+    [ObservableProperty]
+    private bool _cdnStallSwitch;
+
+    [ObservableProperty]
+    private int _cdnReplaceModeIndex;
+
+    [ObservableProperty]
+    private int _cdnServerIndex;
+
+    [ObservableProperty]
+    private string _cdnServerSelected;
+
+    [ObservableProperty]
+    private string _cdnLatencyText;
+
+    /// <summary>
+    /// CDN 替换模式可选项.
+    /// </summary>
+    public List<CdnReplaceMode> CdnReplaceModeCollection { get; set; } = new();
+
+    /// <summary>
+    /// 候选 CDN 服务器.
+    /// </summary>
+    public List<string> CdnServerCollection { get; set; } = new();
 
     [ObservableProperty]
     private string _defaultDownloadPath;

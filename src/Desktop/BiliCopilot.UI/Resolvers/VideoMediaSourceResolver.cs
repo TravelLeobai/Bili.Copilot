@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
@@ -190,6 +191,32 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         const string userAgent = InternalHttpExtensions.VideoUserAgent;
         const string referer = InternalHttpExtensions.VideoReferer;
+
+        // 启用了播放代理时，先尝试从解析服务器拿地址（可解锁区域限制）.
+        if (ProxiedPlayUrlService.IsEnabled)
+        {
+            var cookie = cookiesResolver.GetCookieString();
+            var proxied = await ProxiedPlayUrlService.GetPlayUrlsAsync(
+                _snapshot.Video.Identifier.Id,
+                _part.Identifier.Id,
+                selectedFormat.Quality,
+                preferCodec,
+                cookie,
+                logger);
+
+            if (!string.IsNullOrEmpty(proxied?.Video) || !string.IsNullOrEmpty(proxied?.Audio))
+            {
+                var proxiedVideo = proxied!.Value.Video is null
+                    ? null
+                    : CdnAccelerator.Rewrite(proxied.Value.Video, true);
+                var proxiedAudio = proxied.Value.Audio is null
+                    ? null
+                    : CdnAccelerator.Rewrite(proxied.Value.Audio, true);
+
+                SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, selectedFormat.Quality);
+                return (proxiedVideo, proxiedAudio);
+            }
+        }
 
         var videoUrl = vSeg is null
             ? null
