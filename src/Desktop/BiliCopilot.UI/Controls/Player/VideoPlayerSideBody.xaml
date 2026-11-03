@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <local:VideoPlayerControlBase
     x:Class="BiliCopilot.UI.Controls.Player.VideoPlayerSideBody"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -14,6 +14,9 @@
     <UserControl.Resources>
         <DataTemplate x:Key="CommentTemplate" x:DataType="components:CommentMainViewModel">
             <comment:CommentMainPanel ViewModel="{x:Bind}" />
+        </DataTemplate>
+                <DataTemplate x:Key="DanmakuTemplate" x:DataType="components:VideoPlayerDanmakuSectionDetailViewModel">
+            <local:VideoDanmakuSection ViewModel="{x:Bind}" />
         </DataTemplate>
         <DataTemplate x:Key="RecommendTemplate" x:DataType="components:VideoPlayerRecommendSectionDetailViewModel">
             <local:VideoRecommendSection ViewModel="{x:Bind}" />
@@ -36,6 +39,7 @@
             InfoTemplate="{StaticResource InfoTemplate}"
             PartTemplate="{StaticResource PartTemplate}"
             PlaylistTemplate="{StaticResource PlaylistTemplate}"
+            DanmakuTemplate="{StaticResource DanmakuTemplate}"
             RecommendTemplate="{StaticResource RecommendTemplate}"
             UgcSeasonTemplate="{StaticResource SeasonTemplate}" />
     </UserControl.Resources>

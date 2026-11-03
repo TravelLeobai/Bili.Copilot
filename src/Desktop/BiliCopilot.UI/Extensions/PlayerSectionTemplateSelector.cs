@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.Components;
 
@@ -24,11 +24,17 @@ internal sealed partial class PlayerSectionTemplateSelector : DataTemplateSelect
 
     public DataTemplate AITemplate { get; set; }
 
+    public DataTemplate DanmakuTemplate { get; set; }
+
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
     {
         if (item is CommentMainViewModel)
         {
             return CommentTemplate;
+        }
+        else if (item is VideoPlayerDanmakuSectionDetailViewModel)
+        {
+            return DanmakuTemplate;
         }
         else if (item is VideoPlayerRecommendSectionDetailViewModel)
         {

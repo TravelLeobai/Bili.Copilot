@@ -97,6 +97,9 @@
             <base:SettingsCard Description="{ext:Locale Name=NoP2PDescription}" Header="{ext:Locale Name=NoP2P}">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.NoP2P, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard Description="播放地址会优先使用镜像 CDN 主机，此处可自定义替换用的 CDN" Header="CDN 服务器">
+                <TextBox MinWidth="260" Text="{x:Bind ViewModel.CdnServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>

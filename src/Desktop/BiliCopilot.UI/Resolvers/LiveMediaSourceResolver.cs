@@ -88,7 +88,15 @@ internal sealed partial class LiveMediaSourceResolver(IPlayerService playerServi
             throw new InvalidOperationException("未能获取直播播放地址.");
         }
 
-        _cachedUrl = url;
-        return url;
+        // 直播地址同样可能落在 PCDN 主机上，走一遍地址可用性校验与 CDN 替换.
+        var optimizedUrl = await PlayUrlOptimizer.PickPlayableUrlAsync(
+            url,
+            urls.Where(p => p != url).ToList(),
+            InternalHttpExtensions.LiveUserAgent,
+            InternalHttpExtensions.LiveReferer,
+            logger);
+
+        _cachedUrl = optimizedUrl;
+        return optimizedUrl;
     }
 }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -82,9 +82,9 @@ public sealed partial class VideoConnectorViewModel
             sections.Insert(0, new VideoPlayerPlaylistSectionDetailViewModel(this, _snapshot.Playlist, AvId));
         }
 
-        if (_view.Recommends is not null)
+        if (_part is not null && !string.IsNullOrEmpty(_part.Identifier.Id))
         {
-            sections.Add(new VideoPlayerRecommendSectionDetailViewModel(this, _view.Recommends));
+            sections.Add(new VideoPlayerDanmakuSectionDetailViewModel(this, _view.Information.Identifier.Id, _part.Identifier.Id));
         }
 
         sections.Add(_comments);

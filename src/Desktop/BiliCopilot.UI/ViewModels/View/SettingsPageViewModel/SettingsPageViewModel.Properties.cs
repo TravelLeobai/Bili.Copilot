@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -102,6 +102,9 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     private bool _noP2P;
+
+    [ObservableProperty]
+    private string _cdnServer;
 
     [ObservableProperty]
     private string _defaultDownloadPath;

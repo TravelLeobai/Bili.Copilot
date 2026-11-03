@@ -220,6 +220,8 @@ public sealed partial class PlayerViewModel
             await Client.UseKeepOpenAsync(true);
             await Client.SetTlsVerifyAsync(false);
             await Client.SetAutoCreatePlaylistAsync(AutoCreatePlaylistKind.No);
+
+            await RestorePlaybackEnhancementsAsync();
         }
 
         if (_rightKeyLongPressTimer == null)
@@ -301,6 +303,39 @@ public sealed partial class PlayerViewModel
         });
     }
 
+    private async Task RestorePlaybackEnhancementsAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        Anime4KMode = SettingsToolkit.ReadLocalSetting(SettingNames.Anime4KMode, Anime4KMode.None);
+        ArtCNNMode = SettingsToolkit.ReadLocalSetting(SettingNames.ArtCNNMode, ArtCNNMode.None);
+        Nnedi3Mode = SettingsToolkit.ReadLocalSetting(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
+        RavuMode = SettingsToolkit.ReadLocalSetting(SettingNames.RavuMode, RavuMode.None);
+        VsrScale = SettingsToolkit.ReadLocalSetting(SettingNames.NvidiaVsrScale, VsrScale.None);
+
+        try
+        {
+            var shaders = GetCombinedShaders();
+            if (shaders.Length > 0)
+            {
+                await Client.SetShadersAsync(shaders);
+            }
+
+            CheckClearShaderEnabled();
+
+            if (VsrScale != VsrScale.None)
+            {
+                await ApplyVsrAsync(VsrScale);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Restore playback enhancements failed");
+        }
+    }
     private void OnClientCacheStateChanged(object? sender, MpvCacheStateEventArgs e)
         => CacheStateChanged?.Invoke(this, e);
 
@@ -315,6 +350,11 @@ public sealed partial class PlayerViewModel
             }
 
             return;
+        }
+        else if (e == MpvError.VoInitFailed)
+        {
+            // 视频输出初始化失败时，先回退着色器/超分并重建输出，避免一直白屏.
+            await RecoverPlaybackEnhancementsAsync();
         }
         else if (Player.Duration < 1 && !_isBroken)
         {

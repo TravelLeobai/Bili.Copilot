@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls.Danmaku;
 using BiliCopilot.UI.Models.Constants;
@@ -634,8 +634,8 @@ public sealed partial class PlayerViewModel
         try
         {
             Anime4KMode = mode;
-            await Client!.SetShadersAsync(GetCombinedShaders());
-            CheckClearShaderEnabled();
+            SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, mode);
+            await ApplyShadersAsync();
         }
         catch (Exception ex)
         {
@@ -654,8 +654,8 @@ public sealed partial class PlayerViewModel
         try
         {
             ArtCNNMode = mode;
-            await Client!.SetShadersAsync(GetCombinedShaders());
-            CheckClearShaderEnabled();
+            SettingsToolkit.WriteLocalSetting(SettingNames.ArtCNNMode, mode);
+            await ApplyShadersAsync();
         }
         catch (Exception ex)
         {
@@ -674,8 +674,8 @@ public sealed partial class PlayerViewModel
         try
         {
             Nnedi3Mode = mode;
-            await Client!.SetShadersAsync(GetCombinedShaders());
-            CheckClearShaderEnabled();
+            SettingsToolkit.WriteLocalSetting(SettingNames.Nnedi3Mode, mode);
+            await ApplyShadersAsync();
         }
         catch (Exception ex)
         {
@@ -694,8 +694,8 @@ public sealed partial class PlayerViewModel
         try
         {
             RavuMode = mode;
-            await Client!.SetShadersAsync(GetCombinedShaders());
-            CheckClearShaderEnabled();
+            SettingsToolkit.WriteLocalSetting(SettingNames.RavuMode, mode);
+            await ApplyShadersAsync();
         }
         catch (Exception ex)
         {
@@ -705,73 +705,141 @@ public sealed partial class PlayerViewModel
 
     [RelayCommand]
     private async Task ChangeNvidiaVsrModeAsync(VsrScale scale)
+        => await ApplyVsrAsync(scale);
+    private async Task ApplyVsrAsync(VsrScale scale)
     {
-        if (Player is null)
+        if (Player is null || Client is null)
+        {
+            return;
+        }
+
+        VsrScale = scale;
+        SettingsToolkit.WriteLocalSetting(SettingNames.NvidiaVsrScale, scale);
+
+        if (scale != VsrScale.None && !HasNvidiaGpu)
+        {
+            VsrScale = VsrScale.None;
+            SettingsToolkit.WriteLocalSetting(SettingNames.NvidiaVsrScale, VsrScale.None);
+            Window?.ShowTip("当前设备没有检测到 NVIDIA 显卡，无法开启超分辨率", InfoType.Warning);
+            return;
+        }
+
+        var wasPlaying = Player.IsPlaying && Player.IsPlaybackInitialized;
+        try
+        {
+            if (wasPlaying)
+            {
+                await Client.PauseAsync();
+            }
+
+            var scaleNumber = scale switch
+            {
+                VsrScale.x1_5 => 1.5,
+                VsrScale.x2_0 => 2.0,
+                VsrScale.x3_0 => 3.0,
+                VsrScale.x4_0 => 4.0,
+                _ => 1.0,
+            };
+
+            // 只切换滤镜和超分，不在播放期间重建 GPU 上下文，否则播放窗口会白屏.
+            await Client.SetNvidiaVsrAsync(scale != VsrScale.None, scaleNumber);
+            if (scale == VsrScale.None)
+            {
+                await RestoreDecodeSettingsAsync();
+            }
+
+            if (wasPlaying)
+            {
+                await Client.ResumeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Set Nvidia VSR scale failed");
+            await RecoverPlaybackEnhancementsAsync();
+        }
+    }
+
+    private async Task RestoreDecodeSettingsAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        var decodeType = SettingsToolkit.ReadLocalSetting(SettingNames.PreferDecode, PreferDecodeType.Auto);
+        if (decodeType == PreferDecodeType.Auto)
+        {
+            await Client.SetGpuContextAsync(GpuContextType.Auto);
+            await Client.SetHardwareDecodeAsync(HardwareDecodeType.Auto);
+        }
+        else if (decodeType == PreferDecodeType.D3D11)
+        {
+            await Client.SetGpuContextAsync(GpuContextType.D3D11);
+            await Client.SetHardwareDecodeAsync(HardwareDecodeType.D3D11va);
+        }
+        else if (decodeType == PreferDecodeType.D3D12)
+        {
+            await Client.SetGpuContextAsync(GpuContextType.D3D11);
+            await Client.SetHardwareDecodeAsync(HardwareDecodeType.D3D12vaCopy);
+        }
+        else if (decodeType == PreferDecodeType.NVDEC)
+        {
+            await Client.SetGpuContextAsync(GpuContextType.D3D11);
+            await Client.SetHardwareDecodeAsync(HardwareDecodeType.Nvdec);
+        }
+        else if (decodeType == PreferDecodeType.Vulkan)
+        {
+            await Client.SetGpuContextAsync(GpuContextType.WindowsVulkan);
+            await Client.SetHardwareDecodeAsync(HardwareDecodeType.Vulkan);
+        }
+        else if (decodeType == PreferDecodeType.Software)
+        {
+            await Client.SetHardwareDecodeAsync(HardwareDecodeType.None);
+        }
+    }
+
+    internal async Task RecoverPlaybackEnhancementsAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        var hasEnhancement = VsrScale != VsrScale.None
+            || Anime4KMode != Anime4KMode.None
+            || ArtCNNMode != ArtCNNMode.None
+            || RavuMode != RavuMode.None
+            || Nnedi3Mode != Nnedi3Mode.None;
+        if (!hasEnhancement)
         {
             return;
         }
 
         try
         {
-            VsrScale = scale;
-            if (scale == VsrScale.None)
-            {
-                await Client!.SetNvidiaVsrAsync(false);
-                // Restore the GPU context and hardware decode settings.
-                var decodeType = SettingsToolkit.ReadLocalSetting(SettingNames.PreferDecode, PreferDecodeType.Auto);
-                if (decodeType == PreferDecodeType.Auto)
-                {
-                    await Client.SetGpuContextAsync(GpuContextType.Auto);
-                    await Client.SetHardwareDecodeAsync(HardwareDecodeType.Auto);
-                }
-                else if (decodeType == PreferDecodeType.D3D11)
-                {
-                    await Client.SetGpuContextAsync(GpuContextType.D3D11);
-                    await Client.SetHardwareDecodeAsync(HardwareDecodeType.D3D11va);
-                }
-                else if (decodeType == PreferDecodeType.D3D12)
-                {
-                    await Client.SetGpuContextAsync(GpuContextType.D3D11);
-                    await Client.SetHardwareDecodeAsync(HardwareDecodeType.D3D12vaCopy);
-                }
-                else if (decodeType == PreferDecodeType.NVDEC)
-                {
-                    await Client.SetGpuContextAsync(GpuContextType.D3D11);
-                    await Client.SetHardwareDecodeAsync(HardwareDecodeType.Nvdec);
-                }
-                else if (decodeType == PreferDecodeType.Vulkan)
-                {
-                    await Client.SetGpuContextAsync(GpuContextType.WindowsVulkan);
-                    await Client.SetHardwareDecodeAsync(HardwareDecodeType.Vulkan);
-                }
-                else if (decodeType == PreferDecodeType.Software)
-                {
-                    await Client.SetHardwareDecodeAsync(HardwareDecodeType.None);
-                }
-            }
-            else
-            {
-                var scaleNumber = scale switch
-                {
-                    VsrScale.x1_5 => 1.5,
-                    VsrScale.x2_0 => 2.0,
-                    VsrScale.x3_0 => 3.0,
-                    VsrScale.x4_0 => 4.0,
-                    _ => 1.0,
-                };
-
-                // Ensure the GPU context and hardware decode are set correctly.
-                await Client!.SetGpuContextAsync(GpuContextType.D3D11);
-                await Client!.SetHardwareDecodeAsync(HardwareDecodeType.D3D11va);
-                await Client!.SetNvidiaVsrAsync(true, scaleNumber);
-            }
+            Anime4KMode = Anime4KMode.None;
+            ArtCNNMode = ArtCNNMode.None;
+            RavuMode = RavuMode.None;
+            Nnedi3Mode = Nnedi3Mode.None;
+            VsrScale = VsrScale.None;
+            SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, Anime4KMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.ArtCNNMode, ArtCNNMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.RavuMode, RavuMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.NvidiaVsrScale, VsrScale.None);
+            CheckClearShaderEnabled();
+            await Client.SetNvidiaVsrAsync(false);
+            await Client.SetShadersAsync([]);
+            await Client.SetVideoOutputAsync(VideoOutputType.GpuNext);
+            await RestoreDecodeSettingsAsync();
+            logger.LogWarning("已回退着色器与超分辨率设置，避免播放器白屏");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Set Nvidia VSR scale failed");
+            logger.LogError(ex, "Recover playback enhancements failed");
         }
     }
-
     [RelayCommand]
     private async Task ClearShadersAsync()
     {
@@ -782,16 +850,49 @@ public sealed partial class PlayerViewModel
 
         try
         {
-            await Client!.SetShadersAsync(Array.Empty<string>());
             Anime4KMode = Anime4KMode.None;
             ArtCNNMode = ArtCNNMode.None;
             Nnedi3Mode = Nnedi3Mode.None;
             RavuMode = RavuMode.None;
-            CheckClearShaderEnabled();
+            SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, Anime4KMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.ArtCNNMode, ArtCNNMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.RavuMode, RavuMode.None);
+            await ApplyShadersAsync();
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Clear shaders failed");
+        }
+    }
+
+    private async Task ApplyShadersAsync()
+    {
+        if (Client is null || Player is null)
+        {
+            return;
+        }
+
+        var wasPlaying = Player.IsPlaying && Player.IsPlaybackInitialized;
+        try
+        {
+            if (wasPlaying)
+            {
+                await Client.PauseAsync();
+            }
+
+            await Client.SetShadersAsync(GetCombinedShaders());
+            CheckClearShaderEnabled();
+
+            if (wasPlaying)
+            {
+                await Client.ResumeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Apply shaders failed");
+            await RecoverPlaybackEnhancementsAsync();
         }
     }
 }

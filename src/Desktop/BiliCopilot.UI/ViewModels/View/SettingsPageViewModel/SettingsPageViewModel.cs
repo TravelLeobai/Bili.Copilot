@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls.AI;
 using BiliCopilot.UI.Models.Constants;
@@ -57,6 +57,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         IsNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsNotificationEnabled, true);
         IsVideoMomentNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, true);
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
+        CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PlayerDisplayModeCollection = Enum.GetValues<PlayerDisplayMode>().ToList();
         PreferCodecCollection = Enum.GetValues<PreferCodecType>().ToList();
         PreferQualityCollection = Enum.GetValues<PreferQualityType>().ToList();
@@ -457,6 +458,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnNoP2PChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.PlayWithoutP2P, value);
+
+    partial void OnCdnServerChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerCdnServer, value);
 
     partial void OnDefaultDownloadPathChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.DownloadFolder, value);

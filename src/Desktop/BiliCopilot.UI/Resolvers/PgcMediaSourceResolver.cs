@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Models;
@@ -103,7 +103,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         };
 
         await LoadMediaInfoAsync();
-        var (videoUrl, audioUrl) = GetPlayUrls();
+        var (videoUrl, audioUrl) = await GetPlayUrlsAsync();
         var fileUrl = string.Empty;
         if (!string.IsNullOrEmpty(videoUrl))
         {
@@ -171,9 +171,9 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         _initTask.TrySetResult(true);
     }
 
-    private (string? video, string? audio) GetPlayUrls()
+    private async Task<(string? video, string? audio)> GetPlayUrlsAsync()
     {
-        var videoSegments = _playbackInfo.Videos;
+        var videoSegments = _playbackInfo!.Videos;
         var audioSegments = _playbackInfo.Audios;
         var selectedFormat = GetCurrentFormat();
         if (selectedFormat is null)
@@ -187,23 +187,15 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
             ?? videoSegments?.FirstOrDefault(p => p.Id == selectedFormat.Quality.ToString());
         var aSeg = audioSegments?.FirstOrDefault(p => p.Id == maxAudioQuality.ToString());
 
-        var videoUrl = vSeg?.BaseUrl;
-        var audioUrl = aSeg?.BaseUrl;
+        const string userAgent = InternalHttpExtensions.VideoUserAgent;
+        const string referer = InternalHttpExtensions.VideoReferer;
 
-        if (SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false))
-        {
-            if (vSeg?.BackupUrls is not null)
-            {
-                string[] videoUrls = [vSeg?.BaseUrl, .. vSeg?.BackupUrls];
-                videoUrl = Array.Find(videoUrls, p => !AppToolkit.IsP2PUrl(p)) ?? vSeg?.BaseUrl;
-            }
-
-            if (aSeg?.BackupUrls is not null)
-            {
-                string[] audioUrls = [aSeg?.BaseUrl, .. aSeg?.BackupUrls];
-                audioUrl = Array.Find(audioUrls, p => !AppToolkit.IsP2PUrl(p)) ?? aSeg?.BaseUrl;
-            }
-        }
+        var videoUrl = vSeg is null
+            ? null
+            : await PlayUrlOptimizer.PickPlayableUrlAsync(vSeg.BaseUrl, vSeg.BackupUrls, userAgent, referer, logger);
+        var audioUrl = aSeg is null
+            ? null
+            : await PlayUrlOptimizer.PickPlayableUrlAsync(aSeg.BaseUrl, aSeg.BackupUrls, userAgent, referer, logger);
 
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedPgcQuality, selectedFormat.Quality);
         return (videoUrl, audioUrl);
