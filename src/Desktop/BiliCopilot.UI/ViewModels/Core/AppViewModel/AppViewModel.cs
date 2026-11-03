@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Forms;
@@ -67,6 +67,18 @@ public sealed partial class AppViewModel : ViewModelBase
         FFmpegPath = ffmpegFile.Path;
 
         _ = await this.Get<IFontToolkit>().GetFontsAsync();
+    }
+
+    /// <summary>
+    /// 应用亚克力背景设置到所有主窗口.
+    /// </summary>
+    /// <param name="enabled">是否启用亚克力.</param>
+    public void ApplyBackdrop(bool enabled)
+    {
+        foreach (var window in Windows.OfType<MainWindow>())
+        {
+            window.ApplyBackdropSetting(enabled);
+        }
     }
 
     [RelayCommand]

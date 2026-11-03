@@ -12,7 +12,10 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="16,0" ColumnSpacing="12">
+    <Grid
+        Height="56"
+        Padding="16,0"
+        ColumnSpacing="12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition />
@@ -33,7 +36,8 @@
         <base:TrimTextBlock
             Grid.Column="1"
             VerticalAlignment="Center"
-            FontWeight="Bold"
+            FontSize="18"
+            FontWeight="SemiBold"
             MaxLines="1"
             Text="{x:Bind ViewModel.UserName, Mode=OneWay}" />
 

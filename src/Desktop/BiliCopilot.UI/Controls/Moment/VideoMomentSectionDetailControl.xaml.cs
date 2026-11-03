@@ -48,6 +48,37 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         }
     }
 
+    private void OnUpersChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => SelectCurrentUper();
+
+    private void OnUperSelectionChanged(ItemsView sender, ItemsViewSelectionChangedEventArgs args)
+    {
+        if (sender.SelectedItem is MomentUperSectionViewModel item)
+        {
+            ViewModel?.SelectUperCommand.Execute(item);
+        }
+    }
+
+    private void SelectCurrentUper()
+    {
+        if (ViewModel is null || ViewModel.Upers.Count == 0)
+        {
+            return;
+        }
+
+        var index = 0;
+        if (ViewModel.SelectedAuthor is not null)
+        {
+            var match = ViewModel.Upers.FirstOrDefault(p => string.Equals(p.Name, ViewModel.SelectedAuthor, StringComparison.Ordinal));
+            if (match is not null)
+            {
+                index = ViewModel.Upers.IndexOf(match);
+            }
+        }
+
+        UperView.Select(index);
+    }
+
     /// <inheritdoc/>
     protected override void OnControlLoaded()
     {
@@ -62,6 +93,9 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         _savePaneWidthTimer.Tick += OnSavePaneWidthTick;
         ApplyPaneWidths();
         ViewModel.SynchronizeWatchedItems();
+        ViewModel.Upers.CollectionChanged += OnUpersChanged;
+        UperView.SelectionChanged += OnUperSelectionChanged;
+        SelectCurrentUper();
         if (!ViewModel.IsLoading && (ViewModel.Items.Count > 0 || ViewModel.WatchedItems.Count > 0))
         {
             ViewModel.ResetHistoryCursor();
@@ -81,6 +115,8 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         View.IsLoadMorePaused = false;
         ViewModel.SetTimelineUpdatesSuspended(false);
         ViewModel.ListUpdated -= OnListUpdatedAsync;
+        ViewModel.Upers.CollectionChanged -= OnUpersChanged;
+        UperView.SelectionChanged -= OnUperSelectionChanged;
         MomentWatchHistoryToolkit.WatchedChanged -= OnWatchedChanged;
         _isActive = false;
         ColumnResizer.UnregisterPropertyChangedCallback(ColumnSplitter.ColumnWidthProperty, _paneWidthCallback);

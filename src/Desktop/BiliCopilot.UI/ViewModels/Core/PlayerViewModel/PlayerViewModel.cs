@@ -4,6 +4,7 @@ using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.Resolvers;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
@@ -84,6 +85,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     internal async Task InitializeAsync(MediaSnapshot snapshot)
     {
         _snapshot = snapshot;
+        IsLive = snapshot.Type == BiliMediaType.Live;
+        _sponsorSegments = Array.Empty<SponsorSegment>();
+        _lastSponsorSkipPosition = -1;
+        _ = LoadSponsorBlockAsync(snapshot);
         _watchTracker = new PlaybackWatchTracker();
         _watchRecorded = false;
         ErrorMessage = default;
@@ -135,7 +140,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             VideoConnectorViewModel videoVM => videoVM.Title,
             PgcConnectorViewModel pgcVM => pgcVM.Title,
-            _ => string.Empty
+            _ => _snapshot.Live?.Identifier.Title ?? string.Empty
         };
 
         // TODO: 创建源处理器
@@ -158,6 +163,13 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 }
                 break;
             case BiliMediaType.Live:
+                {
+                    var resolver = this.Get<LiveMediaSourceResolver>();
+                    resolver.Initialize(_snapshot.Live!);
+                    _sourceResolver = resolver;
+                    _ = ConnectLiveAsync(default);
+                }
+
                 break;
             default:
                 break;
@@ -251,7 +263,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// 关闭播放器.
     /// </summary>
     public void Close()
-        => Window?.Close();
+    {
+        StopLive();
+        Window?.Close();
+    }
 
     private void ShowPlayerWindow()
     {
@@ -365,5 +380,53 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     partial void OnIsSubtitleEnabledChanged(bool value)
     {
         ToggleSubtitleEnabledCommand.Execute(value);
+    }
+
+    private async Task LoadSponsorBlockAsync(MediaSnapshot snapshot)
+    {
+        if (!SettingsToolkit.ReadLocalSetting(SettingNames.EnableSponsorBlock, true))
+        {
+            return;
+        }
+
+        var videoId = snapshot.Type == BiliMediaType.Video ? snapshot.Video?.Identifier.Id : null;
+        if (string.IsNullOrEmpty(videoId) || _isSponsorLoading)
+        {
+            return;
+        }
+
+        _isSponsorLoading = true;
+        try
+        {
+            _sponsorSegments = await SponsorBlockService.GetSegmentsAsync(videoId);
+        }
+        catch
+        {
+            _sponsorSegments = Array.Empty<SponsorSegment>();
+        }
+        finally
+        {
+            _isSponsorLoading = false;
+        }
+    }
+
+    private void CheckSponsorBlock()
+    {
+        if (_sponsorSegments.Count == 0 || Player is null || Player.Duration <= 0)
+        {
+            return;
+        }
+
+        var position = Player.Position;
+        foreach (var segment in _sponsorSegments)
+        {
+            if (position >= segment.Start && position < segment.End - 0.3
+                && Math.Abs(_lastSponsorSkipPosition - segment.End) > 0.5)
+            {
+                _lastSponsorSkipPosition = segment.End;
+                _ = ChangePositionAsync(segment.End);
+                break;
+            }
+        }
     }
 }

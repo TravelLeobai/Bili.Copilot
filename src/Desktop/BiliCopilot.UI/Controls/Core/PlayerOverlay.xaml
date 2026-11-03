@@ -726,6 +726,12 @@
                         Duration="0:0:0.25" />
                 </animations:Implicit.HideAnimations>
             </Grid>
+            <player:LivePanel
+                x:Name="LivePanelControl"
+                Grid.RowSpan="2"
+                ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.IsLive, Mode=OneWay}" />
+
 
             <Grid
                 x:Name="TipContainer"

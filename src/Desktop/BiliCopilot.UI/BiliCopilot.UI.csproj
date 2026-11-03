@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows10.0.22621.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <RootNamespace>BiliCopilot.UI</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -13,7 +13,7 @@
     <Nullable>enable</Nullable>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <DefaultLanguage>zh-CN</DefaultLanguage>
-	<NoWarn>$(NoWarn);CS1998;CS0612;NU1903;IL2104;IL3053;MVVMTK0045;MVVMTK0046;CS1591;WMC1510;IL2067;IL2059;IL3050;IL2075;IL2072;IL2055;IL2060;IL2077;IL2070;IL2058;IL2026;IL2065;IL3000;IL3002;IL2057;IL2093;IL2111;IL2080;IL2090;IL2091;IL2113;IL2087;IL2062;IL2046;IL2122;IL2096</NoWarn>
+	<NoWarn>$(NoWarn);CS1998;CS0612;NU1903;IL2104;IL3053;MVVMTK0045;MVVMTK0046;CS1591;WMC1510;IL2067;IL2059;IL3050;IL2075;IL2072;IL2055;IL2060;IL2077;IL2070;IL2058;IL2026;IL2065;IL3000;IL3002;IL2057;IL2093;IL2111;IL2080;IL2090;IL2091;IL2113;IL2087;IL2062;IL2046;IL2122;IL2096;REACTOR_DIALOG_001;IDE0005;REACTOR_THEME_001;REACTOR_THEME_004</NoWarn>
     <MvvmToolkitEnableINotifyPropertyChangingSupport>false</MvvmToolkitEnableINotifyPropertyChangingSupport>
     <AllowUnsafe>True</AllowUnsafe>
   </PropertyGroup>
@@ -306,6 +306,7 @@
     <PackageReference Include="HtmlAgilityPack" />
     <PackageReference Include="Markdig" />
     <PackageReference Include="Microsoft.Web.WebView2" />
+    <PackageReference Include="Microsoft.UI.Reactor" />
     <PackageReference Include="Microsoft.Windows.CsWin32">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -1484,3 +1485,8 @@
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>
+
+
+
+
+

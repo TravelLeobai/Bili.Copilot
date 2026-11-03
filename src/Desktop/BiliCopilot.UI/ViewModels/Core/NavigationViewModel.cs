@@ -20,7 +20,7 @@ namespace BiliCopilot.UI.ViewModels.Core;
 /// </summary>
 public sealed partial class NavigationViewModel : ViewModelBase, INavServiceViewModel
 {
-    private NavigationView _navigationView;
+    private NavigationView? _navigationView;
     private MainFrame? _navFrame;
     private OverlayFrame? _overFrame;
 
@@ -35,6 +35,12 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
 
     [ObservableProperty]
     private bool _isTopNavBarShown;
+
+    /// <summary>
+    /// 导航项可见性版本号，变化时触发外壳重新渲染.
+    /// </summary>
+    [ObservableProperty]
+    private int _navItemsVersion;
 
     [ObservableProperty]
     private bool _isFavoritesPage;
@@ -84,7 +90,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         _navFrame.NavigateTo(pageType, parameter);
 
         var item = MenuItems.Find(p => p.PageKey == pageType.FullName);
-        if (item is not null && _navigationView.SelectedItem != item)
+        if (item is not null && _navigationView is not null && _navigationView.SelectedItem != item)
         {
             _navigationView.SelectedItem = item;
         }
@@ -159,6 +165,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     {
         var item = MenuItems.Find(p => p.PageKey == pageType.FullName);
         item?.IsVisible = isVisible;
+        NavItemsVersion++;
     }
 
     /// <summary>
@@ -202,7 +209,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     /// <summary>
     /// 初始化导航视图模型.
     /// </summary>
-    public void Initialize(NavigationView view, MainFrame navFrame, OverlayFrame overFrame)
+    public void Initialize(NavigationView? view, MainFrame navFrame, OverlayFrame overFrame)
     {
         if (_navFrame is not null && _overFrame is not null)
         {

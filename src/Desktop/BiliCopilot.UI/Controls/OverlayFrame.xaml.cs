@@ -9,7 +9,38 @@ namespace BiliCopilot.UI.Controls;
 
 public sealed partial class OverlayFrame : LayoutUserControlBase
 {
-    public OverlayFrame() => InitializeComponent();
+    private bool _hasOverlay;
+
+    public OverlayFrame()
+    {
+        InitializeComponent();
+        RootGrid.LayoutUpdated += OnRootGridLayoutUpdated;
+    }
+
+    private void OnRootGridLayoutUpdated(object? sender, object e)
+    {
+        var hasOverlay = RootGrid.Children.Count > 0;
+        if (hasOverlay == _hasOverlay)
+        {
+            return;
+        }
+
+        _hasOverlay = hasOverlay;
+        RootGrid.Background = hasOverlay ? ResolveOverlayBackground() : null;
+    }
+
+    private Microsoft.UI.Xaml.Media.Brush ResolveOverlayBackground()
+    {
+        if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("SolidBackgroundFillColorBaseBrush", out var value)
+            && value is Microsoft.UI.Xaml.Media.Brush brush)
+        {
+            return brush;
+        }
+
+        var isDark = RootGrid.ActualTheme != Microsoft.UI.Xaml.ElementTheme.Light;
+        return new Microsoft.UI.Xaml.Media.SolidColorBrush(
+            isDark ? Windows.UI.Color.FromArgb(255, 32, 32, 32) : Windows.UI.Color.FromArgb(255, 243, 243, 243));
+    }
 
     public List<object> GetBackStack()
         => [.. RootGrid.Children];
@@ -67,6 +98,11 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
             var instance = Activator.CreateInstance(pageType);
             if (instance is UIElement element)
             {
+                if (element is Microsoft.UI.Xaml.Controls.Page page)
+                {
+                    page.Background = null;
+                }
+
                 targetElement = element;
                 // 如果实现了 IMainFramePage，则调用 SetParameter
                 if (element is IParameterPage mainFramePage)

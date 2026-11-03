@@ -1,13 +1,17 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Reactor;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.View;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.Toolkits;
 using Windows.Graphics;
@@ -22,6 +26,8 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
 {
     private const int WindowMinWidth = 640;
     private const int WindowMinHeight = 480;
+    private readonly MainShell _shell;
+    private readonly ReactorHostControl _shellHost;
     private bool _isFirstActivated = true;
 
     /// <summary>
@@ -30,13 +36,25 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
     public MainWindow()
     {
         InitializeComponent();
-        SetTitleBar(RootLayout.GetMainTitleBar());
+        ExtendsContentIntoTitleBar = true;
         Title = ResourceToolkit.GetLocalizedString(StringNames.AppName);
         this.SetIcon("Assets/logo.ico");
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         MinWidth = WindowMinWidth;
         MinHeight = WindowMinHeight;
         this.Get<AppViewModel>().Windows.Add(this);
+
+        var navigationViewModel = this.Get<NavigationViewModel>();
+        var mainFrame = new BiliCopilot.UI.Controls.MainFrame();
+        var overlayFrame = new BiliCopilot.UI.Controls.OverlayFrame();
+        navigationViewModel.Initialize(null, mainFrame, overlayFrame);
+        _shell = new MainShell(navigationViewModel, mainFrame, overlayFrame, this.Get<BiliCopilot.UI.ViewModels.Components.AccountViewModel>());
+        _shellHost = new ReactorHostControl();
+        RootGrid.Children.Insert(0, _shellHost);
+        _shellHost.Mount(_shell);
+        _shellHost.Loaded += OnShellHostLoaded;
+        ApplyBackdropSetting(SettingsToolkit.ReadLocalSetting(SettingNames.EnableAcrylicBackdrop, true));
+        SelectedItem();
         Activated += OnActivated;
         Closed += OnClosed;
     }
@@ -50,6 +68,36 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         await popup.ShowAsync(type);
         TipContainer.Children.Remove(popup);
         TipContainer.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// 应用亚克力背景.
+    /// </summary>
+    /// <param name="enabled">是否启用.</param>
+    public void ApplyBackdropSetting(bool enabled)
+    {
+        SystemBackdrop = enabled ? new DesktopAcrylicBackdrop() : null;
+    }
+
+    private void SelectedItem()
+    {
+        var selected = this.Get<NavigationViewModel>().MenuItems.FirstOrDefault(p => p.IsSelected);
+        selected?.NavigateCommand.Execute(default);
+    }
+
+    private void OnShellHostLoaded(object sender, RoutedEventArgs e)
+    {
+        var titleBar = _shell.TitleBarElement;
+        if (titleBar is not null)
+        {
+            SetTitleBar(titleBar);
+        }
+
+        var keyboardSource = InputKeyboardSource.GetForIsland(_shellHost.XamlRoot?.ContentIsland);
+        if (keyboardSource is not null)
+        {
+            keyboardSource.KeyUp += OnWindowKeyUp;
+        }
     }
 
     private static PointInt32 GetSavedWindowPosition()
@@ -99,7 +147,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         }
 
         appVM.IsClosed = true;
-        RootLayout.ViewModel.Back();
+        this.Get<NavigationViewModel>().Back();
         foreach (var item in windows)
         {
             if (item is not MainWindow)
@@ -123,10 +171,8 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
 
     private void OnWindowKeyUp(InputKeyboardSource sender, KeyEventArgs args)
     {
-        if (args.VirtualKey == Windows.System.VirtualKey.F && AppToolkit.IsOnlyCtrlPressed())
-        {
-            RootLayout.TryFocusSearchBox();
-        }
+        _ = sender;
+        _ = args;
     }
 
     private RectInt32 GetRenderRect(DisplayArea area)
@@ -220,59 +266,14 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         if (point.Properties.IsXButton1Pressed || point.Properties.IsXButton2Pressed)
         {
             e.Handled = true;
-            if (RootLayout.ViewModel.IsOverlayOpen)
+            if (this.Get<NavigationViewModel>().IsOverlayOpen)
             {
-                RootLayout.ViewModel.Back();
+                this.Get<NavigationViewModel>().Back();
             }
         }
     }
-
-    private void OnRootLayoutLoaded(object sender, RoutedEventArgs e)
-    {
-        var keyboardSource = InputKeyboardSource.GetForIsland(RootLayout.XamlRoot?.ContentIsland);
-        keyboardSource.KeyUp += OnWindowKeyUp;
-    }
-
-    private bool IsCursorInWindow()
-    {
-        var isSuccess = PInvoke.GetCursorPos(out var point);
-        if (!isSuccess)
-        {
-            return false;
-        }
-
-        if (AppWindow is null || !AppWindow.IsVisible)
-        {
-            return false;
-        }
-
-        var handle = this.GetWindowHandle();
-        isSuccess = PInvoke.GetClientRect(new(handle), out var clientRect);
-        if (!isSuccess)
-        {
-            return false;
-        }
-
-        var lt = new System.Drawing.Point(clientRect.X, clientRect.Y);
-        isSuccess = PInvoke.ClientToScreen(new(handle), ref lt);
-        if (!isSuccess)
-        {
-            return false;
-        }
-
-        var rb = new System.Drawing.Point(clientRect.X + clientRect.Width, clientRect.Y + clientRect.Height);
-        isSuccess = PInvoke.ClientToScreen(new(handle), ref rb);
-        if (!isSuccess)
-        {
-            return false;
-        }
-
-        return point.X >= lt.X && point.X <= rb.X && point.Y >= lt.Y && point.Y <= rb.Y;
-    }
-
-    private bool IsForegroundWindow()
-    {
-        var handle = PInvoke.GetForegroundWindow();
-        return handle.Equals(new(this.GetWindowHandle()));
-    }
 }
+
+
+
+

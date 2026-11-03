@@ -4,6 +4,7 @@ using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Resolvers;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Dispatching;
@@ -44,6 +45,9 @@ public sealed partial class PlayerViewModel
     private bool _isTlsFailed;
     private double _prevPosition;
     private bool _isBroken;
+    private IReadOnlyList<SponsorSegment> _sponsorSegments = Array.Empty<SponsorSegment>();
+    private double _lastSponsorSkipPosition = -1;
+    private bool _isSponsorLoading;
 
     public event EventHandler<string> WarningOccurred;
     public event EventHandler ChapterInitialized;

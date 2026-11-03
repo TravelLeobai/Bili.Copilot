@@ -17,14 +17,44 @@
     <Grid>
         <controls:IncrementVerticalScrollControl x:Name="View" LoadMoreCommand="{x:Bind ViewModel.LoadItemsCommand, Mode=OneWay}">
             <controls:IncrementVerticalScrollControl.Element>
-                <Grid Margin="0,16">
-                    <repeater:AppRepeater MaxWidth="1200" ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                <Grid
+                    x:Name="MomentGrid"
+                    MaxWidth="2200"
+                    Margin="0,16"
+                    ColumnSpacing="12"
+                    SizeChanged="OnMomentGridSizeChanged">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="ColumnOne" Width="*" />
+                        <ColumnDefinition x:Name="ColumnTwo" Width="0" />
+                        <ColumnDefinition x:Name="ColumnThree" Width="0" />
+                    </Grid.ColumnDefinitions>
+                    <repeater:AppRepeater x:Name="FirstRepeater" Grid.Column="0">
                         <repeater:AppRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:MomentItemViewModel">
+                            <DataTemplate>
                                 <components:MomentCardControl
                                     Margin="0,6"
                                     Style="{StaticResource PersonalFullMomentCardStyle}"
-                                    ViewModel="{x:Bind}" />
+                                    ViewModel="{Binding}" />
+                            </DataTemplate>
+                        </repeater:AppRepeater.ItemTemplate>
+                    </repeater:AppRepeater>
+                    <repeater:AppRepeater x:Name="SecondRepeater" Grid.Column="1">
+                        <repeater:AppRepeater.ItemTemplate>
+                            <DataTemplate>
+                                <components:MomentCardControl
+                                    Margin="0,6"
+                                    Style="{StaticResource PersonalFullMomentCardStyle}"
+                                    ViewModel="{Binding}" />
+                            </DataTemplate>
+                        </repeater:AppRepeater.ItemTemplate>
+                    </repeater:AppRepeater>
+                    <repeater:AppRepeater x:Name="ThirdRepeater" Grid.Column="2">
+                        <repeater:AppRepeater.ItemTemplate>
+                            <DataTemplate>
+                                <components:MomentCardControl
+                                    Margin="0,6"
+                                    Style="{StaticResource PersonalFullMomentCardStyle}"
+                                    ViewModel="{Binding}" />
                             </DataTemplate>
                         </repeater:AppRepeater.ItemTemplate>
                     </repeater:AppRepeater>
