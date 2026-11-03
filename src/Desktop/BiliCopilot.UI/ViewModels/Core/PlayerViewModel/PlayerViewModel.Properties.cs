@@ -68,6 +68,12 @@ public sealed partial class PlayerViewModel
     public partial bool IsSkipPromptVisible { get; set; }
 
     /// <summary>
+    /// 本次播放是否因设备异常临时回退了着色器/超分（保存的偏好保留）.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsEnhancementRecovered { get; set; }
+
+    /// <summary>
     /// 当前提示跳过的片段.
     /// </summary>
     public SponsorSegment? SkipPromptSegment { get; set; }

@@ -85,6 +85,7 @@ public enum SettingNames
     PlayerCdnServer,
     PlayerEngine,
     PlayerAutoFallback,
+    RememberPlaybackEnhancements,
     ProxyEnabled,
     ProxyServer,
     ProxyServerHk,

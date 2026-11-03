@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <local:SettingsPageControlBase
     x:Class="BiliCopilot.UI.Controls.Settings.MpvExtraSettingControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -21,6 +21,11 @@
             <ImageIcon Source="ms-appx:///Assets/mpv.png" />
         </base:SettingsExpander.HeaderIcon>
         <base:SettingsExpander.Items>
+            <base:SettingsCard
+                Description="关闭后每次启动播放器都从「不启用着色器 / 不启用超分」开始，并清空已保存的选择"
+                Header="记住着色器与超分设置">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.RememberPlaybackEnhancements, Mode=TwoWay}" />
+            </base:SettingsCard>
             <base:SettingsCard
                 x:Name="D3D11Adapter"
                 Description="--d3d11-adapter"

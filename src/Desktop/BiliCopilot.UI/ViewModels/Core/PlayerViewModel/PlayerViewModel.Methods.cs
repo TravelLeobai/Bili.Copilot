@@ -328,11 +328,37 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        Anime4KMode = SettingsToolkit.ReadLocalSetting(SettingNames.Anime4KMode, Anime4KMode.None);
-        ArtCNNMode = SettingsToolkit.ReadLocalSetting(SettingNames.ArtCNNMode, ArtCNNMode.None);
-        Nnedi3Mode = SettingsToolkit.ReadLocalSetting(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
-        RavuMode = SettingsToolkit.ReadLocalSetting(SettingNames.RavuMode, RavuMode.None);
-        VsrScale = SettingsToolkit.ReadLocalSetting(SettingNames.NvidiaVsrScale, VsrScale.None);
+        var remember = SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true);
+        if (!remember)
+        {
+            // 关闭「记住」后一律从零开始，并清掉旧值，避免下次打开又冒出来.
+            Anime4KMode = Anime4KMode.None;
+            ArtCNNMode = ArtCNNMode.None;
+            Nnedi3Mode = Nnedi3Mode.None;
+            RavuMode = RavuMode.None;
+            VsrScale = VsrScale.None;
+            SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, Anime4KMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.ArtCNNMode, ArtCNNMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.RavuMode, RavuMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.NvidiaVsrScale, VsrScale.None);
+            logger.LogInformation("已关闭播放增强记忆，本次不恢复着色器与超分");
+            return;
+        }
+
+        Anime4KMode = ReadEnhancement(SettingNames.Anime4KMode, Anime4KMode.None);
+        ArtCNNMode = ReadEnhancement(SettingNames.ArtCNNMode, ArtCNNMode.None);
+        Nnedi3Mode = ReadEnhancement(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
+        RavuMode = ReadEnhancement(SettingNames.RavuMode, RavuMode.None);
+        VsrScale = ReadEnhancement(SettingNames.NvidiaVsrScale, VsrScale.None);
+
+        logger.LogInformation(
+            "恢复播放增强：Anime4K={Anime4K} ArtCNN={ArtCNN} NNEDI3={Nnedi3} RAVU={Ravu} VSR={Vsr}",
+            Anime4KMode,
+            ArtCNNMode,
+            Nnedi3Mode,
+            RavuMode,
+            VsrScale);
 
         try
         {

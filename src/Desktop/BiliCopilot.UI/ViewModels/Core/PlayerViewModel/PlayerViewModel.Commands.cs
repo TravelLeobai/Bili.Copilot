@@ -634,7 +634,7 @@ public sealed partial class PlayerViewModel
         try
         {
             Anime4KMode = mode;
-            SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, mode);
+            PersistEnhancement(SettingNames.Anime4KMode, mode);
             await ApplyShadersAsync();
         }
         catch (Exception ex)
@@ -654,7 +654,7 @@ public sealed partial class PlayerViewModel
         try
         {
             ArtCNNMode = mode;
-            SettingsToolkit.WriteLocalSetting(SettingNames.ArtCNNMode, mode);
+            PersistEnhancement(SettingNames.ArtCNNMode, mode);
             await ApplyShadersAsync();
         }
         catch (Exception ex)
@@ -674,7 +674,7 @@ public sealed partial class PlayerViewModel
         try
         {
             Nnedi3Mode = mode;
-            SettingsToolkit.WriteLocalSetting(SettingNames.Nnedi3Mode, mode);
+            PersistEnhancement(SettingNames.Nnedi3Mode, mode);
             await ApplyShadersAsync();
         }
         catch (Exception ex)
@@ -694,7 +694,7 @@ public sealed partial class PlayerViewModel
         try
         {
             RavuMode = mode;
-            SettingsToolkit.WriteLocalSetting(SettingNames.RavuMode, mode);
+            PersistEnhancement(SettingNames.RavuMode, mode);
             await ApplyShadersAsync();
         }
         catch (Exception ex)
@@ -714,7 +714,7 @@ public sealed partial class PlayerViewModel
         }
 
         VsrScale = scale;
-        SettingsToolkit.WriteLocalSetting(SettingNames.NvidiaVsrScale, scale);
+        PersistEnhancement(SettingNames.NvidiaVsrScale, scale);
 
         if (scale != VsrScale.None && !HasNvidiaGpu)
         {
@@ -818,28 +818,50 @@ public sealed partial class PlayerViewModel
 
         try
         {
+            // 只清当前会话，不动已保存的偏好，否则一次设备丢失就把用户的设置永久抹掉.
             Anime4KMode = Anime4KMode.None;
             ArtCNNMode = ArtCNNMode.None;
             RavuMode = RavuMode.None;
             Nnedi3Mode = Nnedi3Mode.None;
             VsrScale = VsrScale.None;
-            SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, Anime4KMode.None);
-            SettingsToolkit.WriteLocalSetting(SettingNames.ArtCNNMode, ArtCNNMode.None);
-            SettingsToolkit.WriteLocalSetting(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
-            SettingsToolkit.WriteLocalSetting(SettingNames.RavuMode, RavuMode.None);
-            SettingsToolkit.WriteLocalSetting(SettingNames.NvidiaVsrScale, VsrScale.None);
+            IsEnhancementRecovered = true;
             CheckClearShaderEnabled();
             await Client.SetNvidiaVsrAsync(false);
             await Client.SetShadersAsync([]);
             await Client.SetVideoOutputAsync(VideoOutputType.GpuNext);
             await RestoreDecodeSettingsAsync();
-            logger.LogWarning("已回退着色器与超分辨率设置，避免播放器白屏");
+            logger.LogWarning("本次播放已临时回退着色器与超分辨率（设备异常），保存的偏好仍然保留");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Recover playback enhancements failed");
         }
     }
+
+    /// <summary>
+    /// 写播放增强设置；关闭「记住」时只清当前状态，不落盘.
+    /// </summary>
+    private void PersistEnhancement(BiliCopilot.UI.Models.Constants.SettingNames key, object value)
+    {
+        if (!SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true))
+        {
+            return;
+        }
+
+        // 存字符串而不是枚举：SharedSettingsToolkit 内部走 JsonSerializer，裁剪构建里枚举可能写失败.
+        SettingsToolkit.WriteLocalSetting(key, value.ToString() ?? string.Empty);
+    }
+
+    /// <summary>
+    /// 读取播放增强设置（按字符串存，读不到就回落默认值）.
+    /// </summary>
+    private static T ReadEnhancement<T>(SettingNames key, T defaultValue)
+        where T : struct, Enum
+    {
+        var raw = SettingsToolkit.ReadLocalSetting(key, string.Empty);
+        return !string.IsNullOrEmpty(raw) && Enum.TryParse<T>(raw, true, out var value) ? value : defaultValue;
+    }
+
     [RelayCommand]
     private async Task ClearShadersAsync()
     {

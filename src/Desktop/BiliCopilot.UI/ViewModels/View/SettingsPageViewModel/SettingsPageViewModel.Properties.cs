@@ -107,6 +107,9 @@ public sealed partial class SettingsPageViewModel
     private string _cdnServer;
 
     [ObservableProperty]
+    private bool _rememberPlaybackEnhancements = true;
+
+    [ObservableProperty]
     private bool _preferWebEngine;
 
     [ObservableProperty]

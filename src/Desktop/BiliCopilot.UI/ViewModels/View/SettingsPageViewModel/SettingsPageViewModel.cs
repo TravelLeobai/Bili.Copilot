@@ -60,6 +60,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
+        RememberPlaybackEnhancements = SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true);
         AutoFallbackToWeb = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerAutoFallback, true);
         ProxyEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyEnabled, false);
         ProxyServer = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServer, "https://bili.nepnep.moe");
@@ -480,6 +481,20 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnCdnServerChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerCdnServer, value);
+
+    partial void OnRememberPlaybackEnhancementsChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.RememberPlaybackEnhancements, value);
+        if (!value)
+        {
+            // 关闭记忆时立刻清掉已保存的增强设置，避免下次启动又恢复.
+            SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, Anime4KMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.ArtCNNMode, ArtCNNMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.RavuMode, RavuMode.None);
+            SettingsToolkit.WriteLocalSetting(SettingNames.NvidiaVsrScale, VsrScale.None);
+        }
+    }
 
     partial void OnPreferWebEngineChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerEngine, value ? PlayerEngineType.Web : PlayerEngineType.Mpv);

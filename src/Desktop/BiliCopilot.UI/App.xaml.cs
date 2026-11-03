@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using H.NotifyIcon;
@@ -84,6 +85,7 @@ public partial class App : Application
             instance.Activated += OnInstanceActivated;
             Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = false;
             GlobalDependencies.Initialize();
+            ProbeEnhancementSettings();
             ApplyMomentVideoLayoutPreset(SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.MomentVideoLayoutPreset, 0));
             GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().LaunchCommand.Execute(default);
         }
@@ -179,4 +181,54 @@ public partial class App : Application
 
     private void OnShowHideWindowCommandExecuteRequested(XamlUICommand sender, ExecuteRequestedEventArgs args)
         => GetMainWindow()?.Activate();
+
+    /// <summary>
+    /// 启动时回读着色器/超分记忆，便于排查「退出重进后设置丢失」；同时支持一次性预置（诊断用）.
+    /// </summary>
+    private static void ProbeEnhancementSettings()
+    {
+        try
+        {
+            var seedDir = AppContext.BaseDirectory;
+            try
+            {
+                seedDir = Package.Current.InstalledPath;
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug(ex, "非打包环境，回落执行目录");
+            }
+
+            var seedFile = Path.Combine(seedDir, "enhancement_seed.txt");
+            if (File.Exists(seedFile))
+            {
+                var seed = File.ReadAllText(seedFile).Trim();
+                if (!string.IsNullOrEmpty(seed))
+                {
+                    SettingsToolkit.WriteLocalSetting(SettingNames.Anime4KMode, seed);
+                }
+
+                File.Delete(seedFile);
+            }
+
+            var anime4k = SettingsToolkit.ReadLocalSetting(SettingNames.Anime4KMode, string.Empty);
+            var artcnn = SettingsToolkit.ReadLocalSetting(SettingNames.ArtCNNMode, string.Empty);
+            var nnedi3 = SettingsToolkit.ReadLocalSetting(SettingNames.Nnedi3Mode, string.Empty);
+            var ravu = SettingsToolkit.ReadLocalSetting(SettingNames.RavuMode, string.Empty);
+            var vsr = SettingsToolkit.ReadLocalSetting(SettingNames.NvidiaVsrScale, string.Empty);
+            var remember = SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true);
+            Serilog.Log.Information(
+                "启动读取播放增强记忆：记住={Remember} Anime4K={Anime4K} ArtCNN={ArtCNN} NNEDI3={Nnedi3} RAVU={Ravu} VSR={Vsr}",
+                remember,
+                anime4k,
+                artcnn,
+                nnedi3,
+                ravu,
+                vsr);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "读取播放增强记忆失败");
+        }
+    }
 }
