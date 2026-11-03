@@ -1,106 +1,60 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Reactor;
 using BiliCopilot.UI.ViewModels.Components;
-using Richasy.BiliKernel.Models.Media;
+using Microsoft.UI.Reactor.Hosting;
 using Richasy.WinUIKernel.Share.Base;
 
 namespace BiliCopilot.UI.Controls.Player;
 
 /// <summary>
-/// 视频播放器分P部分.
+/// 视频合集（分 P）区域，内容由 Reactor 渲染.
 /// </summary>
 public sealed partial class VideoPartsSection : VideoPartsSectionBase
 {
+    private ReactorHostControl? _reactorHost;
+    private VideoPlayerPartSectionDetailViewModel? _mountedViewModel;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoPartsSection"/> class.
     /// </summary>
     public VideoPartsSection() => InitializeComponent();
 
     /// <inheritdoc/>
-    protected override void OnControlLoaded()
-    {
-        if (ViewModel is null)
-        {
-            return;
-        }
-
-        UpdateSelection();
-        InitializeLayoutAsync();
-    }
+    protected override void OnControlLoaded() => MountPanel(ViewModel);
 
     /// <inheritdoc/>
     protected override void OnControlUnloaded()
     {
-        View.ItemsSource = default;
-        if (ViewModel is not null)
-        {
-            ViewModel.PartChanged -= OnPartChanged;
-        }
+        _reactorHost?.Dispose();
+        _reactorHost = null;
+        _mountedViewModel = null;
+        RootGrid.Children.Clear();
     }
 
     /// <inheritdoc/>
     protected override void OnViewModelChanged(VideoPlayerPartSectionDetailViewModel? oldValue, VideoPlayerPartSectionDetailViewModel? newValue)
-    {
-        if (oldValue is not null)
-        {
-            oldValue.PartChanged -= OnPartChanged;
-        }
+        => MountPanel(newValue);
 
-        if (newValue is null)
+    private void MountPanel(VideoPlayerPartSectionDetailViewModel? viewModel)
+    {
+        if (viewModel is null || ReferenceEquals(viewModel, _mountedViewModel))
         {
             return;
         }
 
-        newValue.PartChanged += OnPartChanged;
-        UpdateSelection();
-        InitializeLayoutAsync();
-    }
+        _reactorHost?.Dispose();
+        RootGrid.Children.Clear();
 
-    private void OnPartSelectionChanged(ItemsView sender, ItemsViewSelectionChangedEventArgs args)
-    {
-        if (IsLoaded && sender.SelectedItem is VideoPart part && part != ViewModel.SelectedPart)
-        {
-            ViewModel.SelectPartCommand.Execute(part);
-        }
-    }
-
-    private void OnPartChanged(object? sender, EventArgs e)
-        => UpdateSelection();
-
-    private async void OnIndexToggledAsync(object sender, RoutedEventArgs e)
-    {
-        await Task.Delay(100);
-        InitializeLayoutAsync();
-    }
-
-    private void UpdateSelection()
-    {
-        if (ViewModel?.SelectedPart is VideoPart part)
-        {
-            View.Select(ViewModel.Parts.ToList().IndexOf(part));
-        }
-    }
-
-    private async void InitializeLayoutAsync()
-    {
-        if (ViewModel.OnlyIndex)
-        {
-            View.Layout = IndexLayout;
-            View.ItemTemplate = IndexTemplate;
-        }
-        else
-        {
-            View.Layout = DefaultLayout;
-            View.ItemTemplate = DefaultTemplate;
-        }
-
-        await Task.Delay(100);
-        View.StartBringItemIntoView(ViewModel.Parts.ToList().IndexOf(ViewModel.SelectedPart), new BringIntoViewOptions { VerticalAlignmentRatio = 0.5 });
+        _mountedViewModel = viewModel;
+        _reactorHost = new ReactorHostControl();
+        RootGrid.Children.Add(_reactorHost);
+        _reactorHost.Mount(new VideoPartsPanel(viewModel));
     }
 }
 
 /// <summary>
-/// 视频播放器分P部分.
+/// 视频合集区域基类.
 /// </summary>
 public abstract class VideoPartsSectionBase : LayoutUserControlBase<VideoPlayerPartSectionDetailViewModel>
 {

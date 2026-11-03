@@ -1,49 +1,60 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Reactor;
 using BiliCopilot.UI.ViewModels.Components;
-using Richasy.BiliKernel.Models.Media;
+using Microsoft.UI.Reactor.Hosting;
 using Richasy.WinUIKernel.Share.Base;
 
 namespace BiliCopilot.UI.Controls.Player;
 
 /// <summary>
-/// 视频播放器合集部分.
+/// 视频合集（UGC 合集）区域，内容由 Reactor 渲染.
 /// </summary>
 public sealed partial class VideoSeasonSection : VideoSeasonSectionBase
 {
+    private ReactorHostControl? _reactorHost;
+    private VideoPlayerSeasonSectionDetailViewModel? _mountedViewModel;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoSeasonSection"/> class.
     /// </summary>
     public VideoSeasonSection() => InitializeComponent();
 
-    private async void OnSeasonChanged(object sender, SelectionChangedEventArgs e)
+    /// <inheritdoc/>
+    protected override void OnControlLoaded() => MountPanel(ViewModel);
+
+    /// <inheritdoc/>
+    protected override void OnControlUnloaded()
     {
-        var season = SeasonComboBox.SelectedItem as VideoSeason;
-        ViewModel.ChangeSeasonCommand.Execute(season);
-        await CheckSelectedItemAsync();
+        _reactorHost?.Dispose();
+        _reactorHost = null;
+        _mountedViewModel = null;
+        RootGrid.Children.Clear();
     }
 
-    private async Task CheckSelectedItemAsync()
+    /// <inheritdoc/>
+    protected override void OnViewModelChanged(VideoPlayerSeasonSectionDetailViewModel? oldValue, VideoPlayerSeasonSectionDetailViewModel? newValue)
+        => MountPanel(newValue);
+
+    private void MountPanel(VideoPlayerSeasonSectionDetailViewModel? viewModel)
     {
-        await Task.Delay(200);
-        var selectedItem = ViewModel.Items.Find(p => p.IsSelected);
-        if (selectedItem is null)
+        if (viewModel is null || ReferenceEquals(viewModel, _mountedViewModel))
         {
             return;
         }
 
-        var index = ViewModel.Items.ToList().IndexOf(selectedItem);
-        var offset = 86 * index;
-        var actualOffset = offset - View.ViewportHeight;
-        if (actualOffset > 0)
-        {
-            View.ScrollTo(0, actualOffset + (View.ViewportHeight / 2));
-        }
+        _reactorHost?.Dispose();
+        RootGrid.Children.Clear();
+
+        _mountedViewModel = viewModel;
+        _reactorHost = new ReactorHostControl();
+        RootGrid.Children.Add(_reactorHost);
+        _reactorHost.Mount(new VideoSeasonPanel(viewModel));
     }
 }
 
 /// <summary>
-/// 视频播放器合集部分基类.
+/// 视频合集区域基类.
 /// </summary>
 public abstract class VideoSeasonSectionBase : LayoutUserControlBase<VideoPlayerSeasonSectionDetailViewModel>
 {

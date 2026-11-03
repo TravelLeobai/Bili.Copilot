@@ -13,7 +13,7 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="CommentTemplate" x:DataType="components:CommentMainViewModel">
-            <comment:CommentMainPanel ViewModel="{x:Bind}" />
+            <local:PlayerCommentSection ViewModel="{x:Bind}" />
         </DataTemplate>
                 <DataTemplate x:Key="DanmakuTemplate" x:DataType="components:VideoPlayerDanmakuSectionDetailViewModel">
             <local:VideoDanmakuSection ViewModel="{x:Bind}" />
@@ -31,7 +31,7 @@
             <local:VideoPlaylistSection ViewModel="{x:Bind}" />
         </DataTemplate>
         <DataTemplate x:Key="InfoTemplate" x:DataType="components:VideoPlayerInfoSectionDetailViewModel">
-            <local:VideoInfoSection ViewModel="{x:Bind Page}" />
+            <local:VideoInfoSection ViewModel="{x:Bind}" />
         </DataTemplate>
         <extensions:PlayerSectionTemplateSelector
             x:Key="Selector"
