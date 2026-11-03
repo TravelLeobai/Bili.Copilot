@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.Items;
 using Microsoft.UI.Dispatching;
@@ -45,6 +45,9 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
         });
     }
+
+    internal static Visibility GetSkipPromptVisibility(bool isVisible)
+        => isVisible ? Visibility.Visible : Visibility.Collapsed;
 
     internal static Visibility IsTopMostButtonVisible(bool isFullScreen, bool isAot)
         => (isFullScreen || isAot) ? Visibility.Collapsed : Visibility.Visible;

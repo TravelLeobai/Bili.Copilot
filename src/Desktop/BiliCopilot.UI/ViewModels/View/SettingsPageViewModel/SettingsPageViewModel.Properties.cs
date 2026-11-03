@@ -148,6 +148,59 @@ public sealed partial class SettingsPageViewModel
     private int _cdnServerIndex;
 
     [ObservableProperty]
+    private int _sponsorServerIndex;
+
+    [ObservableProperty]
+    private string _sponsorServerCustom;
+
+    [ObservableProperty]
+    private bool _sponsorManualMode;
+
+    [ObservableProperty]
+    private double _sponsorMinDuration;
+
+    [ObservableProperty]
+    private bool _sponsorIncludeSelfPromo;
+
+    [ObservableProperty]
+    private bool _sponsorIncludeIntro;
+
+    [ObservableProperty]
+    private bool _sponsorIncludeOutro;
+
+    [ObservableProperty]
+    private bool _adCloudEnabled;
+
+    [ObservableProperty]
+    private string _adCloudUrl;
+
+    [ObservableProperty]
+    private bool _aiAdEnabled;
+
+    [ObservableProperty]
+    private string _aiAdEndpoint;
+
+    [ObservableProperty]
+    private string _aiAdKey;
+
+    [ObservableProperty]
+    private string _aiAdModel;
+
+    [ObservableProperty]
+    private string _aiAdPrompt;
+
+    [ObservableProperty]
+    private bool _audioAdEnabled;
+
+    [ObservableProperty]
+    private string _dashScopeKey;
+
+    [ObservableProperty]
+    private string _dashScopeModel;
+
+    [ObservableProperty]
+    private string _adSkipStatusText;
+    [ObservableProperty]
     private string _cdnServerSelected;
 
     [ObservableProperty]

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <local:PlayerControlBase
     x:Class="BiliCopilot.UI.Controls.Core.PlayerOverlay"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -110,6 +110,15 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid Grid.Row="1">
+                <Button
+                    x:Name="SkipPromptButton"
+                    Margin="0,16,24,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Command="{x:Bind ViewModel.SkipPromptSegmentCommand}"
+                    Content="跳过广告"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind local:PlayerOverlay.GetSkipPromptVisibility(ViewModel.IsSkipPromptVisible), Mode=OneWay}" />
                 <local:OverlayTransportControls
                     x:Name="TransportControls"
                     HorizontalAlignment="Stretch"

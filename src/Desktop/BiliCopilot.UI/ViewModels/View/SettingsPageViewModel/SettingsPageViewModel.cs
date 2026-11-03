@@ -519,6 +519,86 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     partial void OnCdnServerSelectedChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerCdnServer, value);
 
+    private static int ResolveSponsorServerIndex(string server)
+        => server switch
+        {
+            "https://bsbsb.top/api" => 1,
+            "https://sponsor.ajay.app" or "" => 0,
+            _ => 2,
+        };
+
+    partial void OnSponsorServerIndexChanged(int value)
+    {
+        var server = value switch
+        {
+            0 => "https://sponsor.ajay.app",
+            1 => "https://bsbsb.top/api",
+            _ => string.IsNullOrWhiteSpace(SponsorServerCustom) ? SponsorBlockService.DefaultServer : SponsorServerCustom,
+        };
+
+        SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockServer, server);
+    }
+
+    partial void OnSponsorServerCustomChanged(string value)
+    {
+        if (SponsorServerIndex == 2 && !string.IsNullOrWhiteSpace(value))
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockServer, value);
+        }
+    }
+
+    partial void OnSponsorManualModeChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockManualMode, value);
+
+    partial void OnSponsorMinDurationChanged(double value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockMinDuration, value);
+
+    partial void OnSponsorIncludeSelfPromoChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeSelfPromo, value);
+
+    partial void OnSponsorIncludeIntroChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeIntro, value);
+
+    partial void OnSponsorIncludeOutroChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeOutro, value);
+
+    partial void OnAdCloudEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AdCloudEnabled, value);
+
+    partial void OnAdCloudUrlChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AdCloudUrl, value);
+
+    partial void OnAiAdEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEnabled, value);
+
+    partial void OnAiAdEndpointChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEndpoint, value);
+
+    partial void OnAiAdKeyChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdKey, value);
+
+    partial void OnAiAdModelChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdModel, value);
+
+    partial void OnAiAdPromptChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdPrompt, value);
+
+    partial void OnAudioAdEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AudioAdEnabled, value);
+
+    partial void OnDashScopeKeyChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeKey, value);
+
+    partial void OnDashScopeModelChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeModel, value);
+
+    [RelayCommand]
+    private void ResetAiAdPrompt()
+    {
+        AiAdPrompt = AiAdAnalyzer.DefaultPrompt;
+        AdSkipStatusText = "已恢复默认提示词";
+    }
+
     partial void OnCdnReplaceModeIndexChanged(int value)
     {
         if (value < 0 || value > 3)

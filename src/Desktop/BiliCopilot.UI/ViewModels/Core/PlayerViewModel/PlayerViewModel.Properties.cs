@@ -61,6 +61,17 @@ public sealed partial class PlayerViewModel
 
     public PlayerWindow? Window { get; private set; }
 
+    /// <summary>
+    /// 是否显示跳过提示（手动模式）
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsSkipPromptVisible { get; set; }
+
+    /// <summary>
+    /// 当前提示跳过的片段.
+    /// </summary>
+    public SponsorSegment? SkipPromptSegment { get; set; }
+
     public bool IsNextTipShown { get; set; }
 
     public bool IsNextTipShownInThisMedia { get; set; }

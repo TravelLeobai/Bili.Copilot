@@ -404,10 +404,32 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _isSponsorLoading = true;
         try
         {
-            _sponsorSegments = await SponsorBlockService.GetSegmentsAsync(videoId);
+            // 三路来源合并：SponsorBlock（可换镜像）、云端广告库、AI 识别.
+            var segments = new List<SponsorSegment>();
+            var sponsorSegments = await SponsorBlockService.GetSegmentsAsync(videoId);
+            segments.AddRange(sponsorSegments);
+
+            if (AdCloudService.IsEnabled)
+            {
+                segments.AddRange(await AdCloudService.GetSegmentsAsync(videoId, logger));
+            }
+
+            if (AiAdAnalyzer.IsEnabled)
+            {
+                segments.AddRange(await AnalyzeAdsWithAiAsync(videoId, snapshot));
+            }
+
+            _sponsorSegments = MergeSegments(segments);
+            logger.LogInformation("跳过片段检查完成：{Count} 段", _sponsorSegments.Count);
+            if (_sponsorSegments.Count > 0)
+            {
+                logger.LogInformation("共找到 {Count} 段可跳过片段（来源：{Sources}）", _sponsorSegments.Count,
+                    string.Join("/", _sponsorSegments.Select(p => p.Source).Distinct()));
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "获取跳过片段失败");
             _sponsorSegments = Array.Empty<SponsorSegment>();
         }
         finally
@@ -416,23 +438,190 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 
+    private async Task<IReadOnlyList<SponsorSegment>> AnalyzeAdsWithAiAsync(string videoId, MediaSnapshot snapshot)
+    {
+        var subtitleText = await GetSubtitleTextAsync(snapshot);
+        if (!string.IsNullOrWhiteSpace(subtitleText))
+        {
+            var result = await AiAdAnalyzer.AnalyzeSubtitleAsync(subtitleText, logger);
+            if (result.Count > 0)
+            {
+                return result;
+            }
+        }
+
+        if (!AiAdAnalyzer.IsAudioEnabled || _sourceResolver is null)
+        {
+            return Array.Empty<SponsorSegment>();
+        }
+
+        try
+        {
+            var source = await _sourceResolver.GetSourceAsync();
+            var audioUrl = source?.Options?.AudioTracks?.FirstOrDefault();
+            if (string.IsNullOrEmpty(audioUrl))
+            {
+                return Array.Empty<SponsorSegment>();
+            }
+
+            var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+            return await AiAdAnalyzer.AnalyzeAudioAsync(audioUrl, cookie, logger);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "音频广告识别失败");
+            return Array.Empty<SponsorSegment>();
+        }
+    }
+
+    private async Task<string?> GetSubtitleTextAsync(MediaSnapshot snapshot)
+    {
+        try
+        {
+            if (Connector is not VideoConnectorViewModel videoVM)
+            {
+                return null;
+            }
+
+            var aid = videoVM._view.Information.Identifier.Id;
+            var cid = videoVM._part.Identifier.Id;
+            var service = this.Get<Richasy.BiliKernel.Bili.Media.ISubtitleService>();
+            var metas = await service.GetSubtitleMetasAsync(aid, cid);
+            if (metas is null || metas.Count == 0)
+            {
+                return null;
+            }
+
+            var meta = metas.FirstOrDefault(p => !p.IsAI) ?? metas[0];
+            var url = meta.Url?.ToString();
+            if (string.IsNullOrEmpty(url))
+            {
+                return null;
+            }
+
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            var content = await client.GetStringAsync(url);
+            using var document = System.Text.Json.JsonDocument.Parse(content);
+            if (!document.RootElement.TryGetProperty("body", out var body) || body.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var builder = new System.Text.StringBuilder();
+            foreach (var item in body.EnumerateArray())
+            {
+                var from = item.TryGetProperty("from", out var fromNode) ? fromNode.GetDouble() : 0;
+                var to = item.TryGetProperty("to", out var toNode) ? toNode.GetDouble() : 0;
+                var text = item.TryGetProperty("content", out var textNode) ? textNode.GetString() : null;
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    continue;
+                }
+
+                builder.AppendLine($"{from:F2} --> {to:F2}");
+                builder.AppendLine(text);
+            }
+
+            return builder.Length > 0 ? builder.ToString() : null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "获取字幕文本失败");
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<SponsorSegment> MergeSegments(IEnumerable<SponsorSegment> segments)
+    {
+        var ordered = segments
+            .Where(p => p.End > p.Start)
+            .OrderBy(p => p.Start)
+            .ToList();
+
+        var merged = new List<SponsorSegment>();
+        foreach (var segment in ordered)
+        {
+            // 与上一段重叠或几乎相接时合并，避免重复跳过.
+            if (merged.Count > 0 && segment.Start <= merged[^1].End + 0.5)
+            {
+                merged[^1].End = Math.Max(merged[^1].End, segment.End);
+                continue;
+            }
+
+            merged.Add(new SponsorSegment
+            {
+                Start = segment.Start,
+                End = segment.End,
+                Category = segment.Category,
+                Source = segment.Source,
+            });
+        }
+
+        return merged;
+    }
+
     private void CheckSponsorBlock()
     {
         if (_sponsorSegments.Count == 0 || Player is null || Player.Duration <= 0)
         {
+            HideSkipPrompt();
             return;
         }
 
+        var manual = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false);
         var position = Player.Position;
-        foreach (var segment in _sponsorSegments)
+        var current = _sponsorSegments.FirstOrDefault(p => position >= p.Start && position < p.End - 0.3);
+        if (current is null)
         {
-            if (position >= segment.Start && position < segment.End - 0.3
-                && Math.Abs(_lastSponsorSkipPosition - segment.End) > 0.5)
-            {
-                _lastSponsorSkipPosition = segment.End;
-                _ = ChangePositionAsync(segment.End);
-                break;
-            }
+            HideSkipPrompt();
+            return;
         }
+
+        if (manual)
+        {
+            // 手动模式：只弹提示，等用户点跳过.
+            ShowSkipPrompt(current);
+            return;
+        }
+
+        if (Math.Abs(_lastSponsorSkipPosition - current.End) > 0.5)
+        {
+            _lastSponsorSkipPosition = current.End;
+            HideSkipPrompt();
+            _ = ChangePositionAsync(current.End);
+        }
+    }
+
+    private void ShowSkipPrompt(SponsorSegment segment)
+    {
+        SkipPromptSegment = segment;
+        IsSkipPromptVisible = true;
+    }
+
+    private void HideSkipPrompt()
+    {
+        if (IsSkipPromptVisible)
+        {
+            IsSkipPromptVisible = false;
+        }
+
+        SkipPromptSegment = default;
+    }
+
+    /// <summary>
+    /// 手动模式下跳过当前提示的片段.
+    /// </summary>
+    [RelayCommand]
+    private async Task SkipPromptSegmentAsync()
+    {
+        if (SkipPromptSegment is null)
+        {
+            return;
+        }
+
+        var end = SkipPromptSegment.End;
+        _lastSponsorSkipPosition = end;
+        HideSkipPrompt();
+        await ChangePositionAsync(end);
     }
 }

@@ -1,12 +1,15 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using System.Net;
 using System.Text.Json;
+using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Toolkits;
+using Richasy.WinUIKernel.Share.Toolkits;
 
 namespace BiliCopilot.UI.Services;
 
 /// <summary>
-/// SponsorBlock 片段信息.
+/// 需要跳过的片段.
 /// </summary>
 public sealed class SponsorSegment
 {
@@ -21,26 +24,45 @@ public sealed class SponsorSegment
     public double End { get; set; }
 
     /// <summary>
-    /// 片段分类.
+    /// 片段分类（sponsor / intro / ai / cloud 等）.
     /// </summary>
     public string Category { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 片段来源（sponsorblock / cloud / ai）.
+    /// </summary>
+    public string Source { get; set; } = string.Empty;
 }
 
 /// <summary>
-/// SponsorBlock 服务，用于获取视频中的赞助/片头/片尾等片段.
-/// 移植自 BiliLite 的 SponsorBlock 实现.
+/// SponsorBlock 服务.
+/// 支持官方实例与 B 站专用镜像（如 bsbsb.top），分类与最短时长可配置.
 /// </summary>
 public static class SponsorBlockService
 {
-    private const string Categories = "[\"sponsor\",\"selfpromo\",\"interaction\",\"intro\",\"outro\",\"preview\",\"music_offtopic\",\"filler\"]";
-    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(10) };
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private const string OfficialServer = "https://sponsor.ajay.app";
+    private static readonly HttpClient Client = CreateClient();
 
     /// <summary>
-    /// 获取指定视频的跳过片段.
+    /// 默认服务器.
     /// </summary>
-    /// <param name="videoId">视频 ID（bvid 或 aid）.</param>
-    /// <returns>片段列表，没有片段时返回空集合.</returns>
+    public static string DefaultServer => OfficialServer;
+
+    /// <summary>
+    /// 当前服务器.
+    /// </summary>
+    public static string CurrentServer
+    {
+        get
+        {
+            var server = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockServer, OfficialServer);
+            return string.IsNullOrWhiteSpace(server) ? OfficialServer : server.TrimEnd('/');
+        }
+    }
+
+    /// <summary>
+    /// 取指定视频的跳过片段.
+    /// </summary>
     public static async Task<IReadOnlyList<SponsorSegment>> GetSegmentsAsync(string videoId)
     {
         if (string.IsNullOrWhiteSpace(videoId))
@@ -48,7 +70,9 @@ public static class SponsorBlockService
             return Array.Empty<SponsorSegment>();
         }
 
-        var url = $"https://sponsor.ajay.app/api/skipSegments?videoID={WebUtility.UrlEncode(videoId)}&categories={WebUtility.UrlEncode(Categories)}";
+        var categories = BuildCategories();
+        var server = CurrentServer;
+        var url = $"{server}/api/skipSegments?videoID={WebUtility.UrlEncode(videoId)}&categories={WebUtility.UrlEncode(categories)}";
         try
         {
             using var response = await Client.GetAsync(url);
@@ -59,24 +83,33 @@ public static class SponsorBlockService
 
             response.EnsureSuccessStatusCode();
             var content = await response.Content.ReadAsStringAsync();
-            var items = JsonSerializer.Deserialize<List<SegmentResponse>>(content, JsonOptions);
+            var items = JsonSerializer.Deserialize<List<SegmentResponse>>(content, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (items is null)
             {
                 return Array.Empty<SponsorSegment>();
             }
 
+            var minDuration = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockMinDuration, 3d);
             var segments = new List<SponsorSegment>();
             foreach (var item in items)
             {
-                if (item.Segment is { Length: 2 } && item.Segment[1] > item.Segment[0])
+                if (item.Segment is not { Length: 2 } || item.Segment[1] <= item.Segment[0])
                 {
-                    segments.Add(new SponsorSegment
-                    {
-                        Start = item.Segment[0],
-                        End = item.Segment[1],
-                        Category = item.Category ?? string.Empty,
-                    });
+                    continue;
                 }
+
+                if (item.Segment[1] - item.Segment[0] < minDuration)
+                {
+                    continue;
+                }
+
+                segments.Add(new SponsorSegment
+                {
+                    Start = item.Segment[0],
+                    End = item.Segment[1],
+                    Category = item.Category ?? "sponsor",
+                    Source = "sponsorblock",
+                });
             }
 
             return segments;
@@ -85,6 +118,37 @@ public static class SponsorBlockService
         {
             return Array.Empty<SponsorSegment>();
         }
+    }
+
+    private static string BuildCategories()
+    {
+        var list = new List<string> { "sponsor" };
+        if (SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockIncludeSelfPromo, true))
+        {
+            list.Add("selfpromo");
+        }
+
+        if (SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockIncludeIntro, true))
+        {
+            list.Add("intro");
+        }
+
+        if (SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockIncludeOutro, true))
+        {
+            list.Add("outro");
+        }
+
+        list.Add("interaction");
+        list.Add("preview");
+        list.Add("music_offtopic");
+        list.Add("filler");
+        return $"[{string.Join(",", list.Select(p => $"\"{p}\""))}]";
+    }
+
+    private static HttpClient CreateClient()
+    {
+        var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All };
+        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
     }
 
     private sealed class SegmentResponse
