@@ -61,6 +61,15 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
         RememberPlaybackEnhancements = SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true);
+        QualityUnlockEnabled = Services.QualityUnlockService.IsEnabled;
+        QualityUnlockAutoMax = Services.QualityUnlockService.AutoMaxQuality;
+        QualityUnlockSendCookie = Services.QualityUnlockService.SendCookie;
+        QualityUnlockServer = Services.QualityUnlockService.Server;
+        QualityUnlockHomePage = Services.QualityUnlockService.HomePage;
+        QualityUnlockScriptUrl = SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockScriptUrl, string.Empty);
+        QualityUnlockStatusText = Services.QualityUnlockService.LastSync == DateTimeOffset.UnixEpoch
+            ? "尚未同步"
+            : $"上次同步：{Services.QualityUnlockService.LastSync:MM-dd HH:mm}";
         AutoFallbackToWeb = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerAutoFallback, true);
         ProxyEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyEnabled, false);
         ProxyServer = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServer, "https://bili.nepnep.moe");
@@ -787,4 +796,43 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnVulkanDeviceNameChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.VulkanDeviceName, value);
+
+    partial void OnQualityUnlockEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockEnabled, value);
+
+    partial void OnQualityUnlockAutoMaxChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockAutoMax, value);
+
+    partial void OnQualityUnlockSendCookieChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockSendCookie, value);
+
+    partial void OnQualityUnlockServerChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockServer, value ?? string.Empty);
+
+    partial void OnQualityUnlockHomePageChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockHomePage, value ?? string.Empty);
+
+    partial void OnQualityUnlockScriptUrlChanged(string value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockScriptUrl, value ?? string.Empty);
+
+    [RelayCommand]
+    private async Task SyncQualityUnlockAsync()
+    {
+        QualityUnlockStatusText = "正在同步…";
+        var result = await Services.QualityUnlockService.SyncAsync(this.Get<ILogger<SettingsPageViewModel>>());
+        if (result.Success)
+        {
+            QualityUnlockServer = result.Server!;
+            if (!string.IsNullOrEmpty(result.HomePage))
+            {
+                QualityUnlockHomePage = result.HomePage!;
+            }
+
+            QualityUnlockStatusText = $"已同步：{result.Server}（{Services.QualityUnlockService.LastSync:MM-dd HH:mm}）";
+        }
+        else
+        {
+            QualityUnlockStatusText = $"同步失败，继续使用当前服务器（{Services.QualityUnlockService.LastSync:MM-dd HH:mm} 尝试过）";
+        }
+    }
 }

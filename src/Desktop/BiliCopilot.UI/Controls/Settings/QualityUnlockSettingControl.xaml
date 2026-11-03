@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<local:SettingsPageControlBase
+    x:Class="BiliCopilot.UI.Controls.Settings.QualityUnlockSettingControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:BiliCopilot.UI.Controls.Settings"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <base:SettingsExpander
+        Description="通过第三方解析服务器代取播放地址，绕过未登录 / 非大会员的画质限制"
+        Header="画质解锁"
+        IsExpanded="{x:Bind ViewModel.IsQualityUnlockExpanded, Mode=TwoWay}">
+        <base:SettingsExpander.HeaderIcon>
+            <FontIcon Glyph="&#xE9D9;" />
+        </base:SettingsExpander.HeaderIcon>
+        <base:SettingsExpander.Items>
+            <base:SettingsCard Description="关闭后所有请求都直接走 B 站官方接口" Header="启用画质解锁">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.QualityUnlockEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
+            <base:SettingsCard Description="进入视频后自动切到当前可用的最高一档画质" Header="自动选择最高画质">
+                <ToggleSwitch
+                    IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
+                    IsOn="{x:Bind ViewModel.QualityUnlockAutoMax, Mode=TwoWay}" />
+            </base:SettingsCard>
+            <base:SettingsCard Description="油猴脚本里的 box.home，可手改；每天会自动从上游同步一次" Header="解析服务器">
+                <TextBox
+                    MinWidth="260"
+                    IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
+                    Text="{x:Bind ViewModel.QualityUnlockServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
+            <base:SettingsCard Description="上游主页，assets/home.txt 与用户脚本都从这里取" Header="上游主页">
+                <TextBox
+                    MinWidth="260"
+                    IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
+                    Text="{x:Bind ViewModel.QualityUnlockHomePage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
+            <base:SettingsCard Description="留空则尝试 上游主页/assets/tampermonkey.user.js" Header="用户脚本地址">
+                <TextBox
+                    MinWidth="260"
+                    IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
+                    Text="{x:Bind ViewModel.QualityUnlockScriptUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+            </base:SettingsCard>
+            <base:SettingsCard Description="脚本会把 cookie 一并交给服务器；默认关闭，服务器要求登录态时再打开" Header="向服务器发送登录态">
+                <ToggleSwitch
+                    IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
+                    IsOn="{x:Bind ViewModel.QualityUnlockSendCookie, Mode=TwoWay}" />
+            </base:SettingsCard>
+            <base:SettingsCard Description="{x:Bind ViewModel.QualityUnlockStatusText, Mode=OneWay}" Header="同步状态">
+                <Button
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.SyncQualityUnlockCommand}"
+                    Content="立即同步" />
+            </base:SettingsCard>
+        </base:SettingsExpander.Items>
+    </base:SettingsExpander>
+</local:SettingsPageControlBase>

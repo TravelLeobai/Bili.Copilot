@@ -48,6 +48,16 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             availableFormats = [.. availableFormats.Where(p => p.IsEnabled)];
         }
 
+        // 画质解锁开启且勾了「自动最高画质」时，直接选当前可用的最高一档.
+        if (QualityUnlockService.IsEnabled && QualityUnlockService.AutoMaxQuality && availableFormats.Count > 0)
+        {
+            var maxFormat = availableFormats.OrderByDescending(p => p.Data.Quality).First();
+            this.Get<ILogger<VideoMediaSourceResolver>>().LogInformation(
+                "画质解锁：自动选中最高画质 qn={Quality}",
+                maxFormat.Data.Quality);
+            return maxFormat.Data;
+        }
+
         SourceItemViewModel? selectedFormat = default;
         if (_snapshot.PreferQuality > 0)
         {
@@ -192,6 +202,36 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         const string userAgent = InternalHttpExtensions.VideoUserAgent;
         const string referer = InternalHttpExtensions.VideoReferer;
 
+        // 启用了画质解锁时，先让第三方服务器代取 playurl（可拿到高画质 dash 地址）.
+        if (QualityUnlockService.IsEnabled)
+        {
+            var cookie = cookiesResolver.GetCookieString();
+            var csrf = ExtractCookie(cookie, "bili_jct");
+            var mid = this.Get<AccountViewModel>().MyProfile?.User?.Id ?? string.Empty;
+            var targetQuality = QualityUnlockService.AutoMaxQuality
+                ? Math.Max(selectedFormat.Quality, 127)
+                : selectedFormat.Quality;
+
+            var unlocked = await QualityUnlockService.GetPlayUrlsAsync(
+                _snapshot.Video.Identifier.Id,
+                _part.Identifier.Id,
+                targetQuality,
+                cookie,
+                csrf,
+                mid,
+                logger);
+
+            if (unlocked.Success)
+            {
+                var unlockedVideo = string.IsNullOrEmpty(unlocked.Video) ? null : CdnAccelerator.Rewrite(unlocked.Video!, true);
+                var unlockedAudio = string.IsNullOrEmpty(unlocked.Audio) ? null : CdnAccelerator.Rewrite(unlocked.Audio!, true);
+                SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality);
+                return (unlockedVideo, unlockedAudio);
+            }
+
+            logger.LogInformation("画质解锁不可用（{Message}），改用常规地址", unlocked.Message);
+        }
+
         // 启用了播放代理时，先尝试从解析服务器拿地址（可解锁区域限制）.
         if (ProxiedPlayUrlService.IsEnabled)
         {
@@ -227,5 +267,19 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, selectedFormat.Quality);
         return (videoUrl, audioUrl);
+    }
+
+    private static string ExtractCookie(string cookie, string name)
+    {
+        foreach (var part in cookie.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var index = part.IndexOf('=');
+            if (index > 0 && part[..index].Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return part[(index + 1)..];
+            }
+        }
+
+        return string.Empty;
     }
 }

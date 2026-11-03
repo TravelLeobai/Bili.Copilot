@@ -107,6 +107,29 @@ public sealed partial class SettingsPageViewModel
     private string _cdnServer;
 
     [ObservableProperty]
+    private bool _qualityUnlockEnabled;
+
+    [ObservableProperty]
+    private bool _qualityUnlockAutoMax = true;
+
+    [ObservableProperty]
+    private bool _qualityUnlockSendCookie;
+
+    [ObservableProperty]
+    private string _qualityUnlockServer = string.Empty;
+
+    [ObservableProperty]
+    private string _qualityUnlockHomePage = string.Empty;
+
+    [ObservableProperty]
+    private string _qualityUnlockScriptUrl = string.Empty;
+
+    [ObservableProperty]
+    private string _qualityUnlockStatusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isQualityUnlockExpanded;
+    [ObservableProperty]
     private bool _rememberPlaybackEnhancements = true;
 
     [ObservableProperty]
