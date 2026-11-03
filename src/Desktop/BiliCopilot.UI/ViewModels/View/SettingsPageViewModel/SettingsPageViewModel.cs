@@ -60,6 +60,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
+        AutoFallbackToWeb = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerAutoFallback, true);
         ProxyEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyEnabled, false);
         ProxyServer = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServer, "https://bili.nepnep.moe");
         ProxyServerHk = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerHk, string.Empty);
@@ -482,6 +483,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnPreferWebEngineChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerEngine, value ? PlayerEngineType.Web : PlayerEngineType.Mpv);
+
+    partial void OnAutoFallbackToWebChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerAutoFallback, value);
 
     partial void OnProxyEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyEnabled, value);

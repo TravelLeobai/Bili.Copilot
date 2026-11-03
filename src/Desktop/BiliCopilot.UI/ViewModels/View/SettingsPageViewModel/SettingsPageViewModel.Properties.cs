@@ -108,6 +108,9 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     private bool _preferWebEngine;
+
+    [ObservableProperty]
+    private bool _autoFallbackToWeb;
     [ObservableProperty]
     private bool _proxyEnabled;
 

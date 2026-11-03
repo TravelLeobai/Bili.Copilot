@@ -100,6 +100,9 @@
             <base:SettingsCard Description="改用 WebView2 网页播放器播放（参考 BiliLite 的 Shaka/Mpegts 方案）。网页模式不支持着色器、超分辨率与 mpv 字幕" Header="使用网页播放器">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.PreferWebEngine, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard Description="mpv 初始化或播放失败时，自动切到网页播放器（Shaka）并从当前进度继续" Header="播放失败自动回落">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.AutoFallbackToWeb, Mode=TwoWay}" />
+            </base:SettingsCard>
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>

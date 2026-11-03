@@ -125,7 +125,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             }
         }
 
-        await InitializeInternalAsync();
+        try
+        {
+            await InitializeInternalAsync();
+        }
+        catch (Exception ex)
+        {
+            // mpv 初始化失败（缺 dll、驱动异常等）时记账，等解析器就绪后改走网页播放器.
+            logger.LogWarning(ex, "mpv 初始化失败，本次播放回落到网页播放器");
+            _mpvInitFailed = true;
+        }
         if (Connector != null)
         {
             System.Diagnostics.Debug.WriteLine($"Player initialized with connector: {Connector.GetType().Name}");
@@ -212,9 +221,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        if (IsWebEngine)
+        if (UseWebEngine || _forceWebFallback || _mpvInitFailed)
         {
+            _forceWebFallback |= _mpvInitFailed;
             await InitializeWebEngineAsync();
+            logger.LogInformation("本次播放使用网页播放器（Shaka）");
         }
         else
         {
@@ -228,8 +239,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             }
             catch (Exception ex)
             {
-                ErrorMessage = ex.Message;
-                return;
+                logger.LogWarning(ex, "mpv 播放器初始化失败，尝试回落到网页播放器");
+                if (!await TryFallbackToWebEngineAsync())
+                {
+                    ErrorMessage = ex.Message;
+                    return;
+                }
             }
         }
 
@@ -254,7 +269,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        if (IsWebEngine)
+        if (UseWebEngine)
         {
             await LoadWebMediaAsync();
         }

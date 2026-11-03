@@ -29,6 +29,7 @@
             display: none;
         }
     </style>
+    <script src="shaka-player.compiled.js"></script>
 </head>
 
 <body>
@@ -71,6 +72,8 @@
             var syncLarge = 0.5;
             var ended = false;
             var reportedLoaded = false;
+            var videoPlayer = null;
+            var audioPlayer = null;
 
             if (!hasVideo) {
                 video.style.display = "none";
@@ -99,6 +102,7 @@
                 }
             }
 
+            /* 音画同步：音频跟随视频时钟，小偏差调速率、大偏差直接跳（同 BiliLite 的 AVSyncManager） */
             function syncAudioToVideo() {
                 if (!hasVideo || !hasAudio) {
                     return;
@@ -122,6 +126,33 @@
                 audio.playbackRate = diff > 0
                     ? Math.min(baseRate + factor, 2)
                     : Math.max(0.5, baseRate - factor);
+            }
+
+            /* 用 Shaka 挂一条轨道；不支持或加载失败时退化成直接给 src */
+            async function attachWithShaka(element, url, contentType, label) {
+                if (!url) {
+                    return null;
+                }
+
+                var shakaReady = typeof shaka !== "undefined" && shaka.Player && shaka.Player.isBrowserSupported();
+                if (shakaReady) {
+                    try {
+                        var player = new shaka.Player();
+                        await player.attach(element);
+                        player.configure({ streaming: { bufferingGoal: 30 } });
+                        player.addEventListener("error", function (event) {
+                            post("error", { message: label + ": " + (event.detail && event.detail.message ? event.detail.message : "shaka error") });
+                        });
+                        await player.load(url, null, contentType);
+                        return player;
+                    } catch (e) {
+                        post("error", { message: label + " shaka 加载失败，改用原生播放：" + e });
+                    }
+                }
+
+                element.src = url;
+                element.load();
+                return null;
             }
 
             video.addEventListener("loadeddata", reportLoadedIfReady);
@@ -158,11 +189,11 @@
             });
 
             video.addEventListener("error", function () {
-                post("error", { message: describeError(video.error) });
+                post("error", { message: "video: " + describeError(video.error) });
             });
 
             audio.addEventListener("error", function () {
-                post("error", { message: describeError(audio.error) });
+                post("error", { message: "audio: " + describeError(audio.error) });
             });
 
             function describeError(err) {
@@ -172,7 +203,7 @@
                 return "code=" + err.code + " message=" + (err.message || "");
             }
 
-            /* 和网页播放器约定一致的对外接口 */
+            /* 对外接口与宿主约定保持一致 */
             window.setVolume = function (value) {
                 var v = Math.max(0, Math.min(1, value));
                 video.volume = v;
@@ -242,36 +273,44 @@
                 return hasVideo ? video.paused : audio.paused;
             };
 
-            if (hasVideo) {
-                video.src = videoUrl;
+            window.getEngineInfo = function () {
+                return {
+                    shaka: typeof shaka !== "undefined" ? shaka.Player.version : "none",
+                    videoPlayer: !!videoPlayer,
+                    audioPlayer: !!audioPlayer,
+                };
+            };
+
+            async function init() {
+                if (typeof shaka !== "undefined" && shaka.polyfill) {
+                    shaka.polyfill.installAll();
+                }
+
+                if (!hasVideo && hasAudio) {
+                    audio.style.display = "block";
+                    audio.addEventListener("timeupdate", function () {
+                        post("positionChanged", audio.currentTime);
+                    });
+                    audio.addEventListener("ended", function () {
+                        if (!ended) {
+                            ended = true;
+                            post("ended", null);
+                        }
+                    });
+                }
+
+                videoPlayer = await attachWithShaka(video, videoUrl, "video/mp4", "视频轨");
+                audioPlayer = await attachWithShaka(audio, audioUrl, "audio/mp4", "音频轨");
+
+                post("engineReady", window.getEngineInfo());
+
+                /* WebView2 侧已放开自动播放限制 */
+                setTimeout(function () {
+                    window.resume();
+                }, 80);
             }
 
-            if (hasAudio) {
-                audio.src = audioUrl;
-            }
-
-            if (!hasVideo && hasAudio) {
-                audio.style.display = "block";
-                audio.addEventListener("timeupdate", function () {
-                    post("positionChanged", audio.currentTime);
-                });
-                audio.addEventListener("ended", function () {
-                    if (!ended) {
-                        ended = true;
-                        post("ended", null);
-                    }
-                });
-            }
-
-            video.load();
-            if (hasAudio) {
-                audio.load();
-            }
-
-            /* 自动播放：WebView2 侧已放宽自动播放限制 */
-            setTimeout(function () {
-                window.resume();
-            }, 100);
+            init();
         })();
     </script>
 </body>

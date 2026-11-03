@@ -84,6 +84,7 @@ public enum SettingNames
     PlayWithoutP2P,
     PlayerCdnServer,
     PlayerEngine,
+    PlayerAutoFallback,
     ProxyEnabled,
     ProxyServer,
     ProxyServerHk,

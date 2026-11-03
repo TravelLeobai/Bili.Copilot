@@ -58,6 +58,11 @@ public sealed partial class WebVideoPlayer : UserControl
     public event EventHandler<string>? PlaybackFailed;
 
     /// <summary>
+    /// 播放引擎就绪（附带 Shaka 版本等信息）.
+    /// </summary>
+    public event EventHandler<string>? EngineReady;
+
+    /// <summary>
     /// 当前播放位置（秒）.
     /// </summary>
     public double Position { get; private set; }
@@ -258,6 +263,12 @@ public sealed partial class WebVideoPlayer : UserControl
                         PlaybackStateChanged?.Invoke(this, _lastState);
                     }
 
+                    break;
+                case "engineReady":
+                    var info = data.ValueKind == JsonValueKind.Object
+                        ? $"shaka={data.GetProperty("shaka").GetString()}, video={data.GetProperty("videoPlayer")}, audio={data.GetProperty("audioPlayer")}"
+                        : "unknown";
+                    EngineReady?.Invoke(this, info);
                     break;
                 case "error":
                     var message = data.ValueKind == JsonValueKind.Object && data.TryGetProperty("message", out var messageNode)

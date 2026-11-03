@@ -4,6 +4,7 @@ using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
+using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.MpvKernel.Core.Enums;
 
@@ -15,12 +16,96 @@ namespace BiliCopilot.UI.ViewModels.Core;
 public sealed partial class PlayerViewModel
 {
     private WebVideoPlayer? _webPlayer;
+    private bool _forceWebFallback;
+    private bool _mpvInitFailed;
+    private bool _isFallbackInProgress;
 
     /// <summary>
     /// 是否使用网页播放器.
     /// </summary>
     internal bool IsWebEngine
         => SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
+
+    /// <summary>
+    /// 实际是否走网页播放器（含 mpv 失败后的自动回落）.
+    /// </summary>
+    internal bool UseWebEngine => IsWebEngine || _forceWebFallback;
+
+    /// <summary>
+    /// 播放失败后回落到网页播放器（Shaka）。
+    /// </summary>
+    /// <param name="resumePosition">要续播的位置，小于 1 秒视为从头.</param>
+    internal async Task<bool> TryFallbackToWebEngineAsync(double resumePosition = 0)
+    {
+        if (IsWebEngine || _forceWebFallback || _isFallbackInProgress)
+        {
+            return false;
+        }
+
+        if (!SettingsToolkit.ReadLocalSetting(SettingNames.PlayerAutoFallback, true))
+        {
+            return false;
+        }
+
+        if (Window is null || Window.IsClosed || _sourceResolver is null)
+        {
+            return false;
+        }
+
+        _isFallbackInProgress = true;
+        try
+        {
+            _webPlayer ??= CreateWebPlayer();
+            Window.SetVideoHost(_webPlayer);
+
+            var source = await _sourceResolver.GetSourceAsync();
+            var videoUrl = source?.Url;
+            var audioUrl = source?.Options?.AudioTracks?.FirstOrDefault();
+            if (string.IsNullOrEmpty(videoUrl) && string.IsNullOrEmpty(audioUrl))
+            {
+                logger.LogWarning("回落到网页播放器失败：没有可用的音视频地址");
+                return false;
+            }
+
+            _webPlayer.CookieString = this.Get<IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+
+            if (Player is not null)
+            {
+                Player.PropertyChanged -= OnPlayerPropertyChanged;
+            }
+
+            Player = new PlayerSurface(_webPlayer);
+            Player.PropertyChanged += OnPlayerPropertyChanged;
+            _forceWebFallback = true;
+
+            var volume = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerVolume, 100d);
+            var rate = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerSpeed, 1d);
+            Player.UpdateWebVolume(volume);
+            Player.UpdateWebRate(rate);
+
+            await _webPlayer.LoadAsync(videoUrl, audioUrl);
+            await _webPlayer.SetVolumeAsync(volume);
+            await _webPlayer.SetRateAsync(rate);
+
+            if (resumePosition > 1)
+            {
+                await _webPlayer.SeekAsync(resumePosition);
+            }
+
+            logger.LogInformation("mpv 播放失败，已回落到网页播放器，位置 {Position:F1} 秒", resumePosition);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "回落到网页播放器失败");
+            _forceWebFallback = false;
+            return false;
+        }
+        finally
+        {
+            _isFallbackInProgress = false;
+        }
+    }
 
     /// <summary>
     /// 用网页播放器初始化播放界面.
@@ -96,6 +181,7 @@ public sealed partial class PlayerViewModel
         player.MediaEnded += OnWebMediaEnded;
         player.PlaybackStateChanged += OnWebPlaybackStateChanged;
         player.PlaybackFailed += OnWebPlaybackFailed;
+        player.EngineReady += OnWebEngineReady;
         return player;
     }
 
@@ -129,6 +215,9 @@ public sealed partial class PlayerViewModel
 
         Player?.UpdateWebState(mapped);
     }
+
+    private void OnWebEngineReady(object? sender, string info)
+        => logger.LogInformation("网页播放器就绪：{Info}", info);
 
     private void OnWebPlaybackFailed(object? sender, string message)
     {

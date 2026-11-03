@@ -89,6 +89,15 @@ public sealed partial class PlayerViewModel
                 UseConfig = false,
                 LoadScripts = true,
             };
+
+            // 故障注入：用于验证「回落到网页播放器」链路（仅测试时设置环境变量）.
+            var forceFail = Environment.GetEnvironmentVariable("BILICOPILOT_FORCE_MPV_FAIL") == "1"
+                || File.Exists(Path.Combine(AppContext.BaseDirectory, "force_mpv_fail.flag"));
+            if (forceFail)
+            {
+                throw new InvalidOperationException("已按测试开关模拟 mpv 初始化失败");
+            }
+
             Client = await MpvClient.CreateAsync(mpvPath, options, logger: logger);
             Client.ErrorOccurred += OnClientErrorOccurred;
             Client.CacheStateChanged += OnClientCacheStateChanged;
@@ -357,20 +366,29 @@ public sealed partial class PlayerViewModel
             // 视频输出初始化失败时，先回退着色器/超分并重建输出，避免一直白屏.
             await RecoverPlaybackEnhancementsAsync();
         }
-        else if (Player.Duration < 1 && !_isBroken)
+        else if (Player.Duration < 1)
         {
-            _isBroken = true;
-
-            // 卡顿时按候选池轮换 CDN 节点，再重试一次.
-            if (CdnAccelerator.StallRecovery && CdnAccelerator.IsEnabled && !_isCdnRotated)
+            if (!_isBroken)
             {
-                _isCdnRotated = true;
-                var nextHost = CdnAccelerator.RotateHost();
-                logger.LogInformation("播放失败，切换 CDN 节点到 {Host}", nextHost);
+                _isBroken = true;
+
+                // 卡顿时按候选池轮换 CDN 节点，再重试一次.
+                if (CdnAccelerator.StallRecovery && CdnAccelerator.IsEnabled && !_isCdnRotated)
+                {
+                    _isCdnRotated = true;
+                    var nextHost = CdnAccelerator.RotateHost();
+                    logger.LogInformation("播放失败，切换 CDN 节点到 {Host}", nextHost);
+                }
+
+                await Player.ReplayAsync();
+                return;
             }
 
-            await Player.ReplayAsync();
-            return;
+            // 重试仍然失败，回落到网页播放器（Shaka）.
+            if (await TryFallbackToWebEngineAsync(Player.Position))
+            {
+                return;
+            }
         }
 
         queue.TryEnqueue(() =>
