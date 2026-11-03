@@ -107,6 +107,9 @@ public sealed partial class SettingsPageViewModel
     private string _cdnServer;
 
     [ObservableProperty]
+    private bool _preferWebEngine;
+
+    [ObservableProperty]
     private string _defaultDownloadPath;
 
     [ObservableProperty]

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Forms;
@@ -212,24 +212,25 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        if (Player is null)
+        if (IsWebEngine)
         {
-            Player = new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger);
-            Player.PropertyChanged += OnPlayerPropertyChanged;
+            await InitializeWebEngineAsync();
         }
         else
         {
-            Player.UpdateResolvers(_sourceResolver, _historyResolver);
-        }
+            Player = new PlayerSurface(new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger));
+            Player.PropertyChanged += OnPlayerPropertyChanged;
+            Player.Mpv!.UpdateResolvers(_sourceResolver, _historyResolver);
 
-        try
-        {
-            await Player.InitializeAsync();
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = ex.Message;
-            return;
+            try
+            {
+                await Player.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                ErrorMessage = ex.Message;
+                return;
+            }
         }
 
         if (Window.IsClosed)
@@ -251,6 +252,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         if (Window.IsClosed)
         {
             return;
+        }
+
+        if (IsWebEngine)
+        {
+            await LoadWebMediaAsync();
         }
 
         IsConnecting = false;

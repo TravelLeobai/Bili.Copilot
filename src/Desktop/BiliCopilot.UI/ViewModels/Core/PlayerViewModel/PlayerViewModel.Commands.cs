@@ -49,7 +49,7 @@ public sealed partial class PlayerViewModel
 
         if (Math.Abs(newVolume - Player.Volume) >= 1)
         {
-            await Client!.SetVolumeAsync(newVolume);
+            await ApplyVolumeAsync(newVolume);
         }
     }
 
@@ -68,7 +68,7 @@ public sealed partial class PlayerViewModel
 
         if (Math.Abs(newVolume - Player.Volume) >= 1)
         {
-            await Client!.SetVolumeAsync(newVolume);
+            await ApplyVolumeAsync(newVolume);
         }
     }
 
@@ -85,7 +85,7 @@ public sealed partial class PlayerViewModel
         {
             IsSpeedChanging = true;
             LastSpeedChangingTime = DateTimeOffset.Now;
-            await Client!.SetSpeedAsync(newSpeed);
+            await ApplySpeedAsync(newSpeed);
         }
     }
 
@@ -102,7 +102,7 @@ public sealed partial class PlayerViewModel
         {
             IsSpeedChanging = true;
             LastSpeedChangingTime = DateTimeOffset.Now;
-            await Client!.SetSpeedAsync(newSpeed);
+            await ApplySpeedAsync(newSpeed);
         }
     }
 
@@ -135,11 +135,11 @@ public sealed partial class PlayerViewModel
 
         if (Player.IsFullScreen)
         {
-            await Client!.SetFullScreenStateAsync(false);
+            await ApplyFullScreenAsync(false);
         }
         else if (Player.IsCompactOverlay)
         {
-            await Client!.SetCompactOverlayStateAsync(false);
+            await ApplyCompactOverlayAsync(false);
         }
     }
 
@@ -172,7 +172,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        await Client!.SetCurrentPositionAsync(position);
+        await ApplySeekAsync(position);
     }
 
     /// <summary>
@@ -192,7 +192,7 @@ public sealed partial class PlayerViewModel
 
         if (Math.Abs(Player.Volume - volume) >= 1)
         {
-            await Client!.SetVolumeAsync(volume);
+            await ApplyVolumeAsync(volume);
         }
     }
 
@@ -206,7 +206,7 @@ public sealed partial class PlayerViewModel
 
         if (Player.PlaybackState == MpvPlayerState.Playing)
         {
-            await Client!.PauseAsync();
+            await ApplyPauseAsync();
         }
         else if (Player.IsStopped)
         {
@@ -214,7 +214,7 @@ public sealed partial class PlayerViewModel
         }
         else
         {
-            await Client!.ResumeAsync();
+            await ApplyResumeAsync();
         }
     }
 
@@ -227,7 +227,7 @@ public sealed partial class PlayerViewModel
         }
 
         IsExtraPanelVisible = false;
-        await Client!.SetFullScreenStateAsync(!Player.IsFullScreen);
+        await ApplyFullScreenAsync(!Player.IsFullScreen);
     }
 
     [RelayCommand]
@@ -239,13 +239,13 @@ public sealed partial class PlayerViewModel
         }
 
         IsExtraPanelVisible = false;
-        await Client!.SetCompactOverlayStateAsync(!Player.IsCompactOverlay);
+        await ApplyCompactOverlayAsync(!Player.IsCompactOverlay);
     }
 
     [RelayCommand]
     private async Task PlayNextAsync()
     {
-        await Client!.PauseAsync();
+        await ApplyPauseAsync();
         await Client!.StopAsync();
         await Task.Delay(500);
         if (IsConnecting || (DateTimeOffset.Now - _lastPlayNextOrPrevTime) < TimeSpan.FromSeconds(1))
@@ -260,7 +260,7 @@ public sealed partial class PlayerViewModel
     [RelayCommand]
     private async Task PlayPreviousAsync()
     {
-        await Client!.PauseAsync();
+        await ApplyPauseAsync();
         await Client!.StopAsync();
         await Task.Delay(500);
         if (IsConnecting || (DateTimeOffset.Now - _lastPlayNextOrPrevTime) < TimeSpan.FromSeconds(1))
@@ -282,7 +282,7 @@ public sealed partial class PlayerViewModel
 
         _lastSpeed = Player.PlaybackRate;
         IsHoldingSpeedChanging = true;
-        await Client!.SetSpeedAsync(SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.TempPlaybackRate, 3d));
+        await ApplySpeedAsync(SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.TempPlaybackRate, 3d));
         LastSpeedChangingTime = DateTimeOffset.Now;
         IsSpeedChanging = true;
         _tripleTimer!.Start();
@@ -300,7 +300,7 @@ public sealed partial class PlayerViewModel
         _tripleTimer!.Stop();
         if (Math.Abs(_lastSpeed - Player.PlaybackRate) > 0.01)
         {
-            await Client!.SetSpeedAsync(_lastSpeed);
+            await ApplySpeedAsync(_lastSpeed);
         }
     }
 
@@ -392,7 +392,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        await Client!.SetCurrentPositionAsync(lastSelectedChapter.Position);
+        await ApplySeekAsync(lastSelectedChapter.Position);
     }
 
     [RelayCommand]
@@ -409,7 +409,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        await Client!.SetCurrentPositionAsync(nextSelectedChapter.Position);
+        await ApplySeekAsync(nextSelectedChapter.Position);
     }
 
     [RelayCommand]
@@ -597,7 +597,7 @@ public sealed partial class PlayerViewModel
 
         try
         {
-            await Client.PauseAsync();
+            await ApplyPauseAsync();
             var dialog = new DanmakuSendDialog(DanmakuSend, () => IsPopupVisible = true)
             {
                 XamlRoot = Window!.XamlRoot,
@@ -620,7 +620,7 @@ public sealed partial class PlayerViewModel
         }
 
         IsPopupVisible = false;
-        await Client.ResumeAsync();
+        await ApplyResumeAsync();
     }
 
     [RelayCommand]
@@ -729,7 +729,7 @@ public sealed partial class PlayerViewModel
         {
             if (wasPlaying)
             {
-                await Client.PauseAsync();
+                await ApplyPauseAsync();
             }
 
             var scaleNumber = scale switch
@@ -750,7 +750,7 @@ public sealed partial class PlayerViewModel
 
             if (wasPlaying)
             {
-                await Client.ResumeAsync();
+                await ApplyResumeAsync();
             }
         }
         catch (Exception ex)
@@ -878,7 +878,7 @@ public sealed partial class PlayerViewModel
         {
             if (wasPlaying)
             {
-                await Client.PauseAsync();
+                await ApplyPauseAsync();
             }
 
             await Client.SetShadersAsync(GetCombinedShaders());
@@ -886,7 +886,7 @@ public sealed partial class PlayerViewModel
 
             if (wasPlaying)
             {
-                await Client.ResumeAsync();
+                await ApplyResumeAsync();
             }
         }
         catch (Exception ex)

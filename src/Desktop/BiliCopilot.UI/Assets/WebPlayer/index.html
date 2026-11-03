@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Bili Copilot Web Player</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #videoElement {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            background: #000;
+            outline: none;
+        }
+
+        #audioElement {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <video id="videoElement" playsinline crossorigin="anonymous"></video>
+    <audio id="audioElement"></audio>
+    <script>
+        (function () {
+            "use strict";
+
+            var video = document.getElementById("videoElement");
+            var audio = document.getElementById("audioElement");
+
+            var playData = null;
+            try {
+                var raw = new URLSearchParams(window.location.search).get("playData");
+                var binary = atob(raw || "");
+                var bytes = Uint8Array.from(binary, function (c) { return c.codePointAt(0); });
+                playData = JSON.parse(new TextDecoder("utf-8").decode(bytes));
+            } catch (e) {
+                playData = null;
+            }
+
+            function post(event, data) {
+                try {
+                    if (window.chrome && window.chrome.webview) {
+                        window.chrome.webview.postMessage({ event: event, data: data });
+                    }
+                } catch (e) {
+                    /* ignore */
+                }
+            }
+
+            var videoUrl = playData && playData.video ? playData.video.url : "";
+            var audioUrl = playData && playData.audio ? playData.audio.url : "";
+            var hasVideo = !!videoUrl;
+            var hasAudio = !!audioUrl;
+
+            var baseRate = 1;
+            var syncSmall = 0.1;
+            var syncLarge = 0.5;
+            var ended = false;
+            var reportedLoaded = false;
+
+            if (!hasVideo) {
+                video.style.display = "none";
+            }
+
+            function currentDuration() {
+                if (hasVideo && isFinite(video.duration)) {
+                    return video.duration;
+                }
+                if (hasAudio && isFinite(audio.duration)) {
+                    return audio.duration;
+                }
+                return 0;
+            }
+
+            function reportLoadedIfReady() {
+                if (reportedLoaded) {
+                    return;
+                }
+
+                var videoReady = !hasVideo || video.readyState >= 2;
+                var audioReady = !hasAudio || audio.readyState >= 2;
+                if (videoReady && audioReady) {
+                    reportedLoaded = true;
+                    post("loaded", { duration: currentDuration() });
+                }
+            }
+
+            function syncAudioToVideo() {
+                if (!hasVideo || !hasAudio) {
+                    return;
+                }
+
+                var diff = video.currentTime - audio.currentTime;
+                if (Math.abs(diff) < syncSmall) {
+                    if (Math.abs(audio.playbackRate - baseRate) > 0.001) {
+                        audio.playbackRate = baseRate;
+                    }
+                    return;
+                }
+
+                if (Math.abs(diff) >= syncLarge) {
+                    audio.currentTime = video.currentTime;
+                    audio.playbackRate = baseRate;
+                    return;
+                }
+
+                var factor = Math.min(Math.abs(diff) * 5, 0.5);
+                audio.playbackRate = diff > 0
+                    ? Math.min(baseRate + factor, 2)
+                    : Math.max(0.5, baseRate - factor);
+            }
+
+            video.addEventListener("loadeddata", reportLoadedIfReady);
+            audio.addEventListener("loadeddata", reportLoadedIfReady);
+
+            video.addEventListener("canplay", function () {
+                reportLoadedIfReady();
+                post("stateChanged", { state: video.paused ? "paused" : "playing" });
+            });
+
+            video.addEventListener("playing", function () {
+                post("stateChanged", { state: "playing" });
+            });
+
+            video.addEventListener("waiting", function () {
+                post("stateChanged", { state: "buffering" });
+            });
+
+            video.addEventListener("pause", function () {
+                post("stateChanged", { state: "paused" });
+            });
+
+            video.addEventListener("timeupdate", function () {
+                post("positionChanged", video.currentTime);
+                syncAudioToVideo();
+            });
+
+            video.addEventListener("ended", function () {
+                if (ended) {
+                    return;
+                }
+                ended = true;
+                post("ended", null);
+            });
+
+            video.addEventListener("error", function () {
+                post("error", { message: describeError(video.error) });
+            });
+
+            audio.addEventListener("error", function () {
+                post("error", { message: describeError(audio.error) });
+            });
+
+            function describeError(err) {
+                if (!err) {
+                    return "unknown";
+                }
+                return "code=" + err.code + " message=" + (err.message || "");
+            }
+
+            /* 和网页播放器约定一致的对外接口 */
+            window.setVolume = function (value) {
+                var v = Math.max(0, Math.min(1, value));
+                video.volume = v;
+                audio.volume = v;
+            };
+
+            window.getVolume = function () {
+                return hasVideo ? video.volume : audio.volume;
+            };
+
+            window.pause = function () {
+                video.pause();
+                if (hasAudio) {
+                    audio.pause();
+                }
+            };
+
+            window.resume = function () {
+                if (ended) {
+                    window.seek(0);
+                    ended = false;
+                }
+
+                if (hasAudio) {
+                    audio.currentTime = video.currentTime;
+                    audio.playbackRate = baseRate;
+                    var audioPromise = audio.play();
+                    if (audioPromise && audioPromise.catch) {
+                        audioPromise.catch(function () { });
+                    }
+                }
+
+                var promise = video.play();
+                if (promise && promise.catch) {
+                    promise.catch(function (e) { post("error", { message: String(e) }); });
+                }
+            };
+
+            window.seek = function (seconds) {
+                ended = false;
+                video.currentTime = seconds;
+                if (hasAudio) {
+                    audio.currentTime = seconds;
+                }
+            };
+
+            window.setRate = function (rate) {
+                baseRate = rate;
+                video.playbackRate = rate;
+                audio.playbackRate = rate;
+            };
+
+            window.setCheckAVSyncDiff = function (small, large) {
+                syncSmall = small;
+                syncLarge = large;
+            };
+
+            window.getPosition = function () {
+                return hasVideo ? video.currentTime : audio.currentTime;
+            };
+
+            window.getDuration = function () {
+                return currentDuration();
+            };
+
+            window.isPaused = function () {
+                return hasVideo ? video.paused : audio.paused;
+            };
+
+            if (hasVideo) {
+                video.src = videoUrl;
+            }
+
+            if (hasAudio) {
+                audio.src = audioUrl;
+            }
+
+            if (!hasVideo && hasAudio) {
+                audio.style.display = "block";
+                audio.addEventListener("timeupdate", function () {
+                    post("positionChanged", audio.currentTime);
+                });
+                audio.addEventListener("ended", function () {
+                    if (!ended) {
+                        ended = true;
+                        post("ended", null);
+                    }
+                });
+            }
+
+            video.load();
+            if (hasAudio) {
+                audio.load();
+            }
+
+            /* 自动播放：WebView2 侧已放宽自动播放限制 */
+            setTimeout(function () {
+                window.resume();
+            }, 100);
+        })();
+    </script>
+</body>
+
+</html>

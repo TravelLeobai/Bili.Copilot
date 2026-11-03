@@ -401,11 +401,11 @@ public sealed partial class PlayerViewModel
         var currentWindowPresenter = Window!.GetWindow().Presenter.Kind;
         if (currentWindowPresenter == AppWindowPresenterKind.FullScreen)
         {
-            await Client!.SetFullScreenStateAsync(true);
+            await ApplyFullScreenAsync(true);
         }
         else if (currentWindowPresenter == AppWindowPresenterKind.CompactOverlay)
         {
-            await Client!.SetCompactOverlayStateAsync(true);
+            await ApplyCompactOverlayAsync(true);
         }
     }
 
@@ -556,7 +556,7 @@ public sealed partial class PlayerViewModel
                     IsHoldingSpeedChanging = false;
                     if (Math.Abs(_lastSpeed - Player.PlaybackRate) > 0.01)
                     {
-                        await Client!.SetSpeedAsync(_lastSpeed);
+                        await ApplySpeedAsync(_lastSpeed);
                     }
 
                     if (_isTlsFailed)
@@ -661,7 +661,7 @@ public sealed partial class PlayerViewModel
             ChangeSubtitleFontSizeCommand.Execute(Math.Max(1, subtitleFontSize));
             if (_continuePosition > 0)
             {
-                await Client!.SetCurrentPositionAsync(_continuePosition!.Value);
+                await ApplySeekAsync(_continuePosition!.Value);
                 _continuePosition = null;
             }
 
@@ -672,7 +672,7 @@ public sealed partial class PlayerViewModel
             // Make sure playing.
             if (Player.PlaybackState != MpvPlayerState.Playing)
             {
-                await Client!.ResumeAsync();
+                await ApplyResumeAsync();
             }
 
             await VerifyChaptersAsync();
@@ -724,7 +724,7 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        await Client!.PauseAsync();
+        await ApplyPauseAsync();
         await Client!.StopAsync();
         await InitializeAsync(e);
     }
@@ -824,7 +824,7 @@ public sealed partial class PlayerViewModel
             if (_isRightKeyTripleSpeed)
             {
                 _isRightKeyTripleSpeed = false;
-                await Client!.SetSpeedAsync(_lastSpeed);
+                await ApplySpeedAsync(_lastSpeed);
                 LastSpeedChangingTime = DateTimeOffset.Now;
                 IsSpeedChanging = true;
             }

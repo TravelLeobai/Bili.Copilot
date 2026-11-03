@@ -1,4 +1,4 @@
-﻿using BiliCopilot.UI.Controls.Core;
+using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.WinUI.Helpers;
@@ -274,6 +274,29 @@ public sealed partial class PlayerWindow : IAsyncDisposable
     /// <returns><see cref="AppWindow"/>.</returns>
     public AppWindow GetWindow()
         => _rootWindow;
+
+    /// <summary>
+    /// 设置视频承载元素（放在覆盖层下方）.
+    /// </summary>
+    /// <param name="element">视频元素，传入 null 表示移除.</param>
+    public void SetVideoHost(UIElement? element)
+    {
+        if (_rootGrid is null)
+        {
+            return;
+        }
+
+        var exist = _rootGrid.Children.FirstOrDefault(p => p is Controls.Core.WebVideoPlayer);
+        if (exist is not null)
+        {
+            _rootGrid.Children.Remove(exist);
+        }
+
+        if (element is not null)
+        {
+            _rootGrid.Children.Insert(0, element);
+        }
+    }
 
     public void DelayUpdateTitleBarPadding(bool delaySec = false)
     {

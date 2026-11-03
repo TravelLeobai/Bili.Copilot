@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
@@ -65,7 +65,7 @@ public sealed partial class PlayerViewModel
     public bool IsNextTipShownInThisMedia { get; set; }
 
     [ObservableProperty]
-    public partial MpvPlayer Player { get; set; }
+    public partial PlayerSurface Player { get; set; }
 
     [ObservableProperty]
     public partial string? Title { get; set; }

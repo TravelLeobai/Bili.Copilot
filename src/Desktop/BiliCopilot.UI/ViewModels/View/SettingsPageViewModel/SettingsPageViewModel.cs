@@ -58,6 +58,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         IsVideoMomentNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, true);
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
+        PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
         PlayerDisplayModeCollection = Enum.GetValues<PlayerDisplayMode>().ToList();
         PreferCodecCollection = Enum.GetValues<PreferCodecType>().ToList();
         PreferQualityCollection = Enum.GetValues<PreferQualityType>().ToList();
@@ -461,6 +462,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnCdnServerChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerCdnServer, value);
+
+    partial void OnPreferWebEngineChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerEngine, value ? PlayerEngineType.Web : PlayerEngineType.Mpv);
 
     partial void OnDefaultDownloadPathChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.DownloadFolder, value);

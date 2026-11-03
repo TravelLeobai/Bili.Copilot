@@ -1049,6 +1049,9 @@
   	<None Update="Assets\Anime4K\*">
   		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   	</None>
+  	<Content Update="Assets\WebPlayer\*">
+  		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  	</Content>
   	<None Update="Assets\ArtCNN\*">
   		<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
   	</None>

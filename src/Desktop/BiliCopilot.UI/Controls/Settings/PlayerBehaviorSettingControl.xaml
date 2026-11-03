@@ -100,6 +100,9 @@
             <base:SettingsCard Description="播放地址会优先使用镜像 CDN 主机，此处可自定义替换用的 CDN" Header="CDN 服务器">
                 <TextBox MinWidth="260" Text="{x:Bind ViewModel.CdnServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
+            <base:SettingsCard Description="改用 WebView2 网页播放器播放（参考 BiliLite 的 Shaka/Mpegts 方案）。网页模式不支持着色器、超分辨率与 mpv 字幕" Header="使用网页播放器">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.PreferWebEngine, Mode=TwoWay}" />
+            </base:SettingsCard>
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>

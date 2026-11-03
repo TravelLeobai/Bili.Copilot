@@ -67,6 +67,7 @@ public enum SettingNames
     IsVideoMomentNotificationEnabled,
     PlayWithoutP2P,
     PlayerCdnServer,
+    PlayerEngine,
     DefaultPlayerDisplayMode,
     PreferCodec,
     PreferDecode,
