@@ -231,7 +231,15 @@ public sealed partial class PlayerViewModel
             await Client.SetTlsVerifyAsync(false);
             await Client.SetAutoCreatePlaylistAsync(AutoCreatePlaylistKind.No);
 
-            await RestorePlaybackEnhancementsAsync();
+            if (IsLive)
+            {
+                // 直播流用着色器/超分容易出现设备丢失，这里跳过。
+                logger.LogDebug("直播跳过播放增强（着色器/超分）");
+            }
+            else
+            {
+                await RestorePlaybackEnhancementsAsync();
+            }
         }
 
         if (_rightKeyLongPressTimer == null)

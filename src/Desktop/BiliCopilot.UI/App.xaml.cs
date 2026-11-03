@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
@@ -31,6 +31,8 @@ public partial class App : Application
     /// </summary>
     public App()
     {
+        // 本机 IPv6 出口不通，.NET 默认优先 AAAA 会一直挂到超时；关掉 IPv6 优先，走 IPv4.
+        AppContext.SetSwitch("System.Net.DisableIPv6", true);
         InitializeComponent();
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         UnhandledException += OnUnhandledException;

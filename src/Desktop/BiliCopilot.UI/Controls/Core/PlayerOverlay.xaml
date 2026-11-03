@@ -110,6 +110,15 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid Grid.Row="1">
+                <player:LiveDanmakuOverlay
+                    x:Name="LiveDanmakuOverlayControl"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Top"
+                    Height="220"
+                    Margin="0,60,0,0"
+                    IsHitTestVisible="False"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+                    Visibility="{x:Bind local:PlayerOverlay.GetLiveDanmakuVisibility(ViewModel.IsLive, ViewModel.IsLiveDanmakuVisible), Mode=OneWay}" />
                 <Button
                     x:Name="SkipPromptButton"
                     Margin="0,16,24,0"

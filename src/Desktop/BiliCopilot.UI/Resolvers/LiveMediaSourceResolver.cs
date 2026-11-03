@@ -32,6 +32,9 @@ internal sealed partial class LiveMediaSourceResolver(IPlayerService playerServi
     }
 
     /// <inheritdoc/>
+        public void UseUrl(string url) => _cachedUrl = url;
+
+    /// <inheritdoc/>
     public override IMpvMediaSourceResolver Clone() => throw new NotImplementedException();
 
     /// <inheritdoc/>

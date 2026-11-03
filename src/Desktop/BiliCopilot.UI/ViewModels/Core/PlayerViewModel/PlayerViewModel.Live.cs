@@ -1,33 +1,58 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using System.Collections.ObjectModel;
-using System.Net.WebSockets;
 using System.Text.Json;
+using BiliCopilot.UI.Services.Live;
+using BiliCopilot.UI.ViewModels.Components;
+using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.Input;
-using Richasy.BiliKernel.Bili.Media;
+using Microsoft.Extensions.Logging;
+using Microsoft.UI.Dispatching;
+using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Bili.User;
 using Richasy.BiliKernel.Models;
-using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
 /// <summary>
 /// 播放器视图模型 - 直播.
-/// 参考 BiliLite 的直播详情页，补齐直播弹幕、在线人数、关注与清晰度等能力.
+/// 弹幕与互动消息直连广播服务器解析，画质线路、榜单、大航海、礼物背包走直播接口.
 /// </summary>
 public sealed partial class PlayerViewModel
 {
-    private ClientWebSocket? _liveSocket;
+    private LiveDanmakuClient? _liveClient;
+    private LiveRoomDetail? _liveDetail;
     private CancellationTokenSource? _liveCancellationTokenSource;
-    private int _liveHeartbeatSeconds = 30;
+    private DispatcherQueueTimer? _liveUptimeTimer;
+    private DateTimeOffset _liveUptimeBase = DateTimeOffset.MinValue;
+    private readonly HashSet<string> _loggedRaw = new();
 
     /// <summary>
-    /// 直播弹幕列表.
+    /// 互动消息（弹幕 / 礼物 / 醒目留言 / 上舰 / 进场）.
     /// </summary>
-    public ObservableCollection<LiveDanmakuItem> LiveDanmakus { get; } = new();
+    public ObservableCollection<LiveInteractionViewModel> LiveInteractions { get; } = new();
+
+    /// <summary>
+    /// 礼物榜.
+    /// </summary>
+    public ObservableCollection<LiveRankItemViewModel> LiveRanks { get; } = new();
+
+    /// <summary>
+    /// 大航海列表.
+    /// </summary>
+    public ObservableCollection<LiveGuardItemViewModel> LiveGuards { get; } = new();
+
+    /// <summary>
+    /// 可选画质与线路.
+    /// </summary>
+    public ObservableCollection<LiveStreamOptionViewModel> LiveStreamOptions { get; } = new();
+
+    /// <summary>
+    /// 礼物背包（免费礼物）.
+    /// </summary>
+    public ObservableCollection<LiveGiftBagItem> LiveGiftBag { get; } = new();
 
     /// <summary>
     /// 当前是否在播放直播.
@@ -54,6 +79,18 @@ public sealed partial class PlayerViewModel
     private string _liveOnlineText = "0";
 
     /// <summary>
+    /// 粉丝数.
+    /// </summary>
+    [ObservableProperty]
+    private string _liveFansText = "0";
+
+    /// <summary>
+    /// 直播已播时长.
+    /// </summary>
+    [ObservableProperty]
+    private string _liveUptimeText = "00:00:00";
+
+    /// <summary>
     /// 直播弹幕输入内容.
     /// </summary>
     [ObservableProperty]
@@ -66,12 +103,96 @@ public sealed partial class PlayerViewModel
     private bool _isLiveUserFollowed;
 
     /// <summary>
-    /// 直播播放地址状态提示.
+    /// 直播状态提示.
     /// </summary>
     [ObservableProperty]
     private string _liveStatusText = string.Empty;
 
+    /// <summary>
+    /// 是否显示直播弹幕浮层.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLiveDanmakuVisible = true;
+
+    /// <summary>
+    /// 当前画质文本.
+    /// </summary>
+    [ObservableProperty]
+    private string _liveQualityText = "原画";
+
+    /// <summary>
+    /// 当前线路文本.
+    /// </summary>
+    [ObservableProperty]
+    private string _liveLineText = "线路1";
+
+    /// <summary>
+    /// 当前选中的直播流.
+    /// </summary>
+    [ObservableProperty]
+    private LiveStreamOptionViewModel? _selectedLiveStream;
+
+    /// <summary>
+    /// 金瓜子余额.
+    /// </summary>
+    [ObservableProperty]
+    private string _liveGoldText = "0";
+
+    /// <summary>
+    /// 银瓜子余额.
+    /// </summary>
+    [ObservableProperty]
+    private string _liveSilverText = "0";
+
     private string LiveRoomId => _snapshot?.Live?.Identifier.Id ?? string.Empty;
+
+    /// <summary>
+    /// 直播面板当前分区（0 互动 / 1 榜单 / 2 大航海）.
+    /// </summary>
+    [ObservableProperty]
+    private int _livePanelTab;
+
+    /// <summary>
+    /// 主播头像.
+    /// </summary>
+    public Microsoft.UI.Xaml.Media.ImageSource? LiveUserAvatar
+        => string.IsNullOrEmpty(_liveDetail?.AnchorAvatar)
+            ? null
+            : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(_liveDetail.AnchorAvatar));
+
+    /// <summary>
+    /// 关注按钮文本.
+    /// </summary>
+    public string FollowButtonText => IsLiveUserFollowed ? "已关注" : "关注";
+
+    /// <summary>
+    /// 画质与线路文本.
+    /// </summary>
+    public string LiveQualityAndLineText => $"{LiveQualityText} · {LiveLineText}";
+
+    /// <summary>
+    /// 钱包余额文本.
+    /// </summary>
+    public string LiveWalletText => $"金瓜子 {LiveGoldText} · 银瓜子 {LiveSilverText}";
+
+    [RelayCommand]
+    private void SwitchLiveTab(int index)
+    {
+        if (index is >= 0 and <= 2)
+        {
+            LivePanelTab = index;
+        }
+    }
+
+    partial void OnIsLiveUserFollowedChanged(bool value) => OnPropertyChanged(nameof(FollowButtonText));
+
+    partial void OnLiveQualityTextChanged(string value) => OnPropertyChanged(nameof(LiveQualityAndLineText));
+
+    partial void OnLiveLineTextChanged(string value) => OnPropertyChanged(nameof(LiveQualityAndLineText));
+
+    partial void OnLiveGoldTextChanged(string value) => OnPropertyChanged(nameof(LiveWalletText));
+
+    partial void OnLiveSilverTextChanged(string value) => OnPropertyChanged(nameof(LiveWalletText));
 
     private async Task ConnectLiveAsync(CancellationToken cancellationToken)
     {
@@ -89,29 +210,108 @@ public sealed partial class PlayerViewModel
 
         _liveCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var token = _liveCancellationTokenSource.Token;
+
+        await LoadLiveRoomInfoAsync(token);
+        await LoadLiveListsAsync(token);
+        await ConnectLiveDanmakuAsync(token);
+        StartUptimeTimer();
+    }
+
+    private async Task LoadLiveRoomInfoAsync(CancellationToken token)
+    {
+        var cookie = GetCookieString();
+        var detail = await LiveRoomApi.GetRoomDetailAsync(LiveRoomId, cookie, logger);
+        if (detail is null)
+        {
+            LiveStatusText = "直播间信息获取失败";
+            return;
+        }
+
+        _liveDetail = detail;
+        if (!string.IsNullOrEmpty(detail.Title))
+        {
+            LiveTitle = detail.Title;
+        }
+
+        LiveOnlineText = FormatCount(detail.Online);
+        LiveFansText = detail.FansCount > 0 ? $"{detail.FansCount:N0}" : LiveFansText;
+        if (detail.StartTime > 0)
+        {
+            _liveUptimeBase = DateTimeOffset.FromUnixTimeSeconds(detail.StartTime);
+        }
+
+        UpdateUptime();
+
+        // 画质与线路.
+        var options = await LiveRoomApi.GetStreamOptionsAsync(LiveRoomId, cookie, logger);
+        LiveStreamOptions.Clear();
+        foreach (var option in options)
+        {
+            LiveStreamOptions.Add(new LiveStreamOptionViewModel(option));
+        }
+
+        logger.LogInformation("直播间 {Room} 在线 {Online}，可选流 {Count} 条", LiveRoomId, LiveOnlineText, LiveStreamOptions.Count);
+
+        var current = LiveStreamOptions.FirstOrDefault();
+        if (current is not null)
+        {
+            SelectedLiveStream = current;
+            LiveQualityText = current.QualityText;
+            LiveLineText = current.LineText;
+        }
+    }
+
+    private async Task LoadLiveListsAsync(CancellationToken token)
+    {
+        var cookie = GetCookieString();
+        var anchorUid = _liveDetail?.AnchorUid ?? 0;
+        if (anchorUid == 0)
+        {
+            anchorUid = await LiveRoomApi.GetAnchorUidAsync(LiveRoomId, cookie, logger);
+        }
         try
         {
-            var service = this.Get<IPlayerService>();
-            _liveSocket = await service.EnterLiveRoomAsync(LiveRoomId, token);
-            LiveStatusText = "弹幕已连接";
-            _ = HeartbeatLoopAsync(service, token);
-            while (!token.IsCancellationRequested && _liveSocket is { State: WebSocketState.Open })
+            var ranks = await LiveRoomApi.GetGoldRankAsync(LiveRoomId, anchorUid, cookie, logger);
+            LiveRanks.Clear();
+            foreach (var item in ranks)
             {
-                var messages = await service.GetLiveSocketMessagesAsync(_liveSocket, token);
-                if (messages is null || messages.Count == 0)
-                {
-                    await Task.Delay(200, token);
-                    continue;
-                }
-
-                foreach (var message in messages)
-                {
-                    HandleLiveMessage(message);
-                }
+                LiveRanks.Add(new LiveRankItemViewModel(item));
             }
+
+            var guards = await LiveRoomApi.GetGuardListAsync(LiveRoomId, anchorUid, cookie, logger);
+            LiveGuards.Clear();
+            foreach (var item in guards)
+            {
+                LiveGuards.Add(new LiveGuardItemViewModel(item));
+            }
+
+            var giftBag = await LiveRoomApi.GetGiftBagAsync(LiveRoomId, cookie, logger);
+            LiveGiftBag.Clear();
+            foreach (var item in giftBag)
+            {
+                LiveGiftBag.Add(item);
+            }
+
+            var (gold, silver) = await LiveRoomApi.GetWalletAsync(cookie, logger);
+            LiveGoldText = gold.ToString("N0");
+            LiveSilverText = silver.ToString("N0");
         }
-        catch (OperationCanceledException)
+        catch (Exception ex)
         {
+            logger.LogDebug(ex, "加载直播榜单失败");
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private async Task ConnectLiveDanmakuAsync(CancellationToken token)
+    {
+        try
+        {
+            _liveClient = new LiveDanmakuClient();
+            _liveClient.MessageReceived += OnLiveMessageReceived;
+            _liveClient.StateChanged += OnLiveStateChanged;
+            await _liveClient.ConnectAsync(LiveRoomId, GetCookieString(), GetMyUid(), logger);
         }
         catch (Exception ex)
         {
@@ -120,88 +320,186 @@ public sealed partial class PlayerViewModel
         }
     }
 
-    private async Task HeartbeatLoopAsync(IPlayerService service, CancellationToken token)
+    private void OnLiveMessageReceived(object? sender, (string Command, JsonElement Data) e)
     {
-        try
-        {
-            while (!token.IsCancellationRequested && _liveSocket is { State: WebSocketState.Open })
-            {
-                await Task.Delay(TimeSpan.FromSeconds(_liveHeartbeatSeconds), token);
-                await service.SendLiveHeartBeatAsync(_liveSocket, token);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            logger.LogDebug(ex, "直播心跳发送失败.");
-        }
-    }
+        var cmd = e.Command.Split(':')[0];
 
-    private void HandleLiveMessage(LiveMessage message)
-    {
-        switch (message.Type)
+        if (_loggedRaw.Add(cmd))
         {
-            case LiveMessageType.Danmaku when message.Data is LiveDanmakuInformation danmaku:
-                queue.TryEnqueue(() => AppendLiveDanmaku(danmaku));
+            var raw = e.Data.GetRawText();
+            logger.LogInformation("弹幕原始样本 {Cmd}：{Raw}", cmd, raw.Length > 700 ? raw[..700] : raw);
+        }
+
+        switch (cmd)
+        {
+            case "WATCHED_CHANGE":
+                var text = ReadProp(e.Data, "data", "text_small");
+                if (!string.IsNullOrEmpty(text))
+                {
+                    queue.TryEnqueue(() => LiveOnlineText = text);
+                }
+
                 break;
-            case LiveMessageType.Online when message.Data is not null:
-                queue.TryEnqueue(() => LiveOnlineText = message.Data.ToString() ?? "0");
+            case "ONLINE_RANK_COUNT":
+                var count = ReadProp(e.Data, "data", "count");
+                if (!string.IsNullOrEmpty(count))
+                {
+                    queue.TryEnqueue(() => LiveOnlineText = count);
+                }
+
                 break;
-            case LiveMessageType.Welcome when message.Data is LiveDanmakuInformation welcome:
-                queue.TryEnqueue(() => AppendLiveDanmaku(welcome));
+            case "ROOM_REAL_TIME_MESSAGE_UPDATE":
+                var fans = ReadProp(e.Data, "data", "fans");
+                if (!string.IsNullOrEmpty(fans))
+                {
+                    queue.TryEnqueue(() => LiveFansText = long.TryParse(fans, out var value) ? $"{value:N0}" : fans);
+                }
+
                 break;
-            case LiveMessageType.Gift when message.Data is LiveDanmakuInformation gift:
-                queue.TryEnqueue(() => AppendLiveDanmaku(gift));
+            case "LIVE":
+                queue.TryEnqueue(() => LiveStatusText = "直播中");
                 break;
-            case LiveMessageType.SuperChat when message.Data is LiveDanmakuInformation superChat:
-                queue.TryEnqueue(() => AppendLiveDanmaku(superChat));
+            case "PREPARING":
+                queue.TryEnqueue(() => LiveStatusText = "未开播");
+                break;
+            case "ROOM_CHANGE":
+                var title = ReadProp(e.Data, "data", "title");
+                if (!string.IsNullOrEmpty(title))
+                {
+                    queue.TryEnqueue(() => LiveTitle = title);
+                }
+
                 break;
             default:
+                var item = LiveMessageParser.Parse(e.Command, e.Data);
+                if (item is not null)
+                {
+                    queue.TryEnqueue(() => AppendLiveInteraction(item));
+                }
+
                 break;
         }
     }
 
-    private void AppendLiveDanmaku(LiveDanmakuInformation information)
+    private void OnLiveStateChanged(object? sender, string state)
+        => queue.TryEnqueue(() => LiveStatusText = state);
+
+    private void AppendLiveInteraction(LiveInteractionItem item)
     {
-        LiveDanmakus.Add(new LiveDanmakuItem(information.UserName, information.Text, information.UserLevel));
-        while (LiveDanmakus.Count > 200)
+        LiveInteractions.Add(new LiveInteractionViewModel(item));
+        while (LiveInteractions.Count > 200)
         {
-            LiveDanmakus.RemoveAt(0);
+            LiveInteractions.RemoveAt(0);
         }
+    }
+
+    private void StartUptimeTimer()
+    {
+        _liveUptimeTimer ??= queue.CreateTimer();
+        _liveUptimeTimer.Interval = TimeSpan.FromSeconds(1);
+        _liveUptimeTimer.Tick -= OnLiveUptimeTick;
+        _liveUptimeTimer.Tick += OnLiveUptimeTick;
+        _liveUptimeTimer.Start();
+    }
+
+    private void OnLiveUptimeTick(DispatcherQueueTimer sender, object args) => UpdateUptime();
+
+    private void UpdateUptime()
+    {
+        if (_liveUptimeBase == DateTimeOffset.MinValue)
+        {
+            LiveUptimeText = "00:00:00";
+            return;
+        }
+
+        var span = DateTimeOffset.Now - _liveUptimeBase;
+        if (span < TimeSpan.Zero)
+        {
+            span = TimeSpan.Zero;
+        }
+
+        LiveUptimeText = $"{(int)span.TotalHours:D2}:{span.Minutes:D2}:{span.Seconds:D2}";
+    }
+
+    private string GetCookieString()
+        => this.Get<IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+
+    private long GetMyUid()
+        => this.Get<AccountViewModel>().MyProfile?.User?.Id is var id && long.TryParse(id, out var value) ? value : 0;
+
+    private static string FormatCount(int value)
+        => value >= 10000 ? $"{value / 10000d:F1} 万" : value.ToString();
+
+    private static string ReadProp(JsonElement root, string parent, string name)
+    {
+        if (!root.TryGetProperty(parent, out var node) || node.ValueKind != JsonValueKind.Object || !node.TryGetProperty(name, out var value))
+        {
+            return string.Empty;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? string.Empty,
+            JsonValueKind.Number => value.GetRawText(),
+            _ => string.Empty,
+        };
     }
 
     [RelayCommand]
     private async Task SendLiveDanmakuAsync()
     {
         var text = LiveDanmakuInput?.Trim();
-        if (string.IsNullOrEmpty(text) || _liveSocket is null || _liveSocket.State != WebSocketState.Open)
+        if (string.IsNullOrEmpty(text))
         {
             return;
         }
 
         try
         {
-            var service = this.Get<IPlayerService>();
-            var payload = JsonSerializer.Serialize(new
+            var sent = _liveClient is not null && await _liveClient.SendDanmakuAsync(LiveRoomId, text);
+            if (!sent)
             {
-                color = 16777215,
-                fontsize = 25,
-                mode = 1,
-                msg = text,
-                rnd = DateTimeOffset.Now.ToUnixTimeSeconds(),
-                roomid = Convert.ToInt64(LiveRoomId),
-                biz = 0,
-            });
+                var cookie = GetCookieString();
+                var csrf = ExtractCookie(cookie, "bili_jct");
+                sent = await LiveRoomApi.SendDanmakuAsync(LiveRoomId, text, cookie, csrf, logger);
+            }
 
-            await service.SendLiveMessageAsync(_liveSocket, payload, 5, _liveCancellationTokenSource?.Token ?? default);
-            LiveDanmakuInput = string.Empty;
+            LiveDanmakuInput = sent ? string.Empty : LiveDanmakuInput;
+            LiveStatusText = sent ? "弹幕已发送" : "弹幕发送失败";
         }
         catch (Exception ex)
         {
             LiveStatusText = "弹幕发送失败";
             logger.LogWarning(ex, "发送直播弹幕失败.");
+        }
+    }
+
+    [RelayCommand]
+    private void SwitchLiveDanmaku() => IsLiveDanmakuVisible = !IsLiveDanmakuVisible;
+
+    [RelayCommand]
+    private async Task RefreshLiveInfoAsync()
+    {
+        var token = _liveCancellationTokenSource?.Token ?? CancellationToken.None;
+        await LoadLiveRoomInfoAsync(token);
+        await LoadLiveListsAsync(token);
+    }
+
+    [RelayCommand]
+    private async Task SwitchLiveStreamAsync(LiveStreamOptionViewModel? option)
+    {
+        if (option is null)
+        {
+            return;
+        }
+
+        SelectedLiveStream = option;
+        LiveQualityText = option.QualityText;
+        LiveLineText = option.LineText;
+        if (_sourceResolver is Resolvers.LiveMediaSourceResolver liveResolver)
+        {
+            liveResolver.UseUrl(option.Url);
+            await Player.ReplayAsync();
         }
     }
 
@@ -233,12 +531,33 @@ public sealed partial class PlayerViewModel
         }
     }
 
+    private static string ExtractCookie(string cookie, string name)
+    {
+        foreach (var part in cookie.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var index = part.IndexOf('=');
+            if (index > 0 && part[..index].Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return part[(index + 1)..];
+            }
+        }
+
+        return string.Empty;
+    }
+
     private void StopLive()
     {
         try
         {
             _liveCancellationTokenSource?.Cancel();
-            _liveSocket?.Dispose();
+            if (_liveClient is not null)
+            {
+                _liveClient.MessageReceived -= OnLiveMessageReceived;
+                _liveClient.StateChanged -= OnLiveStateChanged;
+                _ = _liveClient.DisposeAsync();
+            }
+
+            _liveUptimeTimer?.Stop();
         }
         catch (Exception ex)
         {
@@ -247,40 +566,13 @@ public sealed partial class PlayerViewModel
         finally
         {
             _liveCancellationTokenSource?.Dispose();
-            _liveSocket = null;
+            _liveClient = null;
             _liveCancellationTokenSource = null;
-            LiveDanmakus.Clear();
+            LiveInteractions.Clear();
+            LiveRanks.Clear();
+            LiveGuards.Clear();
+            LiveStreamOptions.Clear();
+            LiveGiftBag.Clear();
         }
     }
-}
-
-/// <summary>
-/// 直播弹幕条目.
-/// </summary>
-public sealed class LiveDanmakuItem
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="LiveDanmakuItem"/> class.
-    /// </summary>
-    public LiveDanmakuItem(string userName, string text, string level)
-    {
-        UserName = userName;
-        Text = text;
-        Level = level;
-    }
-
-    /// <summary>
-    /// 用户名.
-    /// </summary>
-    public string UserName { get; }
-
-    /// <summary>
-    /// 弹幕内容.
-    /// </summary>
-    public string Text { get; }
-
-    /// <summary>
-    /// 用户等级.
-    /// </summary>
-    public string Level { get; }
 }

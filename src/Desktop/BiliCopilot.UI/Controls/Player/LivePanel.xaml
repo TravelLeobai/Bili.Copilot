@@ -5,80 +5,368 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:core="using:BiliCopilot.UI.ViewModels.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
+    xmlns:live="using:BiliCopilot.UI.Services.Live"
+    xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid HorizontalAlignment="Right" Width="340">
+    <Grid HorizontalAlignment="Right" Width="360">
         <Border
             Margin="0,16,16,16"
             Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-            CornerRadius="8"
             BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-            BorderThickness="1">
-            <Grid Padding="12" RowSpacing="10">
+            BorderThickness="1"
+            CornerRadius="8">
+            <Grid Padding="12" RowSpacing="8">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <StackPanel
-                    Orientation="Horizontal"
-                    Spacing="10">
-                    <Image
-                        Width="40"
-                        Height="40"
-                        Source="{x:Bind ViewModel.LiveUser.Avatar.Uri, Mode=OneWay, Converter={StaticResource BitmapConverter}}" />
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
-                        <TextBlock
-                            MaxWidth="150"
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Text="{x:Bind ViewModel.LiveUser.Name, Mode=OneWay}"
-                            TextTrimming="CharacterEllipsis" />
+                <!--  主播信息  -->
+                <StackPanel Spacing="6">
+                    <Grid ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Image
+                            Width="40"
+                            Height="40"
+                            Source="{x:Bind ViewModel.LiveUserAvatar, Mode=OneWay}"
+                            Stretch="UniformToFill" />
+                        <StackPanel
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            Spacing="2">
+                            <TextBlock
+                                MaxWidth="150"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Text="{x:Bind ViewModel.LiveUser.Name, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Opacity="0.7"
+                                FontSize="11"
+                                Text="{x:Bind ViewModel.LiveOnlineText, Mode=OneWay}" />
+                        </StackPanel>
+                        <Button
+                            Grid.Column="2"
+                            Click="OnFollowClick"
+                            Content="{x:Bind ViewModel.FollowButtonText, Mode=OneWay}" />
+                    </Grid>
+
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock
                             FontSize="11"
                             Opacity="0.7"
-                            Text="{x:Bind ViewModel.LiveOnlineText, Mode=OneWay}" />
-                    </StackPanel>
-                    <Button
-                        HorizontalAlignment="Right"
-                        Click="OnFollowClick"
-                        Content="关注" />
+                            Text="{x:Bind ViewModel.LiveFansText, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            Grid.Column="1"
+                            FontSize="11"
+                            Opacity="0.7"
+                            Text="{x:Bind ViewModel.LiveUptimeText, Mode=OneWay}" />
+                        <Button
+                            Grid.Column="2"
+                            Padding="6,0"
+                            FontSize="11"
+                            Content="{x:Bind ViewModel.LiveQualityAndLineText, Mode=OneWay}">
+                            <Button.Flyout>
+                                <Flyout>
+                                    <ListView
+                                        MaxHeight="320"
+                                        ItemsSource="{x:Bind ViewModel.LiveStreamOptions, Mode=OneWay}"
+                                        ItemClick="OnStreamOptionClick"
+                                        SelectionMode="None">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="items:LiveStreamOptionViewModel">
+                                                <TextBlock Text="{x:Bind DisplayText}" />
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
                 </StackPanel>
 
-                <ListView
+                <!--  分区切换  -->
+                <Grid
                     Grid.Row="1"
-                    IsItemClickEnabled="False"
-                    ItemsSource="{x:Bind ViewModel.LiveDanmakus, Mode=OneWay}"
-                    SelectionMode="None">
+                    ColumnSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        Click="OnTabClick"
+                        Content="互动"
+                        Tag="0" />
+                    <Button
+                        Grid.Column="1"
+                        HorizontalAlignment="Stretch"
+                        Click="OnTabClick"
+                        Content="榜单"
+                        Tag="1" />
+                    <Button
+                        Grid.Column="2"
+                        HorizontalAlignment="Stretch"
+                        Click="OnTabClick"
+                        Content="大航海"
+                        Tag="2" />
+                    <Button
+                        Grid.Column="3"
+                        Click="OnRefreshClick"
+                        Content="刷新" />
+                </Grid>
+
+                <!--  互动消息  -->
+                <ListView
+                    x:Name="InteractionList"
+                    Grid.Row="2"
+                    ItemsSource="{x:Bind ViewModel.LiveInteractions, Mode=OneWay}"
+                    SelectionMode="None"
+                    Visibility="{x:Bind local:LivePanel.IsTab(ViewModel.LivePanelTab, 0), Mode=OneWay}">
                     <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="core:LiveDanmakuItem">
-                            <TextBlock
-                                FontSize="12"
-                                TextWrapping="Wrap">
-                                <Run Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind UserName}" />
-                                <Run Text=": " />
-                                <Run Text="{x:Bind Text}" />
-                            </TextBlock>
+                        <DataTemplate x:DataType="items:LiveInteractionViewModel">
+                            <Border
+                                Margin="0,2"
+                                Padding="8,6"
+                                Background= "{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                                <Grid RowSpacing="2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border
+                                            Padding="4,0"
+                                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                            CornerRadius="3"
+                                            Visibility="{x:Bind IsSuperChat}">
+                                            <TextBlock
+                                                FontSize="10"
+                                                Foreground="White"
+                                                Text="{x:Bind PriceText}" />
+                                        </Border>
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Text="{x:Bind UserName}" />
+                                        <Border
+                                            Padding="3,0"
+                                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                            CornerRadius="3"
+                                            Visibility="{x:Bind HasUserLevel}">
+                                            <TextBlock
+                                                FontSize="9"
+                                                Opacity="0.8"
+                                                Text="{x:Bind UserLevelText}" />
+                                        </Border>
+                                        <Border
+                                            Padding="3,0"
+                                            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                                            CornerRadius="3"
+                                            Visibility="{x:Bind HasMedal}">
+                                            <TextBlock
+                                                FontSize="9"
+                                                Text="{x:Bind MedalText}" />
+                                        </Border>
+                                        <TextBlock
+                                            HorizontalAlignment="Right"
+                                            FontSize="9"
+                                            Opacity="0.5"
+                                            Text="{x:Bind TimeText}" />
+                                    </StackPanel>
+
+                                    <!--  普通弹幕 / 进场  -->
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        FontSize="12"
+                                        Text="{x:Bind Text}"
+                                        TextWrapping="Wrap"
+                                        Visibility="{x:Bind IsGift, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
+
+                                    <!--  礼物  -->
+                                    <StackPanel
+                                        Grid.Row="1"
+                                        Orientation="Horizontal"
+                                        Spacing="6"
+                                        Visibility="{x:Bind IsGift}">
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                            Text="{x:Bind GiftDescription}" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Opacity="0.6"
+                                            Text="{x:Bind PriceText}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <Grid
+                <!--  礼物榜  -->
+                <ListView
                     Grid.Row="2"
+                    ItemsSource="{x:Bind ViewModel.LiveRanks, Mode=OneWay}"
+                    SelectionMode="None"
+                    Visibility="{x:Bind local:LivePanel.IsTab(ViewModel.LivePanelTab, 1), Mode=OneWay}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="items:LiveRankItemViewModel">
+                            <Grid Padding="4,4" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Text="{x:Bind RankText}" />
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Text="{x:Bind UserName}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    Text="{x:Bind ScoreText}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!--  大航海  -->
+                <ListView
+                    Grid.Row="2"
+                    ItemsSource="{x:Bind ViewModel.LiveGuards, Mode=OneWay}"
+                    SelectionMode="None"
+                    Visibility="{x:Bind local:LivePanel.IsTab(ViewModel.LivePanelTab, 2), Mode=OneWay}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="items:LiveGuardItemViewModel">
+                            <Grid Padding="4,4" ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border
+                                    Padding="4,0"
+                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                    CornerRadius="3">
+                                    <TextBlock
+                                        FontSize="10"
+                                        Foreground="White"
+                                        Text="{x:Bind GuardText}" />
+                                </Border>
+                                <TextBlock
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Text="{x:Bind UserName}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    Grid.Column="2"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    Text="{x:Bind TotalWealth}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!--  发送区  -->
+                <Grid
+                    Grid.Row="3"
                     ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ToggleButton
+                            Padding="8,4"
+                            Click="OnDanmakuToggleClick"
+                            Content="弹"
+                            IsChecked="{x:Bind ViewModel.IsLiveDanmakuVisible, Mode=OneWay}"
+                            ToolTipService.ToolTip="弹幕浮层开关" />
+                        <Button
+                            Padding="8,4"
+                            Click="OnGiftBagClick"
+                            Content="礼物">
+                        <Button.Flyout>
+                            <Flyout>
+                                <StackPanel MinWidth="220" Spacing="6">
+                                    <TextBlock
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Text="我的礼物" />
+                                    <TextBlock
+                                        FontSize="11"
+                                        Opacity="0.7"
+                                        Text="{x:Bind ViewModel.LiveWalletText, Mode=OneWay}" />
+                                    <ListView
+                                        MaxHeight="240"
+                                        ItemsSource="{x:Bind ViewModel.LiveGiftBag, Mode=OneWay}"
+                                        SelectionMode="None">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="live:LiveGiftBagItem">
+                                                <Grid Padding="2" ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Text="{x:Bind GiftName}" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        FontSize="12"
+                                                        Opacity="0.7"
+                                                        Text="{x:Bind NumberText}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                        </Button>
+                    </StackPanel>
                     <TextBox
                         x:Name="DanmakuBox"
+                        Grid.Column="1"
                         MaxLength="30"
                         PlaceholderText="发个弹幕…"
                         Text="{x:Bind ViewModel.LiveDanmakuInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <Button
-                        Grid.Column="1"
+                        Grid.Column="2"
                         Click="OnSendClick"
                         Content="发送" />
                 </Grid>

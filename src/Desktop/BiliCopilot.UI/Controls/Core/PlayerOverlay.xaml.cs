@@ -341,4 +341,10 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             SubtitleFontComboBox.SelectedItem = source;
         }
     }
+
+    /// <summary>
+    /// 直播弹幕浮层可见性.
+    /// </summary>
+    public static Visibility GetLiveDanmakuVisibility(bool isLive, bool isVisible)
+        => isLive && isVisible ? Visibility.Visible : Visibility.Collapsed;
 }
