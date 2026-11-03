@@ -53,6 +53,9 @@
                 <TextBox MinWidth="360" PlaceholderText="https://your-worker.example.com/ads?bvid={bvid}" Text="{x:Bind ViewModel.AdCloudUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
+            <base:SettingsCard Description="复用下面配置的 AI 接口，在动态「已看过」里用一段话概括你的观看偏好" Header="分析观看兴趣">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.AiInterestEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
             <base:SettingsCard Description="用大模型读字幕判断广告位置（OpenAI 兼容接口）" Header="AI 识别广告">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AiAdEnabled, Mode=TwoWay}" />
             </base:SettingsCard>

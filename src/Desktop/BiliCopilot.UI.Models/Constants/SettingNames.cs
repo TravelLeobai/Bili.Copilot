@@ -17,6 +17,7 @@ public enum SettingNames
     AdCloudEnabled,
     AdCloudUrl,
     AiAdEnabled,
+    AiInterestEnabled,
     AiAdEndpoint,
     AiAdKey,
     AiAdModel,

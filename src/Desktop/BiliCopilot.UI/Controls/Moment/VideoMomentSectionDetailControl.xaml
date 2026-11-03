@@ -168,6 +168,30 @@
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Text="{ext:Locale Name=MomentWatchedDescription}"
                         TextWrapping="Wrap" />
+                    <StackPanel Spacing="6" Visibility="{x:Bind ViewModel.HasWatchedInterest, Mode=OneWay}">
+                        <TextBlock
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="观看兴趣（AI 分析）" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            IsTextSelectionEnabled="True"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.WatchedInterestText, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind ViewModel.IsInterestAnalyzing, Mode=OneWay}">
+                        <ProgressRing
+                            Width="14"
+                            Height="14"
+                            IsActive="True"
+                            Visibility="{x:Bind ViewModel.IsInterestAnalyzing, Mode=OneWay}" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Text="正在分析观看兴趣…"
+                            Visibility="{x:Bind ViewModel.IsInterestAnalyzing, Mode=OneWay}" />
+                    </StackPanel>
                     <TextBlock
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         MaxLines="1"

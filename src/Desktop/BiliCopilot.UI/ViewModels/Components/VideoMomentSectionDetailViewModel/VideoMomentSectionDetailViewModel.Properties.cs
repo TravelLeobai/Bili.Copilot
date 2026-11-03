@@ -32,6 +32,8 @@ public sealed partial class VideoMomentSectionDetailViewModel
     private bool _isAtTop = true;
     private bool _areTimelineUpdatesSuspended;
     private bool _hasDeferredWatchedUpdate;
+    private string? _interestSignature;
+    private CancellationTokenSource? _interestCts;
 
     [ObservableProperty]
     private bool _isEmpty;
@@ -82,4 +84,21 @@ public sealed partial class VideoMomentSectionDetailViewModel
     /// 跟随左侧当前时间位置显示的已看视频.
     /// </summary>
     public ObservableCollection<MomentItemViewModel> WatchedItems { get; } = new();
+
+    /// <summary>
+    /// 已看过视频的观看兴趣分析（由大模型生成）.
+    /// </summary>
+    [ObservableProperty]
+    private string _watchedInterestText;
+
+    /// <summary>
+    /// 是否正在分析观看兴趣.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isInterestAnalyzing;
+
+    /// <summary>
+    /// 是否已有兴趣分析结果.
+    /// </summary>
+    public bool HasWatchedInterest => !string.IsNullOrWhiteSpace(WatchedInterestText);
 }

@@ -207,6 +207,9 @@ public sealed partial class SettingsPageViewModel
     private bool _aiAdEnabled;
 
     [ObservableProperty]
+    private bool _aiInterestEnabled = true;
+
+    [ObservableProperty]
     private string _aiAdEndpoint;
 
     [ObservableProperty]

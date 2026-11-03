@@ -597,6 +597,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     partial void OnAdCloudUrlChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.AdCloudUrl, value);
 
+    partial void OnAiInterestEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiInterestEnabled, value);
+
     partial void OnAiAdEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEnabled, value);
 

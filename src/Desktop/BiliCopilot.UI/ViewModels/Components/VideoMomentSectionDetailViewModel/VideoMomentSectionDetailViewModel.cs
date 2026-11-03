@@ -1,5 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
 using BiliCopilot.UI.ViewModels.View;
@@ -363,6 +364,7 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
             .Select(entry => entry.Item).ToList();
         UpdateCollection(WatchedItems, watched);
         IsWatchedEmpty = WatchedItems.Count == 0;
+        RequestInterestAnalysis();
     }
 
     private static void UpdateCollection(
@@ -400,5 +402,76 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
                 target.Insert(i, source[i]);
             }
         }
+    }
+
+    /// <summary>
+    /// 触发一次观看兴趣分析（去抖 + 结果签名判重）.
+    /// </summary>
+    private void RequestInterestAnalysis()
+    {
+        if (!AiInterestAnalyzer.IsEnabled || !AiInterestAnalyzer.IsConfigured)
+        {
+            return;
+        }
+
+        var samples = WatchedItems
+            .Take(12)
+            .Select(p => new InterestSample(
+                p.VideoTitle ?? string.Empty,
+                p.Author ?? string.Empty,
+                p.Description?.Text ?? string.Empty,
+                p.VideoCover?.ToString() ?? string.Empty))
+            .Where(p => !string.IsNullOrWhiteSpace(p.Title))
+            .ToList();
+
+        if (samples.Count == 0)
+        {
+            WatchedInterestText = null;
+            IsInterestAnalyzing = false;
+            return;
+        }
+
+        var signature = string.Join('|', samples.Select(p => p.Title));
+        if (signature == _interestSignature)
+        {
+            return;
+        }
+
+        _interestSignature = signature;
+        _interestCts?.Cancel();
+        _interestCts = new CancellationTokenSource();
+        var token = _interestCts.Token;
+
+        IsInterestAnalyzing = true;
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    // 用户滚动很快时只在停下来的那一版上跑，省请求.
+                    await Task.Delay(TimeSpan.FromSeconds(3), token).ConfigureAwait(false);
+                    var text = await AiInterestAnalyzer.AnalyzeAsync(samples, _logger).ConfigureAwait(false);
+                    if (token.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
+                    this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, () =>
+                    {
+                        WatchedInterestText = text;
+                        OnPropertyChanged(nameof(HasWatchedInterest));
+                        IsInterestAnalyzing = false;
+                    });
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "分析观看兴趣失败");
+                    this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, () => IsInterestAnalyzing = false);
+                }
+            },
+            token);
     }
 }
