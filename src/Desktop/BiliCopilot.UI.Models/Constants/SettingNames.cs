@@ -106,6 +106,8 @@ public enum SettingNames
     CdnStallSwitch,
     CdnBlockP2P,
     CdnRankingCache,
+    CdnPoolCache,
+    CdnPoolLastSync,
     DefaultPlayerDisplayMode,
     PreferCodec,
     PreferDecode,

@@ -173,7 +173,7 @@ internal static class CdnAccelerator
         var pool = GetRankedHosts();
         if (pool.Count == 0)
         {
-            pool = CandidatePool.ToList();
+            pool = CdnPoolService.GetCandidates();
         }
 
         if (pool.Count > 1)
@@ -199,7 +199,7 @@ internal static class CdnAccelerator
             return GetRankedHosts();
         }
 
-        var tasks = CandidatePool.Select(host => ProbeHostAsync(host, sampleUrl)).ToList();
+        var tasks = CdnPoolService.GetCandidates().Select(host => ProbeHostAsync(host, sampleUrl)).ToList();
         var results = await Task.WhenAll(tasks);
         var valid = results
             .Where(p => p.Mbps > 0)

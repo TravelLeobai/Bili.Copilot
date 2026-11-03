@@ -61,6 +61,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
         RememberPlaybackEnhancements = SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true);
+        CdnPoolStatusText = CdnPoolService.StatusText;
         QualityUnlockEnabled = Services.QualityUnlockService.IsEnabled;
         QualityUnlockAutoMax = Services.QualityUnlockService.AutoMaxQuality;
         QualityUnlockSendCookie = Services.QualityUnlockService.SendCookie;
@@ -834,5 +835,16 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         {
             QualityUnlockStatusText = $"同步失败，继续使用当前服务器（{Services.QualityUnlockService.LastSync:MM-dd HH:mm} 尝试过）";
         }
+    }
+
+    [RelayCommand]
+    private async Task RefreshCdnPoolAsync()
+    {
+        CdnPoolStatusText = "正在刷新节点池…";
+        var logger = this.Get<ILogger<SettingsPageViewModel>>();
+        var result = await CdnPoolService.SyncAsync(logger);
+        CdnPoolStatusText = result.Success
+            ? $"{result.Count} 个节点（{result.Source}）· 上次同步 {CdnPoolService.LastSync:MM-dd HH:mm}"
+            : $"{CdnPoolService.StatusText}（刷新失败）";
     }
 }

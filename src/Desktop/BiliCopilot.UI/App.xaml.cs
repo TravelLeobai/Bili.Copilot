@@ -87,6 +87,7 @@ public partial class App : Application
             GlobalDependencies.Initialize();
             ProbeEnhancementSettings();
             _ = SyncQualityUnlockIfNeededAsync();
+            _ = SyncCdnPoolIfNeededAsync();
             ApplyMomentVideoLayoutPreset(SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.MomentVideoLayoutPreset, 0));
             GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().LaunchCommand.Execute(default);
         }
@@ -251,6 +252,27 @@ public partial class App : Application
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "画质解锁服务器同步失败");
+        }
+    }
+
+    /// <summary>
+    /// 每天刷新一次 CDN 节点池（关闭 CDN 替换或未到时间则跳过）.
+    /// </summary>
+    private static async Task SyncCdnPoolIfNeededAsync()
+    {
+        try
+        {
+            if (!Services.CdnAccelerator.IsEnabled || !Services.CdnPoolService.NeedSync)
+            {
+                return;
+            }
+
+            var logger = GlobalDependencies.Kernel.GetRequiredService<Microsoft.Extensions.Logging.ILogger<App>>();
+            await Services.CdnPoolService.SyncAsync(logger);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "CDN 节点池同步失败");
         }
     }
 }

@@ -234,6 +234,8 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     private string _cdnLatencyText;
+    [ObservableProperty]
+    private string _cdnPoolStatusText;
 
     /// <summary>
     /// CDN 替换模式可选项.

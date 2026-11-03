@@ -67,6 +67,12 @@
                 <ComboBox MinWidth="320" ItemsSource="{x:Bind ViewModel.CdnServerCollection}" SelectedIndex="{x:Bind ViewModel.CdnServerIndex, Mode=TwoWay}" />
             </base:SettingsCard>
 
+            <base:SettingsCard Description="{x:Bind ViewModel.CdnPoolStatusText, Mode=OneWay}" Header="CDN 节点池">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Command="{x:Bind ViewModel.RefreshCdnPoolCommand}" Content="刷新节点池" />
+                </StackPanel>
+            </base:SettingsCard>
+
             <base:SettingsCard Description="测试各候选节点的响应延迟" Header="CDN 节点延迟">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <Button Command="{x:Bind ViewModel.TestCdnLatencyCommand}" Content="测试服务器延迟" />
