@@ -540,9 +540,11 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 .Foreground(new SolidColorBrush(nameColor))
                 .FontFamily(MedalFontFamily);
 
+        // 与等级同色的圆角描边，让勋章在弹幕里更有辨识度.
         return Border(content)
             .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
-            .CornerRadius(3)
+            .WithBorder(new SolidColorBrush(nameColor), 1)
+            .CornerRadius(4)
             .Padding(4, 0, 4, 0)
             .Margin(6, 0, 0, 0)
             .VAlign(VerticalAlignment.Center);
