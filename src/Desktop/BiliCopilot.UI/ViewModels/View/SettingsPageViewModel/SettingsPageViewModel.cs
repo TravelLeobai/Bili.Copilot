@@ -725,6 +725,19 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     private async Task TestCdnLatencyAsync()
     {
         CdnLatencyText = "测试中…";
+        if (CdnPoolService.Count == 0)
+        {
+            await CdnPoolService.SyncAsync(this.Get<ILogger<SettingsPageViewModel>>());
+            RebuildCdnServerList();
+        }
+
+        if (CdnPoolService.Count == 0)
+        {
+            CdnLatencyText = "节点池是空的，先点上面「刷新节点池」";
+            Services.CdnStatusBus.Report("CDN 延迟测试：节点池为空，先刷新节点池");
+            return;
+        }
+
         var tasks = CdnPoolService.GetCandidates(16)
             .Select(async host =>
             {

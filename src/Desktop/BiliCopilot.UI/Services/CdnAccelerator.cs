@@ -357,9 +357,13 @@ internal static class CdnAccelerator
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             using var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             stopwatch.Stop();
-            return response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.PartialContent
-                ? (int)stopwatch.ElapsedMilliseconds
-                : -1;
+            if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.PartialContent)
+            {
+                return (int)stopwatch.ElapsedMilliseconds;
+            }
+
+            // 节点对样本链接回 403/404（路径通常只对带签名的地址有效），退回 TCP 握手测速.
+            return await ProbeTcpLatencyAsync(host).ConfigureAwait(false);
         }
         catch (Exception)
         {
