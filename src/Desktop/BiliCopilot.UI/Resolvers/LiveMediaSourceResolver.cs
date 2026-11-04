@@ -82,8 +82,13 @@ internal sealed partial class LiveMediaSourceResolver(IPlayerService playerServi
             .Select(item => item!)
             .ToList() ?? new List<string>();
 
-        var url = urls.FirstOrDefault(item => item.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
+        // 优先 FLV（http_stream）：mpv 对 B 站直播的 HLS 变体偶尔只出音频轨.
+        var url = urls.FirstOrDefault(item => item.Contains(".flv", StringComparison.OrdinalIgnoreCase))
+            ?? urls.FirstOrDefault(item => item.Contains(".m3u8", StringComparison.OrdinalIgnoreCase))
             ?? urls.FirstOrDefault();
+        logger.LogInformation(
+            "直播流格式：{Format}",
+            url.Contains(".flv", StringComparison.OrdinalIgnoreCase) ? "flv" : url.Contains(".m3u8", StringComparison.OrdinalIgnoreCase) ? "hls" : "other");
 
         if (string.IsNullOrEmpty(url))
         {

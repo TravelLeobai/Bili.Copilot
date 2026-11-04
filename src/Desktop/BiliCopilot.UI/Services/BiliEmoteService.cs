@@ -38,6 +38,18 @@ internal static class BiliEmoteService
     public static bool IsReady => Cache.Count > 0;
 
     /// <summary>
+    /// 取全部已缓存表情（发送面板用）.
+    /// </summary>
+    /// <returns>表情列表.</returns>
+    public static IReadOnlyList<BiliEmote> GetAll()
+    {
+        lock (Cache)
+        {
+            return Cache.Values.ToList();
+        }
+    }
+
+    /// <summary>
     /// 按占位文本取表情.
     /// </summary>
     /// <param name="token">形如 <c>[名字]</c> 的占位文本.</param>

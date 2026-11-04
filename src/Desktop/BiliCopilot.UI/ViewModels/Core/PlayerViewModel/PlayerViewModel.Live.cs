@@ -184,6 +184,16 @@ public sealed partial class PlayerViewModel
             : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(LiveUserAvatarUrl));
 
     /// <summary>
+    /// 当前直播间 id（给表情面板用）.
+    /// </summary>
+    public string LiveRoomIdText => LiveRoomId;
+
+    /// <summary>
+    /// 当前登录态 cookie（给表情面板用）.
+    /// </summary>
+    public string LiveCookieText => GetCookieString();
+
+    /// <summary>
     /// 关注按钮文本.
     /// </summary>
     public string FollowButtonText => IsLiveUserFollowed ? "已关注" : "关注";

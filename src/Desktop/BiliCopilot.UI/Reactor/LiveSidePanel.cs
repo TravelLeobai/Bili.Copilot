@@ -327,14 +327,15 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildFooter(PlayerViewModel vm)
     {
-        // 底栏用 Grid：[弹][礼][输入 *][发送]，输入框吃掉中间所有宽度，整体撑满面板.
+        // 底栏：[弹][礼][表情][输入 *][发送]，输入框吃掉中间所有宽度，整体撑满面板.
         return Grid(
-            new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
             new[] { GridSize.Auto },
             BuildDanmakuToggle(vm).Grid(row: 0, column: 0).Margin(0, 0, 6, 0),
             BuildGiftButton(vm).Grid(row: 0, column: 1).Margin(0, 0, 6, 0),
-            BuildInputBox(vm).Grid(row: 0, column: 2).Margin(0, 0, 6, 0),
-            BuildSendButton(vm).Grid(row: 0, column: 3))
+            BuildEmoteButton(vm).Grid(row: 0, column: 2).Margin(0, 0, 6, 0),
+            BuildInputBox(vm).Grid(row: 0, column: 3).Margin(0, 0, 6, 0),
+            BuildSendButton(vm).Grid(row: 0, column: 4))
             .Padding(12, 8, 12, 12);
     }
 
@@ -675,5 +676,159 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         }
 
         return new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+    }
+    private Element BuildEmoteButton(PlayerViewModel vm)
+        => new XamlHostElement(
+            () =>
+            {
+                var button = new Button
+                {
+                    Width = 32,
+                    Height = 32,
+                    Padding = new Thickness(0),
+                    Content = new FluentIcons.WinUI.SymbolIcon
+                    {
+                        Symbol = FluentIcons.Common.Symbol.Emoji,
+                        FontSize = 14,
+                    },
+                };
+
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, "表情");
+                var flyout = new Flyout { Placement = FlyoutPlacementMode.Top };
+                flyout.Opening += async (_, _) => await FillEmoteFlyoutAsync(vm, flyout);
+                button.Flyout = flyout;
+                return button;
+            },
+            _ => { })
+            .WithKey("live-emote");
+
+    private async Task FillEmoteFlyoutAsync(PlayerViewModel vm, Flyout flyout)
+    {
+        if (flyout.Content is StackPanel)
+        {
+            return;
+        }
+
+        var root = new StackPanel { Spacing = 8, MaxWidth = 420 };
+        flyout.Content = root;
+
+        var loading = new TextBlock { Text = "加载表情中…", Opacity = 0.6, FontSize = 12 };
+        root.Children.Add(loading);
+
+        try
+        {
+            var packages = new List<(string Name, List<(string Token, string Url)> Items)>();
+
+            // 1) 直播间专属 / UP 主大表情.
+            var roomEmotes = await BiliCopilot.UI.Services.LiveEmoteService.GetRoomEmotesAsync(
+                vm.LiveRoomIdText,
+                vm.LiveCookieText);
+            foreach (var package in roomEmotes)
+            {
+                packages.Add((package.Name, package.Emotes.Select(p => (p.Token, p.Url)).ToList()));
+            }
+
+            // 2) 平时发评论能用的表情.
+            var commentEmotes = BiliCopilot.UI.Services.BiliEmoteService.GetAll();
+            if (commentEmotes.Count > 0)
+            {
+                packages.Add(("常用表情", commentEmotes.Select(p => (p.Token, p.Url)).ToList()));
+            }
+
+            root.Children.Remove(loading);
+            if (packages.Count == 0)
+            {
+                root.Children.Add(new TextBlock { Text = "没有可用表情（可能需要登录）", Opacity = 0.6, FontSize = 12 });
+                return;
+            }
+
+            foreach (var (name, items) in packages)
+            {
+                root.Children.Add(new TextBlock
+                {
+                    Text = name,
+                    FontSize = 12,
+                    Opacity = 0.7,
+                    Margin = new Thickness(0, 4, 0, 0),
+                });
+
+                var wrap = new StackPanel { Spacing = 4 };
+                for (var i = 0; i < items.Count; i += 8)
+                {
+                    var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                    foreach (var (token, url) in items.Skip(i).Take(8))
+                    {
+                        var safeUrl = NormalizeEmoteUrl(url);
+                        if (safeUrl is null)
+                        {
+                            continue;
+                        }
+
+                        var emoteButton = new Button
+                        {
+                            Width = 36,
+                            Height = 36,
+                            Padding = new Thickness(0),
+                            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                            BorderThickness = new Thickness(0),
+                            Content = new Image
+                            {
+                                Width = 24,
+                                Height = 24,
+                                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(safeUrl)),
+                            },
+                        };
+                        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(emoteButton, token);
+                        emoteButton.Click += (_, _) =>
+                        {
+                            InsertEmoteToken(token);
+                            flyout.Hide();
+                        };
+                        row.Children.Add(emoteButton);
+                    }
+
+                    wrap.Children.Add(row);
+                }
+
+                root.Children.Add(wrap);
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "加载直播表情面板失败");
+            root.Children.Remove(loading);
+            root.Children.Add(new TextBlock { Text = "表情加载失败", Opacity = 0.6, FontSize = 12 });
+        }
+    }
+
+    private void InsertEmoteToken(string token)
+    {
+        var box = _liveInputBox;
+        if (box is null)
+        {
+            return;
+        }
+
+        box.Text = string.IsNullOrEmpty(box.Text) ? token : box.Text + token;
+        box.SelectionStart = box.Text.Length;
+        _ = box.Focus(FocusState.Programmatic);
+    }
+    private static string? NormalizeEmoteUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var value = url.Trim();
+        if (value.StartsWith("//", StringComparison.Ordinal))
+        {
+            value = "https:" + value;
+        }
+
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? value
+            : null;
     }
 }
