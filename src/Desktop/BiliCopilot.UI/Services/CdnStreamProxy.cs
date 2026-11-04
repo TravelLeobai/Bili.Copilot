@@ -225,22 +225,33 @@ internal static class CdnStreamProxy
             context.Response.Headers["Content-Type"] = "video/mp4";
             context.Response.ContentLength64 = count;
 
+            // mpv 会先发 HEAD 探一下，HEAD 只回头不回体.
+            if (string.Equals(context.Request.HttpMethod, "HEAD", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.OutputStream.Close();
+                return;
+            }
+
             var firstChunk = (int)(start / ChunkSize);
             var lastChunk = (int)(end / ChunkSize);
             _ = PrefetchAsync(firstChunk, Math.Min(lastChunk + 3, TotalChunks - 1));
 
             var buffer = new byte[64 * 1024];
+            var writtenTotal = 0L;
             for (var index = firstChunk; index <= lastChunk; index++)
             {
                 var data = await GetChunkAsync(index).ConfigureAwait(false);
                 if (data is null)
                 {
+                    // 已经吐了一部分时直接断开会污染播放；这里尽量只关连接，让 mpv 自己重试.
+                    Serilog.Log.Warning("多线程代理：分块 {Index} 下载失败，中断本次响应", index);
                     context.Response.Abort();
                     return;
                 }
 
                 var offsetInChunk = index == firstChunk ? (int)(start % ChunkSize) : 0;
-                var take = Math.Min(data.Length - offsetInChunk, (int)Math.Min(count, int.MaxValue));
+                var available = data.Length - offsetInChunk;
+                var take = (int)Math.Min(available, count);
                 var written = 0;
                 while (written < take)
                 {
@@ -250,11 +261,22 @@ internal static class CdnStreamProxy
                     written += slice;
                 }
 
+                writtenTotal += take;
                 count -= take;
                 if (count <= 0)
                 {
                     break;
                 }
+            }
+
+            if (writtenTotal < end - start + 1)
+            {
+                Serilog.Log.Warning(
+                    "多线程代理：响应未写满（{Written}/{Total}），目标 {Start}-{End}",
+                    writtenTotal,
+                    end - start + 1,
+                    start,
+                    end);
             }
 
             context.Response.OutputStream.Close();
@@ -341,6 +363,23 @@ internal static class CdnStreamProxy
 
         private async Task<long> ProbeLengthAsync()
         {
+            // 先 HEAD 拿长度，拿不到再用 Range 探.
+            try
+            {
+                using var headRequest = new HttpRequestMessage(HttpMethod.Head, _remoteUrl);
+                headRequest.Headers.TryAddWithoutValidation("User-Agent", string.IsNullOrWhiteSpace(UserAgent) ? "Mozilla/5.0" : UserAgent);
+                headRequest.Headers.TryAddWithoutValidation("Referer", "https://www.bilibili.com");
+                using var headResponse = await Client.SendAsync(headRequest, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                if (headResponse.Content.Headers.ContentLength is { } headLength && headLength > 0)
+                {
+                    return headLength;
+                }
+            }
+            catch (Exception headEx)
+            {
+                Serilog.Log.Debug(headEx, "多线程加速：HEAD 探测失败，改用 Range");
+            }
+
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, _remoteUrl);
