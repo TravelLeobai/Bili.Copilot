@@ -58,18 +58,30 @@ public sealed class SettingsShell : Component
             .Height(56)
             .Padding(16, 0);
 
+        // 用类型找控件，别再靠下标：删掉一个分区后下标会整体错位，进设置页直接越界崩溃.
         var children = new List<Element>
         {
             SectionTitle("播放器"),
-            Control(0), Control(1), Control(2), Control(3), Control(4),
+            Control<PlayerControlSettingControl>(),
+            Control<PlayerBehaviorSettingControl>(),
+            Control<MpvExtraSettingControl>(),
+            Control<ScreenshotSettingControl>(),
+            Control<DownloadSettingControl>(),
             SectionTitle("自动化"),
-            Control(15),
+            Control<AdSkipSettingControl>(),
             SectionTitle("网络与加速"),
-            Control(14), Control(16),
+            Control<ProxySettingControl>(),
+            Control<QualityUnlockSettingControl>(),
             SectionTitle("通用"),
-            Control(5), Control(6), Control(7), Control(8), Control(9), Control(10), Control(11), Control(12),
+            Control<ThemeSettingControl>(),
+            Control<LayoutSettingSection>(),
+            Control<CacheSettingControl>(),
+            Control<NavigationSettingControl>(),
+            Control<ScrollSettingControl>(),
+            Control<NotificationSettingControl>(),
+            Control<LoggerSettingControl>(),
             SectionTitle("关于"),
-            Control(13),
+            Control<AboutSettingControl>(),
         };
 
         var body = ScrollView(VStack(4, [.. children]).Padding(16, 0));
@@ -84,6 +96,9 @@ public sealed class SettingsShell : Component
     private static Element SectionTitle(string text)
         => TextBlock(text).FontSize(13).SemiBold().Margin(0, 12, 0, 4);
 
-    private Element Control(int index)
-        => new XamlHostElement(() => _appControls[index], _ => { });
+    private Element Control<TControl>()
+        where TControl : FrameworkElement
+        => new XamlHostElement(
+            () => _appControls.OfType<TControl>().First(),
+            _ => { });
 }
