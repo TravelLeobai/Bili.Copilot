@@ -43,6 +43,8 @@ public sealed class MainShell : Component
     private readonly Button _favoriteButton = CreateFlatIconButton("\uE734", "我的收藏");
     private readonly Button _viewLaterButton = CreateFlatIconButton("\uE823", "稍后再看");
     private readonly Button _historyButton = CreateFlatIconButton("\uE81C", "历史记录");
+    private const string SearchRailTag = "__rail_search__";
+
     private Action? _togglePaneAction;
     private Action? _openPaneAction;
     private ElementRef<FrameworkElement>? _titleBarRef;
@@ -98,7 +100,15 @@ public sealed class MainShell : Component
         var menu = viewModel.MenuItems
             .Where(item => item.IsVisible)
             .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
-            .ToArray();
+            .ToList();
+
+        // 侧栏收起时，搜索图标放到左侧窄 rail 的最上面（标题栏里不再放）.
+        if (!isPaneOpen)
+        {
+            menu.Insert(0, new NavigationViewItemData("搜索", "Find", SearchRailTag));
+        }
+
+        var menuItems = menu.ToArray();
         var footer = viewModel.FooterItems
             .Where(item => item.IsVisible && !item.PageKey.Contains("SettingsPage"))
             .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
@@ -133,7 +143,7 @@ public sealed class MainShell : Component
                 .Margin(12, 6, 8, 8)
             : (Element)TextBlock(string.Empty);
 
-        var navigation = (NavigationView(menu) with
+        var navigation = (NavigationView(menuItems) with
         {
             Content = new XamlHostElement(() => _contentHost, _ => { }),
             FooterMenuItems = footer,
@@ -164,13 +174,8 @@ public sealed class MainShell : Component
                 .Margin(3.5, 0, 0, 0)
                 .HAlign(HorizontalAlignment.Left)
                 .VAlign(VerticalAlignment.Center),
-            // 侧栏收起时，搜索缩成标题栏里的一个图标.
-            isPaneOpen
-                ? (Element)TextBlock(string.Empty)
-                : new XamlHostElement(() => _compactSearchButton, _ => { })
-                    .Size(40, 40)
-                    .HAlign(HorizontalAlignment.Left)
-                    .VAlign(VerticalAlignment.Center),
+            // 搜索图标只在侧栏窄 rail 上（折叠态），标题栏这里留空.
+            (Element)TextBlock(string.Empty),
             TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
             .VAlign(VerticalAlignment.Center)
             .HAlign(HorizontalAlignment.Left)
@@ -255,6 +260,20 @@ public sealed class MainShell : Component
 
     private void NavigateByTag(string tag)
     {
+        Serilog.Log.Information("导航项被点击：{Tag}", tag);
+
+        if (tag == SearchRailTag)
+        {
+            // 点窄 rail 上的搜索图标：先展开侧栏，再把焦点送进搜索框.
+            _openPaneAction?.Invoke();
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(200).ConfigureAwait(false);
+                _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
+            });
+            return;
+        }
+
         var item = _viewModel.MenuItems.Concat(_viewModel.FooterItems)
             .FirstOrDefault(entry => entry.PageKey == tag);
         item?.NavigateCommand.Execute(default);
