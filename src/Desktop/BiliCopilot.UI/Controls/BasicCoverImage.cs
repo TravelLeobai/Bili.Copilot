@@ -1,6 +1,7 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Extensions;
+using BiliCopilot.UI.Services;
 using Microsoft.Graphics.Canvas;
 using Microsoft.UI;
 using Richasy.WinUIKernel.Share.Base;
@@ -11,6 +12,8 @@ public sealed partial class BasicCoverImage : ImageExBase
 {
     private readonly static BasicScaleEffect _scaleEffect = new();
 
+    private readonly System.Diagnostics.Stopwatch _loadStopwatch = new();
+
     private bool _isNormalizingSource;
 
     /// <summary>
@@ -18,10 +21,24 @@ public sealed partial class BasicCoverImage : ImageExBase
     /// </summary>
     public BasicCoverImage()
     {
-        // Source 或解码宽度变化时把地址补成服务端缩略图。
-        // 注意：B 站接口返回的封面大多自带 @672w_378h_1c 这类参数，
-        // 这一步只对没有参数、且属于图床域名的地址做兜底。
-        RegisterPropertyChangedCallback(SourceProperty, (_, _) => NormalizeSource());
+        _ = _loadStopwatch;
+
+        // 诊断开关打开时，解码完成/失败都记一笔，用来判断失败重试风暴和解码开销.
+        ImageLoaded += (_, _) => ImageDiagnostics.RecordLoaded(
+            Source?.OriginalString,
+            (int)DecodeWidth,
+            (int)DecodeHeight,
+            _loadStopwatch.Elapsed.TotalMilliseconds);
+
+        ImageFailed += (_, _) => ImageDiagnostics.RecordFailed(Source?.OriginalString, null);
+
+        // Source 或解码宽度变化时把地址补成服务端缩略图：列表只下缩略图.
+        RegisterPropertyChangedCallback(SourceProperty, (_, _) =>
+        {
+            _loadStopwatch.Restart();
+            NormalizeSource();
+        });
+
         RegisterPropertyChangedCallback(DecodeWidthProperty, (_, _) => NormalizeSource());
     }
 

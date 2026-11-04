@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using System.Net;
 
@@ -45,7 +45,13 @@ internal static class InternalHttpExtensions
             ServerCertificateCustomValidationCallback = (_, _, _, _) => true, // Bypass SSL validation for self-signed certificates (not recommended for production)
         };
 
-        var client = new HttpClient(handler);
+        HttpMessageHandler pipeline = handler;
+        if (BiliCopilot.UI.Services.ImageDiagnostics.IsEnabled)
+        {
+            pipeline = new BiliCopilot.UI.Services.ImageDiagnostics.TimingHandler(handler);
+        }
+
+        var client = new HttpClient(pipeline);
         client.DefaultRequestHeaders.Add("User-Agent", VideoUserAgent);
         return client;
     }

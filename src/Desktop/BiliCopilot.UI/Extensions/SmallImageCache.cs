@@ -98,5 +98,53 @@ internal static class SmallImageCache
         return bitmap;
     }
 
+    /// <summary>
+    /// 系统内存压力上升时把缓存清掉，别跟页面抢内存.
+    /// </summary>
+    static SmallImageCache()
+    {
+        try
+        {
+            Windows.System.MemoryManager.AppMemoryUsageIncreased += (_, _) => Trim();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "订阅内存压力事件失败");
+        }
+    }
+
+    /// <summary>
+    /// 当前缓存了多少张小图.
+    /// </summary>
+    internal static int Count
+    {
+        get
+        {
+            lock (SyncRoot)
+            {
+                return Order.Count;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 清空缓存.
+    /// </summary>
+    internal static void Trim()
+    {
+        int removed;
+        lock (SyncRoot)
+        {
+            removed = Order.Count;
+            Lookup.Clear();
+            Order.Clear();
+        }
+
+        if (removed > 0)
+        {
+            Serilog.Log.Information("图片缓存已按内存压力清空：{Count} 张", removed);
+        }
+    }
+
     private readonly record struct CacheEntry(string Key, BitmapImage Image);
 }

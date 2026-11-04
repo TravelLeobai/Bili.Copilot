@@ -83,7 +83,9 @@ public partial class App : Application
             }
 
             instance.Activated += OnInstanceActivated;
-            Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = false;
+            // 后台解码：内核默认就是开的，这里恢复默认，解码不再压 UI 线程.
+            Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = true;
+            BiliCopilot.UI.Services.ImageDiagnostics.Initialize();
             GlobalDependencies.Initialize();
             ProbeEnhancementSettings();
             _ = SyncQualityUnlockIfNeededAsync();
