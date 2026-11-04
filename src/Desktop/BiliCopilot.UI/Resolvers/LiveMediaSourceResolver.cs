@@ -102,7 +102,6 @@ internal sealed partial class LiveMediaSourceResolver(IPlayerService playerServi
 
         if (Uri.TryCreate(optimizedUrl, UriKind.Absolute, out var chosenUri))
         {
-            logger.LogInformation("直播地址原文：{Url}", optimizedUrl);
             logger.LogInformation(
                 "直播地址选定：{Host} 协议={Scheme} 候选={Count} 带视频标记={HasVideo}",
                 chosenUri.Host,

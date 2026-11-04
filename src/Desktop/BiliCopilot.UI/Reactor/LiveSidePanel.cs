@@ -152,10 +152,15 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             })
             .WithKey("live-quality");
 
-        return VStack(
-            8,
-            HStack(10, avatar, nameBlock, followHost),
-            HStack(8, qualityHost)).Padding(12, 10, 12, 8);
+        // 头像占左列，关注按钮压在头像下面；画质线路和关注按钮同一行.
+        return Grid(
+            new[] { GridSize.Auto, GridSize.Star() },
+            new[] { GridSize.Auto, GridSize.Auto },
+            avatar.Grid(row: 0, column: 0).Margin(0, 0, 0, 6),
+            nameBlock.Grid(row: 0, column: 1).Margin(10, 0, 0, 6),
+            followHost.Grid(row: 1, column: 0).HAlign(HorizontalAlignment.Center),
+            qualityHost.Grid(row: 1, column: 1).HAlign(HorizontalAlignment.Left).Margin(10, 0, 0, 0))
+            .Padding(12, 10, 12, 8);
     }
 
     /// <summary>

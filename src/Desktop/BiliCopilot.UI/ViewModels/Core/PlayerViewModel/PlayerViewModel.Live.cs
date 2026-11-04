@@ -257,7 +257,15 @@ public sealed partial class PlayerViewModel
         }
 
         LiveOnlineText = FormatCount(detail.Online);
-        LiveFansText = detail.FansCount > 0 ? $"{detail.FansCount:N0}" : LiveFansText;
+        if (detail.FansCount > 0)
+        {
+            LiveFansText = detail.FansCount.ToString("N0");
+        }
+        else
+        {
+            // 直播间详情偶尔不带粉丝数（接口失败时就是 0），单独问一次关注关系.
+            _ = FillFansCountAsync(detail.AnchorUid.ToString(), logger);
+        }
         if (detail.StartTime > 0)
         {
             _liveUptimeBase = DateTimeOffset.FromUnixTimeSeconds(detail.StartTime);
@@ -356,20 +364,10 @@ public sealed partial class PlayerViewModel
         switch (cmd)
         {
             case "WATCHED_CHANGE":
-                var text = ReadProp(e.Data, "data", "text_small");
-                if (!string.IsNullOrEmpty(text))
-                {
-                    queue.TryEnqueue(() => LiveOnlineText = text);
-                }
-
+                // 「x 人看过」这种累计观看数，跟直播间人气不是一个口径，留着不用.
                 break;
             case "ONLINE_RANK_COUNT":
-                var count = ReadProp(e.Data, "data", "count");
-                if (!string.IsNullOrEmpty(count))
-                {
-                    queue.TryEnqueue(() => LiveOnlineText = count);
-                }
-
+                // 这是榜单里的人数（高能榜/在线榜），不是直播间人气，不去覆盖 LiveOnlineText，否则数字来回跳.
                 break;
             case "ROOM_REAL_TIME_MESSAGE_UPDATE":
                 var fans = ReadProp(e.Data, "data", "fans");
@@ -452,7 +450,16 @@ public sealed partial class PlayerViewModel
         => this.Get<AccountViewModel>().MyProfile?.User?.Id is var id && long.TryParse(id, out var value) ? value : 0;
 
     private static string FormatCount(int value)
-        => value >= 10000 ? $"{value / 10000d:F1} 万" : value.ToString();
+    {
+        if (value < 10000)
+        {
+            return value.ToString();
+        }
+
+        // 55.0 万这种多余的小数点去掉，55 万 / 4.3 万.
+        var wan = value / 10000d;
+        return wan % 1 == 0 ? $"{(int)wan} 万" : $"{wan:0.#} 万";
+    }
 
     private static string ReadProp(JsonElement root, string parent, string name)
     {
@@ -623,6 +630,52 @@ public sealed partial class PlayerViewModel
         catch (Exception ex)
         {
             logger.LogWarning(ex, "清空直播着色器失败");
+        }
+    }
+    /// <summary>
+    /// 详情里没带粉丝数时，用关注关系接口补一次.
+    /// </summary>
+    /// <param name="uid">主播 uid.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>任务.</returns>
+    private async Task FillFansCountAsync(string? uid, ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(uid))
+        {
+            return;
+        }
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.bilibili.com/x/relation/stat?vmid={uid}");
+            request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            request.Headers.TryAddWithoutValidation("Referer", "https://live.bilibili.com");
+            var cookie = GetCookieString();
+            if (!string.IsNullOrWhiteSpace(cookie))
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            }
+
+            using var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            using var document = await System.Text.Json.JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+            if (document.RootElement.TryGetProperty("data", out var data)
+                && data.TryGetProperty("follower", out var follower)
+                && follower.TryGetInt64(out var value)
+                && value > 0)
+            {
+                LiveFansText = value.ToString("N0");
+                logger.LogInformation("直播粉丝数已补充：{Fans}", LiveFansText);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "补充直播粉丝数失败");
         }
     }
 }

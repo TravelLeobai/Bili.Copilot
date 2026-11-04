@@ -506,7 +506,10 @@
                                 </DropDownButton.Flyout>
                             </DropDownButton>
                             <player:CdnIndicatorControl Margin="8,0,0,0" VerticalAlignment="Center" />
-                            <player:AdSkipIndicatorControl Margin="8,0,0,0" VerticalAlignment="Center" />
+                            <player:AdSkipIndicatorControl
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind local:PlayerOverlay.GetAdSkipVisibility(ViewModel.IsLive), Mode=OneWay}" />
                             <Button
                                 Width="32"
                                 Height="32"

@@ -347,4 +347,11 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     /// </summary>
     public static Visibility GetLiveDanmakuVisibility(bool isLive, bool isVisible)
         => isLive && isVisible ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>
+    /// 空降 / AI 跳过按钮可见性：直播不需要跳广告.
+    /// </summary>
+    /// <param name="isLive">是否直播.</param>
+    /// <returns>可见性.</returns>
+    public static Visibility GetAdSkipVisibility(bool isLive)
+        => isLive ? Visibility.Collapsed : Visibility.Visible;
 }
