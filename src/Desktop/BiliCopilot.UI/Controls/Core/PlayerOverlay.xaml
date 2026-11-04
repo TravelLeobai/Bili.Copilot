@@ -76,6 +76,11 @@
     <Grid x:Name="RootGrid" RightTapped="OnRootGridRightTapped">
         <Grid.ContextFlyout>
             <MenuFlyout x:Name="CdnContextMenu" Opening="OnCdnContextMenuOpening">
+                <MenuFlyoutItem
+                    MinWidth="200"
+                    Text="重载"
+                    Click="OnReloadPlayerClick" />
+                <MenuFlyoutSeparator />
                 <ToggleMenuFlyoutItem
                     x:Name="CdnToggleItem"
                     MinWidth="200"

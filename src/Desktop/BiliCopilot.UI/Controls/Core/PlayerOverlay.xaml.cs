@@ -362,6 +362,19 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     private void OnCdnContextMenuOpening(object sender, object e)
         => RefreshCdnMenuState();
 
+    /// <summary>
+    /// 右键菜单里的「重载」：用当前快照重新初始化播放.
+    /// </summary>
+    private async void OnReloadPlayerClick(object sender, object e)
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        await ViewModel.ReloadAsync();
+    }
+
     private void RefreshCdnMenuState()
     {
         var enabled = Services.CdnAccelerator.IsEnabled;
