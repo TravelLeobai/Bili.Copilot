@@ -422,7 +422,8 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             () =>
             {
                 var button = new Button { Content = "发送", Padding = new Thickness(12, 4, 12, 4), Height = 32 };
-                button.Click += (_, _) => vm.SendLiveDanmakuCommand.Execute(default);
+                // 点按钮时输入框还没回写 ViewModel，这里直接从框里取文本，跟回车走同一条路.
+                button.Click += (_, _) => SendLiveInput(vm);
                 return button;
             },
             _ => { })
@@ -481,6 +482,25 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
         var avatar = AvatarOrFallback(item.Avatar, item.UserName, 24, 11);
 
+        // 表情弹幕：正文位置直接画表情图，文字留作提示.
+        Element bodyElement = item.HasEmote && NormalizeEmoteUrl(item.EmoteUrl) is { } emoteUri
+            ? new XamlHostElement(
+                () => new Image
+                {
+                    Width = 64,
+                    Height = 64,
+                    Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
+                    Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(emoteUri)),
+                },
+                _ => { })
+                .Margin(8, 2, 0, 0)
+                .Grid(row: 1, column: 1)
+            : TextBlock(body)
+                .FontSize(12)
+                .TextWrapping(TextWrapping.Wrap)
+                .Margin(8, 2, 0, 0)
+                .Grid(row: 1, column: 1);
+
         var content = Grid(
             new[] { GridSize.Auto, GridSize.Star() },
             new[] { GridSize.Auto, GridSize.Auto },
@@ -488,11 +508,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 .VAlign(VerticalAlignment.Top)
                 .Grid(row: 0, rowSpan: 2, column: 0),
             header.Grid(row: 0, column: 1).Margin(8, 0, 0, 0),
-            TextBlock(body)
-                .FontSize(12)
-                .TextWrapping(TextWrapping.Wrap)
-                .Margin(8, 2, 0, 0)
-                .Grid(row: 1, column: 1));
+            bodyElement);
 
         return Border(content)
             .Background(ResolveBrush("CardBackgroundFillColorDefaultBrush"))
@@ -699,6 +715,55 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         try
         {
             var packages = new List<(string Name, List<(string Token, string Url)> Items)>();
+
+            // 0) 直播间表情（带 emoticon_unique）：点一下直接发出去，不再只是塞文本.
+            if (vm.LiveEmotes.Count > 0)
+            {
+                root.Children.Remove(loading);
+                var emoteWrap = new StackPanel { Spacing = 4 };
+                var items = vm.LiveEmotes.ToList();
+                for (var i = 0; i < items.Count; i += 8)
+                {
+                    var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+                    foreach (var emote in items.Skip(i).Take(8))
+                    {
+                        var safeUrl = NormalizeEmoteUrl(emote.Url);
+                        if (safeUrl is null)
+                        {
+                            continue;
+                        }
+
+                        var emoteButton = new Button
+                        {
+                            Width = 40,
+                            Height = 40,
+                            Padding = new Thickness(0),
+                            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                            BorderThickness = new Thickness(0),
+                            Content = new Image
+                            {
+                                Width = 28,
+                                Height = 28,
+                                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(safeUrl)),
+                            },
+                        };
+                        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(
+                            emoteButton,
+                            emote.IsLocked ? $"{emote.Text}（未解锁）" : emote.Text);
+                        emoteButton.Click += (_, _) =>
+                        {
+                            vm.SendLiveEmoteCommand.Execute(emote);
+                            flyout.Hide();
+                        };
+                        row.Children.Add(emoteButton);
+                    }
+
+                    emoteWrap.Children.Add(row);
+                }
+
+                root.Children.Add(emoteWrap);
+                return;
+            }
 
             // 1) 直播间专属 / UP 主大表情.
             var roomEmotes = await BiliCopilot.UI.Services.LiveEmoteService.GetRoomEmotesAsync(

@@ -29,6 +29,7 @@ public sealed partial class LiveInteractionViewModel : ObservableObject
         GuardLevel = item.GuardLevel;
         Avatar = item.Avatar;
         BackgroundColor = item.BackgroundColor;
+        EmoteUrl = item.EmoteUrl;
         Time = item.Time;
     }
 
@@ -91,6 +92,16 @@ public sealed partial class LiveInteractionViewModel : ObservableObject
     /// 醒目留言背景色.
     /// </summary>
     public string BackgroundColor { get; }
+
+    /// <summary>
+    /// 表情弹幕的图片地址（普通弹幕为空）.
+    /// </summary>
+    public string EmoteUrl { get; } = string.Empty;
+
+    /// <summary>
+    /// 是否表情弹幕.
+    /// </summary>
+    public bool HasEmote => !string.IsNullOrEmpty(EmoteUrl);
 
     /// <summary>
     /// 收到时间.

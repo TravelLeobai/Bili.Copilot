@@ -61,6 +61,11 @@ public sealed class LiveInteractionItem
 
     public string BackgroundColor { get; set; } = string.Empty;
 
+    /// <summary>
+    /// 表情弹幕的图片地址（普通弹幕为空）.
+    /// </summary>
+    public string EmoteUrl { get; set; } = string.Empty;
+
     public DateTimeOffset Time { get; set; } = DateTimeOffset.Now;
 
     /// <summary>
@@ -139,6 +144,35 @@ public static class LiveMessageParser
         {
             item.MedalLevel = info[3][0].ValueKind == JsonValueKind.Number ? info[3][0].GetInt32() : 0;
             item.MedalName = info[3][1].ValueKind == JsonValueKind.String ? info[3][1].GetString() ?? string.Empty : string.Empty;
+        }
+
+        // 表情弹幕：实测表情对象挂在 info[0][12]（个别版本在 13），
+        // 里面有 emoticon_unique 和 url，列表按这个 url 画图.
+        if (info[0].ValueKind == JsonValueKind.Array)
+        {
+            foreach (var index in new[] { 12, 13, 11, 14 })
+            {
+                if (info[0].GetArrayLength() <= index || info[0][index].ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var emoteNode = info[0][index];
+                var unique = ReadString(emoteNode, "emoticon_unique");
+                if (string.IsNullOrEmpty(unique))
+                {
+                    continue;
+                }
+
+                var emoteUrl = ReadString(emoteNode, "url");
+                if (string.IsNullOrEmpty(emoteUrl))
+                {
+                    continue;
+                }
+
+                item.EmoteUrl = emoteUrl.StartsWith("//", StringComparison.Ordinal) ? "https:" + emoteUrl : emoteUrl;
+                break;
+            }
         }
 
         // info[4] = 用户等级 [等级, ...]

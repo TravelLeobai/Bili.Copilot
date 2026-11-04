@@ -55,6 +55,17 @@ public sealed partial class PlayerViewModel
     public ObservableCollection<LiveGiftBagItem> LiveGiftBag { get; } = new();
 
     /// <summary>
+    /// 直播间可用表情.
+    /// </summary>
+    public ObservableCollection<LiveEmoteItem> LiveEmotes { get; } = new();
+
+    /// <summary>
+    /// 表情面板是否展开.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLiveEmotePanelVisible;
+
+    /// <summary>
     /// 当前是否在播放直播.
     /// </summary>
     [ObservableProperty]
@@ -246,6 +257,7 @@ public sealed partial class PlayerViewModel
 
         await LoadLiveRoomInfoAsync(token);
         await LoadLiveListsAsync(token);
+        await LoadLiveEmotesAsync(token);
         await ConnectLiveDanmakuAsync(token);
         StartUptimeTimer();
     }
@@ -364,6 +376,13 @@ public sealed partial class PlayerViewModel
     private void OnLiveMessageReceived(object? sender, (string Command, JsonElement Data) e)
     {
         var cmd = e.Command.Split(':')[0];
+
+        // 表情弹幕单独留样本：普通弹幕的样本只记一次，看不出表情字段长什么样.
+        if (cmd == "DANMU_MSG" && e.Data.GetRawText().Contains("\"emoticon_unique\":\"", StringComparison.Ordinal) && !e.Data.GetRawText().Contains("\"emoticon_unique\":\"\"", StringComparison.Ordinal))
+        {
+            var emoteRaw = e.Data.GetRawText();
+            logger.LogInformation("表情弹幕样本：{Raw}", emoteRaw.Length > 1200 ? emoteRaw[..1200] : emoteRaw);
+        }
 
         if (_loggedRaw.Add(cmd))
         {
@@ -497,10 +516,20 @@ public sealed partial class PlayerViewModel
 
         try
         {
-            // 先用 REST：服务端会回 code，能判断到底发没发出去；WS 发完没有回执.
             var cookie = GetCookieString();
-            var csrf = ExtractCookie(cookie, "bili_jct");
-            var sent = await LiveRoomApi.SendDanmakuAsync(LiveRoomId, text, cookie, csrf, logger);
+            var uid = GetMyUid();
+
+            // 顺序照 biliuwp-lite：先走 App 接口 /api/sendmsg（对表情和特殊字符更宽容），
+            // 失败再退网页端 /msg/send，最后才用弹幕连接发（没有回执，只当兜底）.
+            var result = await LiveRoomSendApi.SendTextAsync(LiveRoomId, text, uid, cookie, logger);
+            var sent = result.Ok;
+            if (!sent)
+            {
+                logger.LogInformation("App 接口发送失败（code={Code} {Message}），改用网页端接口", result.Code, result.Message);
+                var csrf = ExtractCookie(cookie, "bili_jct");
+                sent = await LiveRoomApi.SendDanmakuAsync(LiveRoomId, text, cookie, csrf, logger);
+            }
+
             if (!sent && _liveClient is not null)
             {
                 logger.LogInformation("REST 发送失败，改用弹幕连接发送");
@@ -517,6 +546,72 @@ public sealed partial class PlayerViewModel
             logger.LogWarning(ex, "发送直播弹幕失败.");
         }
     }
+
+    private async Task LoadLiveEmotesAsync(CancellationToken token)
+    {
+        try
+        {
+            var emotes = await LiveRoomSendApi.GetEmoticonsAsync(LiveRoomId, GetCookieString(), logger);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            queue.TryEnqueue(() =>
+            {
+                LiveEmotes.Clear();
+                foreach (var emote in emotes)
+                {
+                    LiveEmotes.Add(emote);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "加载直播间表情失败");
+        }
+    }
+
+    /// <summary>
+    /// 发送表情弹幕.
+    /// </summary>
+    /// <param name="emote">表情.</param>
+    [RelayCommand]
+    private async Task SendLiveEmoteAsync(LiveEmoteItem? emote)
+    {
+        if (emote is null)
+        {
+            return;
+        }
+
+        if (emote.IsLocked)
+        {
+            LiveStatusText = "这个表情还没解锁";
+            return;
+        }
+
+        try
+        {
+            var result = await LiveRoomSendApi.SendEmoteAsync(LiveRoomId, emote, GetMyUid(), GetCookieString(), logger);
+            LiveStatusText = result.Ok ? "表情已发送" : $"表情发送失败（{result.Code}）";
+            logger.LogInformation("直播表情发送：{Unique} 结果={Ok} code={Code}", emote.Unique, result.Ok, result.Code);
+            if (result.Ok)
+            {
+                queue.TryEnqueue(() => IsLiveEmotePanelVisible = false);
+            }
+        }
+        catch (Exception ex)
+        {
+            LiveStatusText = "表情发送失败";
+            logger.LogWarning(ex, "发送直播表情失败.");
+        }
+    }
+
+    /// <summary>
+    /// 展开/收起表情面板.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleLiveEmotePanel() => IsLiveEmotePanelVisible = !IsLiveEmotePanelVisible;
 
     [RelayCommand]
     private void SwitchLiveDanmaku() => IsLiveDanmakuVisible = !IsLiveDanmakuVisible;
