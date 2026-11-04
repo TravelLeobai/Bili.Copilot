@@ -167,9 +167,6 @@ public sealed partial class SettingsPageViewModel
     private bool _cdnStallSwitch;
 
     [ObservableProperty]
-    private bool _cdnMultiThreadEnabled;
-
-    [ObservableProperty]
     private int _cdnReplaceModeIndex;
 
     [ObservableProperty]

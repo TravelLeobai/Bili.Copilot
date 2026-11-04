@@ -163,34 +163,6 @@ internal static class CdnAccelerator
     }
 
     /// <summary>
-    /// 多线程分块加速：开启时把播放地址换成走本机代理.
-    /// </summary>
-    /// <param name="url">原始播放地址.</param>
-    /// <param name="userAgent">请求用的 UA.</param>
-    /// <returns>可直接播放的地址.</returns>
-    public static string SpeedUp(string url, string userAgent)
-    {
-        if (string.IsNullOrWhiteSpace(url)
-            || !SettingsToolkit.ReadLocalSetting(SettingNames.CdnMultiThreadEnabled, false))
-        {
-            return url;
-        }
-
-        var proxied = CdnStreamProxy.Wrap(url, userAgent);
-        if (proxied == url)
-        {
-            return url;
-        }
-
-        var hosts = GetRankedHosts();
-        var preview = hosts.Count > 0
-            ? string.Join("/", hosts.Take(3))
-            : "默认节点";
-        CdnStatusBus.Report($"多线程加速已接管：3 路并行下载，节点 {preview}");
-        return proxied;
-    }
-
-    /// <summary>
     /// 按当前设置改写播放链接.
     /// </summary>
     /// <param name="url">原始播放地址.</param>

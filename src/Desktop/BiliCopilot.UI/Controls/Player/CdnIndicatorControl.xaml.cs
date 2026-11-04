@@ -64,8 +64,6 @@ public sealed partial class CdnIndicatorControl : UserControl
         var host = CdnAccelerator.ActiveHostDisplay;
 
         ToggleItem.IsChecked = enabled;
-        MultiThreadItem.IsChecked = SettingsToolkit.ReadLocalSetting(SettingNames.CdnMultiThreadEnabled, false);
-        MultiThreadItem.IsEnabled = enabled;
         SwitchItem.IsEnabled = enabled && CdnAccelerator.Mode != CdnReplaceMode.None;
         StateIcon.Symbol = FluentIcons.Common.Symbol.Globe;
         StateIcon.Opacity = enabled ? 1 : 0.4;
@@ -82,19 +80,6 @@ public sealed partial class CdnIndicatorControl : UserControl
     private void OnToggleClick(object sender, RoutedEventArgs e)
     {
         CdnAccelerator.SetEnabled(!CdnAccelerator.IsEnabled);
-        Refresh();
-    }
-
-    private void OnMultiThreadClick(object sender, RoutedEventArgs e)
-    {
-        var value = !SettingsToolkit.ReadLocalSetting(SettingNames.CdnMultiThreadEnabled, false);
-        SettingsToolkit.WriteLocalSetting(SettingNames.CdnMultiThreadEnabled, value);
-        if (value)
-        {
-            _ = CdnStreamProxy.EnsureStarted();
-        }
-
-        CdnStatusBus.Report(value ? "多线程分块加速已开启，下次进入视频生效" : "多线程分块加速已关闭");
         Refresh();
     }
 
