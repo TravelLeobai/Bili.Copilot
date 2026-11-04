@@ -6,6 +6,8 @@ using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.View;
+using Richasy.WinUIKernel.Share.Base;
+using Richasy.WinUIKernel.Share.ViewModels;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hooks;
@@ -48,6 +50,8 @@ public sealed class MainShell : Component
     private const string FavoritesTag = "__favorites__";
     private const string ViewLaterTag = "__view_later__";
     private const string HistoryTag = "__history__";
+
+    private readonly Dictionary<string, AppNavigationViewItem> _sideNavControls = new();
 
     private Action? _togglePaneAction;
     private Action? _openPaneAction;
@@ -104,22 +108,23 @@ public sealed class MainShell : Component
         var account = UseObservableTree(_accountViewModel);
         _ = viewModel.NavItemsVersion;
 
-        var menu = viewModel.MenuItems
+        var sideMenuItems = viewModel.MenuItems
             .Where(item => item.IsVisible)
-            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
-            .ToList();
+            .Select(item => BuildSideNavItem(item, isPaneOpen))
+            .ToArray();
 
-        var menuItems = menu.ToArray();
-        var footerItems = new List<NavigationViewItemData>
+        var sideFooterItems = new List<Element>
         {
-            new("我的收藏", "Favorite", FavoritesTag),
-            new("稍后再看", "Clock", ViewLaterTag),
-            new("历史记录", "Calendar", HistoryTag),
+            BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, FavoritesTag, viewModel.IsFavoritesPage, isPaneOpen),
+            BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, ViewLaterTag, viewModel.IsViewLaterPage, isPaneOpen),
+            BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, HistoryTag, viewModel.IsHistoryPage, isPaneOpen),
         };
 
-        footerItems.AddRange(viewModel.FooterItems
+        sideFooterItems.AddRange(viewModel.FooterItems
             .Where(item => item.IsVisible && !item.PageKey.Contains("SettingsPage"))
-            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey)));
+            .Select(item => BuildSideNavItem(item, isPaneOpen)));
+
+        Element sideNav = VStack(2, sideMenuItems).Margin(0, 4, 0, 0);
 
         Element accountRow = HStack(
             9.7,
@@ -142,6 +147,8 @@ public sealed class MainShell : Component
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Center);
 
+        Element paneFooter = VStack(2, [.. sideFooterItems, accountPanel]);
+
         // 侧栏顶部：展开时是完整搜索框，收起时只剩一个搜索图标.
         Element paneHeader = isPaneOpen
             ? new XamlHostElement(() => _searchBox, _ => { })
@@ -150,10 +157,11 @@ public sealed class MainShell : Component
                 .Margin(12, 6, 8, 8)
             : (Element)TextBlock(string.Empty);
 
-        var navigation = (NavigationView(menuItems) with
+        // 导航项改成自绘（AppNavigationViewItem + 内核模板），才能拿到双图标交叉淡入.
+        var navigation = (NavigationView([]) with
         {
             Content = new XamlHostElement(() => _contentHost, _ => { }),
-            FooterMenuItems = footerItems.ToArray(),
+            FooterMenuItems = [],
             IsBackEnabled = viewModel.IsOverlayOpen,
             OnBackRequested = () => viewModel.Back(),
             OnItemInvoked = tag => NavigateByTag(tag),
@@ -162,10 +170,10 @@ public sealed class MainShell : Component
             IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
             PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
             PaneHeader = paneHeader,
+            PaneCustomContent = sideNav,
         })
             // 受控折叠：值给当前状态，回调把 NavigationView 自己触发的变化写回状态.
-            .IsPaneOpen(isPaneOpen, value => setIsPaneOpen(value))
-            .PaneFooter(accountPanel)
+            .PaneFooter(paneFooter)
             .Background("Transparent")
             .Grid(row: 1);
 
@@ -221,6 +229,77 @@ public sealed class MainShell : Component
             titleBar.Grid(row: 0),
             navigation,
             railSearch);
+    }
+
+    /// <summary>
+    /// 自绘导航项：复用内核 AppNavigationViewItem + MainNavigationViewItemStyle，
+    /// 模板里是 Regular/Filled 两个 SymbolIcon，靠隐式动画交叉淡入.
+    /// </summary>
+    /// <summary>
+    /// 固定项的导航（收藏/稍后再看/历史记录），选中态由页面状态决定.
+    /// </summary>
+    private Element BuildStaticNavItem(
+        string title,
+        FluentIcons.Common.Symbol symbol,
+        string tag,
+        bool isSelected,
+        bool isPaneOpen)
+    {
+        if (!_sideNavControls.TryGetValue(tag, out var control))
+        {
+            control = new AppNavigationViewItem
+            {
+                Style = (Style)Application.Current.Resources["MainNavigationViewItemStyle"],
+                SelectsOnInvoked = false,
+                Tag = tag,
+            };
+
+            control.Tapped += (_, _) => NavigateByTag(tag);
+            _sideNavControls[tag] = control;
+        }
+
+        var navigateItem = control;
+        return new XamlHostElement(
+            () => navigateItem,
+            _ =>
+            {
+                navigateItem.Content = isPaneOpen ? title : string.Empty;
+                navigateItem.Symbol = symbol;
+                navigateItem.IsSelected = isSelected;
+                navigateItem.Visibility = Visibility.Visible;
+                navigateItem.Width = isPaneOpen ? double.NaN : 44;
+            })
+            .WithKey("sidenav-" + tag);
+    }
+
+    private Element BuildSideNavItem(AppNavigationItemViewModel item, bool isPaneOpen)
+    {
+        if (!_sideNavControls.TryGetValue(item.PageKey, out var control))
+        {
+            control = new AppNavigationViewItem
+            {
+                Style = (Style)Application.Current.Resources["MainNavigationViewItemStyle"],
+                SelectsOnInvoked = false,
+                Tag = item.PageKey,
+            };
+
+            control.Tapped += (_, _) => NavigateByTag(item.PageKey);
+            _sideNavControls[item.PageKey] = control;
+        }
+
+        var navigateItem = control;
+        return new XamlHostElement(
+            () => navigateItem,
+            _ =>
+            {
+                navigateItem.Content = isPaneOpen ? item.Title : string.Empty;
+                navigateItem.Symbol = item.Symbol;
+                navigateItem.ShowUnread = item.ShowUnread;
+                navigateItem.IsSelected = item.IsSelected;
+                navigateItem.Visibility = item.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+                navigateItem.Width = isPaneOpen ? double.NaN : 44;
+            })
+            .WithKey("sidenav-" + item.PageKey);
     }
 
     private static Button CreateFlatIconButton(string glyph, string automationName)

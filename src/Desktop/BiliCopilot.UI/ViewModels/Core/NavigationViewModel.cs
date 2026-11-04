@@ -88,11 +88,13 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedFeaturePage, pageType.FullName);
         _navFrame.NavigateTo(pageType, parameter);
 
-        var item = MenuItems.Find(p => p.PageKey == pageType.FullName);
-        if (item is not null && _navigationView is not null && _navigationView.SelectedItem != item)
+        // 自绘导航栏：选中态直接写回条目，并让外壳重渲染，触发图标交叉淡入.
+        foreach (var entry in MenuItems)
         {
-            _navigationView.SelectedItem = item;
+            entry.IsSelected = string.Equals(entry.PageKey, pageType.FullName, StringComparison.Ordinal);
         }
+
+        NavItemsVersion++;
     }
 
     public void TryClearOverlayPages()
