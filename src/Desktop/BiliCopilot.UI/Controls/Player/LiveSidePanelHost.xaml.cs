@@ -52,10 +52,19 @@ public sealed partial class LiveSidePanelHost : UserControl
         _isCollapsed = SettingsToolkit.ReadLocalSetting(SettingNames.LivePanelCollapsed, true);
         ApplyCollapsedState();
         MountPanel();
+        SizeChanged += OnHostSizeChanged;
+    }
+
+    private void OnHostSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // 窗口尺寸变化后 mpv 会被重置成铺满，这里按当前折叠状态再让一次.
+        ApplySurfaceInset();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        SizeChanged -= OnHostSizeChanged;
+        Services.MpvSurfaceService.ApplyRightInset(GetPlayerWindowHandle(), 0);
         _reactorHost?.Dispose();
         _reactorHost = null;
         _mountedViewModel = null;
@@ -95,5 +104,23 @@ public sealed partial class LiveSidePanelHost : UserControl
         ExpandButton.Visibility = _isCollapsed ? Visibility.Visible : Visibility.Collapsed;
         // 收起后左侧只剩展开条，收起按钮要跟着藏起来.
         CollapseButton.Visibility = _isCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        ApplySurfaceInset();
     }
+    /// <summary>
+    /// 让 mpv 画面给右侧面板腾地方：展开时画面缩到左边，收起时恢复铺满.
+    /// </summary>
+    private void ApplySurfaceInset()
+    {
+        var handle = GetPlayerWindowHandle();
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var inset = _isCollapsed ? 0 : Services.MpvSurfaceService.LivePanelWidth;
+        Services.MpvSurfaceService.ApplyRightInset(handle, inset);
+    }
+
+    private IntPtr GetPlayerWindowHandle()
+        => ViewModel?.Window is null ? IntPtr.Zero : ViewModel.Window.Handle;
 }

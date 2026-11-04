@@ -326,77 +326,92 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildFooter(PlayerViewModel vm)
     {
-        // 底栏两个图标按钮统一 32x32；输入框占满剩余宽度.
-        const double ButtonSize = 32;
-        return HStack(
-            8,
-            new XamlHostElement(
-                () =>
-                {
-                    var button = new ToggleButton
-                    {
-                        Content = "弹",
-                        Width = ButtonSize,
-                        Height = ButtonSize,
-                        Padding = new Thickness(0),
-                        IsChecked = vm.IsLiveDanmakuVisible,
-                    };
-                    button.Click += (_, _) => vm.SwitchLiveDanmakuCommand.Execute(default);
-                    return button;
-                },
-                element => ((ToggleButton)element).IsChecked = vm.IsLiveDanmakuVisible).WithKey("live-danmaku-toggle"),
-            new XamlHostElement(
-                () =>
-                {
-                    var button = new Button
-                    {
-                        Width = ButtonSize,
-                        Height = ButtonSize,
-                        Padding = new Thickness(0),
-                        Content = new FluentIcons.WinUI.SymbolIcon
-                        {
-                            Symbol = FluentIcons.Common.Symbol.Gift,
-                            FontSize = 14,
-                        },
-                    };
-                    Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, "我的礼物");
-                    button.Click += (_, _) => ShowGiftFlyout(button);
-                    return button;
-                },
-                _ => { }).WithKey("live-gift"),
-            new XamlHostElement(
-                () =>
-                {
-                    var box = new TextBox
-                    {
-                        PlaceholderText = "发个弹幕…",
-                        Text = vm.LiveDanmakuInput ?? string.Empty,
-                        MinWidth = 0,
-                        HorizontalAlignment = HorizontalAlignment.Stretch,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    };
-                    box.TextChanged += (s, _) => vm.LiveDanmakuInput = ((TextBox)s).Text;
-                    return box;
-                },
-                element =>
-                {
-                    var box = (TextBox)element;
-                    if (box.Text != vm.LiveDanmakuInput)
-                    {
-                        box.Text = vm.LiveDanmakuInput ?? string.Empty;
-                    }
-                })
-                .HAlign(HorizontalAlignment.Stretch)
-                .WithKey("live-input"),
-            new XamlHostElement(
-                () =>
-                {
-                    var button = new Button { Content = "发送", Padding = new Thickness(12, 4, 12, 4), Height = ButtonSize };
-                    button.Click += (_, _) => vm.SendLiveDanmakuCommand.Execute(default);
-                    return button;
-                },
-                _ => { }).WithKey("live-send")).Padding(12, 8, 12, 12);
+        // 底栏用 Grid：[弹][礼][输入 *][发送]，输入框吃掉中间所有宽度，整体撑满面板.
+        return Grid(
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
+            new[] { GridSize.Auto },
+            BuildDanmakuToggle(vm).Grid(row: 0, column: 0).Margin(0, 0, 6, 0),
+            BuildGiftButton(vm).Grid(row: 0, column: 1).Margin(0, 0, 6, 0),
+            BuildInputBox(vm).Grid(row: 0, column: 2).Margin(0, 0, 6, 0),
+            BuildSendButton(vm).Grid(row: 0, column: 3))
+            .Padding(12, 8, 12, 12);
     }
+
+    private static Element BuildDanmakuToggle(PlayerViewModel vm)
+        => new XamlHostElement(
+            () =>
+            {
+                var button = new ToggleButton
+                {
+                    Content = "弹",
+                    Width = 32,
+                    Height = 32,
+                    Padding = new Thickness(0),
+                    IsChecked = vm.IsLiveDanmakuVisible,
+                };
+                button.Click += (_, _) => vm.SwitchLiveDanmakuCommand.Execute(default);
+                return button;
+            },
+            element => ((ToggleButton)element).IsChecked = vm.IsLiveDanmakuVisible)
+            .WithKey("live-danmaku-toggle");
+
+    private Element BuildGiftButton(PlayerViewModel vm)
+        => new XamlHostElement(
+            () =>
+            {
+                var button = new Button
+                {
+                    Width = 32,
+                    Height = 32,
+                    Padding = new Thickness(0),
+                    Content = new FluentIcons.WinUI.SymbolIcon
+                    {
+                        Symbol = FluentIcons.Common.Symbol.Gift,
+                        FontSize = 14,
+                    },
+                };
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, "我的礼物");
+                button.Click += (_, _) => ShowGiftFlyout(button);
+                return button;
+            },
+            _ => { })
+            .WithKey("live-gift");
+
+    private static Element BuildInputBox(PlayerViewModel vm)
+        => new XamlHostElement(
+            () =>
+            {
+                var box = new TextBox
+                {
+                    PlaceholderText = "发个弹幕…",
+                    Text = vm.LiveDanmakuInput ?? string.Empty,
+                    MinWidth = 0,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                box.TextChanged += (s, _) => vm.LiveDanmakuInput = ((TextBox)s).Text;
+                return box;
+            },
+            element =>
+            {
+                var box = (TextBox)element;
+                if (box.Text != vm.LiveDanmakuInput)
+                {
+                    box.Text = vm.LiveDanmakuInput ?? string.Empty;
+                }
+            })
+            .HAlign(HorizontalAlignment.Stretch)
+            .WithKey("live-input");
+
+    private static Element BuildSendButton(PlayerViewModel vm)
+        => new XamlHostElement(
+            () =>
+            {
+                var button = new Button { Content = "发送", Padding = new Thickness(12, 4, 12, 4), Height = 32 };
+                button.Click += (_, _) => vm.SendLiveDanmakuCommand.Execute(default);
+                return button;
+            },
+            _ => { })
+            .WithKey("live-send");
 
     /// <summary>
     /// 一条互动消息.
