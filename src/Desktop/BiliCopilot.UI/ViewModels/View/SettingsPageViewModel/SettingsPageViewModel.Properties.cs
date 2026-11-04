@@ -25,8 +25,6 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     private string _appThemeText;
 
-    [ObservableProperty]
-    private bool _isTopNavShown;
 
     [ObservableProperty]
     private bool _isAcrylicBackdropEnabled;

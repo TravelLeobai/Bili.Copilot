@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls;
 using BiliCopilot.UI.Forms;
@@ -33,8 +33,6 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     [ObservableProperty]
     private List<AppNavigationItemViewModel> _menuItems;
 
-    [ObservableProperty]
-    private bool _isTopNavBarShown;
 
     /// <summary>
     /// 导航项可见性版本号，变化时触发外壳重新渲染.
@@ -73,6 +71,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         {
             IsOverlayOpen = false;
             IsTemporaryOverlayClosed = true;
+            _overFrame.SetOpen(false);
             CheckSubPageStatus();
         }
 
@@ -106,6 +105,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         IsOverlayOpen = false;
         IsTemporaryOverlayClosed = false;
         _overFrame?.ClearBackStack();
+        _overFrame?.SetOpen(false);
     }
 
     /// <inheritdoc/>
@@ -125,6 +125,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         ActiveMainWindow();
         _overFrame.NavigateTo(pageType, parameter);
         IsOverlayOpen = true;
+        _overFrame.SetOpen(true);
         CheckSubPageStatus();
 
         var searchBox = this.Get<SearchBoxViewModel>();
@@ -200,6 +201,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
             {
                 IsOverlayOpen = false;
                 _navFrame?.Focus(FocusState.Programmatic);
+                _overFrame.SetOpen(false);
             }
         }
 
@@ -219,7 +221,6 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         _navFrame = navFrame;
         _overFrame = overFrame;
         _navigationView = view;
-        IsTopNavBarShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
 
         MenuItems = [.. GetMenuItems()];
 

@@ -44,7 +44,6 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CheckTheme();
         LogLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
         HideMainWindowOnPlay = SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true);
-        IsTopNavShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
         IsAcrylicBackdropEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.EnableAcrylicBackdrop, true);
         IsSponsorBlockEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.EnableSponsorBlock, true);
         MomentVideoLayoutPreset = Math.Clamp(SettingsToolkit.ReadLocalSetting(SettingNames.MomentVideoLayoutPreset, 0), 0, 4);
@@ -799,11 +798,6 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         this.Get<AppViewModel>().ApplyBackdrop(value);
     }
 
-    partial void OnIsTopNavShownChanged(bool value)
-    {
-        SettingsToolkit.WriteLocalSetting(SettingNames.IsTopNavBarShown, value);
-        this.Get<NavigationViewModel>().IsTopNavBarShown = value;
-    }
 
     partial void OnMomentVideoLayoutPresetChanged(int value)
     {

@@ -42,10 +42,12 @@ public sealed class MainShell : Component
 
     private readonly Button _railSearchButton = CreateFlatIconButton("\uE721", "搜索");
     private readonly Button _backButton = CreateFlatIconButton("\uE72B", "返回");
-    private readonly Button _favoriteButton = CreateFlatIconButton("\uE734", "我的收藏");
-    private readonly Button _viewLaterButton = CreateFlatIconButton("\uE823", "稍后再看");
-    private readonly Button _historyButton = CreateFlatIconButton("\uE81C", "历史记录");
     private const string SearchRailTag = "__rail_search__";
+
+    // 收藏 / 稍后再看 / 历史记录放在侧栏底部，用和普通导航项一样的条目.
+    private const string FavoritesTag = "__favorites__";
+    private const string ViewLaterTag = "__view_later__";
+    private const string HistoryTag = "__history__";
 
     private Action? _togglePaneAction;
     private Action? _openPaneAction;
@@ -70,9 +72,6 @@ public sealed class MainShell : Component
         _compactSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _railSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _backButton.Click += (_, _) => _viewModel.Back();
-        _favoriteButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(FavoritesPage), default);
-        _viewLaterButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
-        _historyButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(HistoryPage), default);
     }
 
     /// <summary>
@@ -111,10 +110,16 @@ public sealed class MainShell : Component
             .ToList();
 
         var menuItems = menu.ToArray();
-        var footer = viewModel.FooterItems
+        var footerItems = new List<NavigationViewItemData>
+        {
+            new("我的收藏", "Favorite", FavoritesTag),
+            new("稍后再看", "Clock", ViewLaterTag),
+            new("历史记录", "Calendar", HistoryTag),
+        };
+
+        footerItems.AddRange(viewModel.FooterItems
             .Where(item => item.IsVisible && !item.PageKey.Contains("SettingsPage"))
-            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
-            .ToArray();
+            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey)));
 
         Element accountRow = HStack(
             9.7,
@@ -148,7 +153,7 @@ public sealed class MainShell : Component
         var navigation = (NavigationView(menuItems) with
         {
             Content = new XamlHostElement(() => _contentHost, _ => { }),
-            FooterMenuItems = footer,
+            FooterMenuItems = footerItems.ToArray(),
             IsBackEnabled = viewModel.IsOverlayOpen,
             OnBackRequested = () => viewModel.Back(),
             OnItemInvoked = tag => NavigateByTag(tag),
@@ -183,24 +188,12 @@ public sealed class MainShell : Component
             .HAlign(HorizontalAlignment.Left)
             .Grid(row: 0, column: 0);
 
-        var navButtons = viewModel.IsTopNavBarShown
-            ? HStack(
-                6,
-                new XamlHostElement(() => _favoriteButton, _ => { }).Size(40, 40),
-                new XamlHostElement(() => _viewLaterButton, _ => { }).Size(40, 40),
-                new XamlHostElement(() => _historyButton, _ => { }).Size(40, 40))
-                .Margin(8, 0, 0, 0)
-                .HAlign(HorizontalAlignment.Left)
-                .VAlign(VerticalAlignment.Center)
-            : (Element)TextBlock(string.Empty);
-
         var titleBar = Grid(
             columns: [GridSize.Auto, GridSize.Star()],
             rows: [GridSize.Star()],
             HStack(
                 4,
-                titleContent,
-                navButtons)
+                titleContent)
                 .VAlign(VerticalAlignment.Center)
                 .Grid(row: 0, column: 0),
             HStack(0, TextBlock(string.Empty))
@@ -274,6 +267,19 @@ public sealed class MainShell : Component
     private void NavigateByTag(string tag)
     {
         Serilog.Log.Information("导航项被点击：{Tag}", tag);
+
+        switch (tag)
+        {
+            case FavoritesTag:
+                _viewModel.NavigateToOver(typeof(FavoritesPage), default);
+                return;
+            case ViewLaterTag:
+                _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
+                return;
+            case HistoryTag:
+                _viewModel.NavigateToOver(typeof(HistoryPage), default);
+                return;
+        }
 
         if (tag == SearchRailTag)
         {

@@ -42,6 +42,12 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
             isDark ? Windows.UI.Color.FromArgb(255, 32, 32, 32) : Windows.UI.Color.FromArgb(255, 243, 243, 243));
     }
 
+    /// <summary>
+    /// æ˜¾éšæ•´å—æµ®å±‚ï¼šä¸»é¡µé¢åˆ‡å›æ¥æ—¶å¿…é¡»æ”¶èµ·ï¼Œå¦åˆ™æµ®å±‚å†…å®¹ä¼šç›–ä½ä¸»æ¡†æ¶.
+    /// </summary>
+    public void SetOpen(bool isOpen)
+        => Visibility = isOpen ? Visibility.Visible : Visibility.Collapsed;
+
     public List<object> GetBackStack()
         => [.. RootGrid.Children];
 
@@ -57,7 +63,7 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
             RootGrid.Children.RemoveAt(RootGrid.Children.Count - 1);
         }
 
-        // Èç¹û»¹ÓĞÔªËØ£¬Ôò½«×îºóÒ»¸öÔªËØÉèÖÃÎª¿É¼û
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôªï¿½Ø£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½Ôªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½É¼ï¿½
         if (RootGrid.Children.Count > 0)
         {
             foreach (var child in RootGrid.Children)
@@ -78,13 +84,13 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
 
         UIElement? targetElement = null;
 
-        // ²éÕÒÊÇ·ñÒÑ´æÔÚ¸ÃÀàĞÍµÄ¿Ø¼ş
+        // ï¿½ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½Ñ´ï¿½ï¿½Ú¸ï¿½ï¿½ï¿½ï¿½ÍµÄ¿Ø¼ï¿½
         foreach (var item in RootGrid.Children)
         {
             if (item.GetType() == pageType)
             {
                 targetElement = item;
-                // Èç¹ûÊµÏÖÁË IMainFramePage£¬Ôòµ÷ÓÃ SetParameter
+                // ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ IMainFramePageï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SetParameter
                 if (item is IParameterPage mainFramePage)
                 {
                     mainFramePage.SetParameter(parameter);
@@ -94,7 +100,7 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
 
         if (targetElement == null)
         {
-            // Î´ÕÒµ½£¬´´½¨ĞÂÊµÀı
+            // Î´ï¿½Òµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Êµï¿½ï¿½
             var instance = Activator.CreateInstance(pageType);
             if (instance is UIElement element)
             {
@@ -104,7 +110,7 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
                 }
 
                 targetElement = element;
-                // Èç¹ûÊµÏÖÁË IMainFramePage£¬Ôòµ÷ÓÃ SetParameter
+                // ï¿½ï¿½ï¿½Êµï¿½ï¿½ï¿½ï¿½ IMainFramePageï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ SetParameter
                 if (element is IParameterPage mainFramePage)
                 {
                     mainFramePage.SetParameter(parameter);
@@ -137,17 +143,17 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
             }
             else
             {
-                // ÀàĞÍ²»ÊÇ UIElement£¬Ö±½Ó·µ»Ø
+                // ï¿½ï¿½ï¿½Í²ï¿½ï¿½ï¿½ UIElementï¿½ï¿½Ö±ï¿½Ó·ï¿½ï¿½ï¿½
                 return;
             }
         }
         else if (RootGrid.Children.Count > 1)
         {
-            // ½« targetElement ÒÆ¶¯µ½×îºó
+            // ï¿½ï¿½ targetElement ï¿½Æ¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             RootGrid.Children.Move(Convert.ToUInt32(RootGrid.Children.IndexOf(targetElement)), Convert.ToUInt32(RootGrid.Children.Count - 1));
         }
 
-        // ÉèÖÃ¿É¼ûĞÔ
+        // ï¿½ï¿½ï¿½Ã¿É¼ï¿½ï¿½ï¿½
         foreach (var child in RootGrid.Children)
         {
             child.Visibility = child == targetElement ? Visibility.Visible : Visibility.Collapsed;
