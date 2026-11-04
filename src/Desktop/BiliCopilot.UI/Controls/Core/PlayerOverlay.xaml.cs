@@ -142,14 +142,16 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             return;
         }
 
-        FooterContainer.Margin = ViewModel.IsLive
+        // 只有直播面板展开（有让位宽度）时才往右顶；收起后要留出窗口按钮的位置，别压上去.
+        var shouldShift = ViewModel.IsLive && ViewModel.LivePanelInset > 1;
+        FooterContainer.Margin = shouldShift
             ? new Thickness(0, 0, -140, 0)
             : new Thickness(0);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ViewModel.IsLive))
+        if (e.PropertyName is nameof(ViewModel.IsLive) or nameof(ViewModel.LivePanelInset))
         {
             ApplyLiveHeaderAlignment();
         }
