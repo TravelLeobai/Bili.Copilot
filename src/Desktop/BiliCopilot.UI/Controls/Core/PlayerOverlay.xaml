@@ -104,7 +104,8 @@
                 Text="{ext:Locale Name=Loading}"
                 Visibility="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay}" />
         </Grid>
-        <Grid>
+        <!--  直播面板展开时整块覆盖层右侧让位，进度条/按钮都跟着缩  -->
+        <Grid Margin="{x:Bind ViewModel.LivePanelInsetThickness, Mode=OneWay}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="60" />
                 <RowDefinition Height="*" />
@@ -749,19 +750,17 @@
                         Duration="0:0:0.25" />
                 </animations:Implicit.HideAnimations>
             </Grid>
-            <player:LiveSidePanelHost
-                x:Name="LivePanelControl"
-                Grid.RowSpan="2"
-                HorizontalAlignment="Right"
-                ViewModel="{x:Bind ViewModel, Mode=OneWay}"
-                Visibility="{x:Bind ViewModel.IsLive, Mode=OneWay}" />
-
-
             <Grid
                 x:Name="TipContainer"
                 Grid.RowSpan="2"
                 Visibility="Collapsed" />
         </Grid>
+        <player:LiveSidePanelHost
+            x:Name="LivePanelControl"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Stretch"
+            ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+            Visibility="{x:Bind ViewModel.IsLive, Mode=OneWay}" />
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="DefaultState" />

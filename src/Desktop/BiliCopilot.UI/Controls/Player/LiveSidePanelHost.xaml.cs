@@ -123,6 +123,12 @@ public sealed partial class LiveSidePanelHost : UserControl
             ? 0
             : measured > 40 ? (int)Math.Ceiling(measured) : Services.MpvSurfaceService.LivePanelWidth;
         Services.MpvSurfaceService.ApplyRightInset(handle, inset);
+
+        // 让覆盖层（进度条、按钮、右上角控件）也跟着缩，避免被面板压住.
+        if (ViewModel is not null)
+        {
+            ViewModel.LivePanelInset = inset;
+        }
     }
 
     private IntPtr GetPlayerWindowHandle()

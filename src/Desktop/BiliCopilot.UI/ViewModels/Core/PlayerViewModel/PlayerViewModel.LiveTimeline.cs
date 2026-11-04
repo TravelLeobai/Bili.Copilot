@@ -127,4 +127,29 @@ public sealed partial class PlayerViewModel
 
     partial void OnIsPreviewProgressChangingChanged(bool value)
         => OnPropertyChanged(nameof(IsVodTimelineVisible));
+    /// <summary>
+    /// 直播面板展开时右侧让出的宽度（像素），0 表示不遮挡.
+    /// </summary>
+    public double LivePanelInset
+    {
+        get => _livePanelInset;
+        set
+        {
+            if (Math.Abs(_livePanelInset - value) < 0.5)
+            {
+                return;
+            }
+
+            _livePanelInset = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LivePanelInsetThickness));
+        }
+    }
+
+    /// <summary>
+    /// 给覆盖层用的让位边距.
+    /// </summary>
+    public Thickness LivePanelInsetThickness => new(0, 0, _livePanelInset, 0);
+
+    private double _livePanelInset;
 }
