@@ -6,6 +6,7 @@ using BiliCopilot.UI.Controls.Comment;
 using BiliCopilot.UI.Controls.Components;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.Toolkits;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.ViewModels.Items;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -13,8 +14,10 @@ using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Text;
+using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
 using Richasy.BiliKernel.Models;
+using Richasy.WinUIKernel.Share.Toolkits;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace BiliCopilot.UI.Reactor;
@@ -46,6 +49,14 @@ public sealed class CommentPanel : Component
         var viewModel = UseObservableTree(_viewModel);
         var (version, setVersion) = UseState(0);
         _ = version;
+
+        UseEffect(
+            () =>
+            {
+                // 表情包（含装扮表情）首次渲染时拉一次，拿到后重绘评论正文.
+                _ = LoadEmotesAsync(() => setVersion(++_version));
+            },
+            Array.Empty<object>());
 
         UseEffect(
             () =>
@@ -297,9 +308,7 @@ public sealed class CommentPanel : Component
                 .Margin(8, 0, 0, 0)
                 .Grid(row: 0, column: 1));
 
-        Element content = TextBlock(comment.Content?.Text ?? string.Empty)
-            .FontSize(13)
-            .TextWrapping(TextWrapping.Wrap);
+        Element content = BuildCommentContent(comment.Content?.Text ?? string.Empty);
 
         var likeButton = new XamlHostElement(
             () => new CommentLikeButton { VerticalAlignment = VerticalAlignment.Center },
@@ -375,5 +384,128 @@ public sealed class CommentPanel : Component
         }
 
         return new SolidColorBrush(fallback);
+    }
+    /// <summary>
+    /// 拉一次表情面板；拿到之后触发重绘，把 [名字] 换成图.
+    /// </summary>
+    private static async Task LoadEmotesAsync(Action refresh)
+    {
+        if (BiliEmoteService.IsReady)
+        {
+            return;
+        }
+
+        try
+        {
+            var cookie = GlobalDependencies.Kernel
+                .Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()
+                ?.GetCookieString() ?? string.Empty;
+            var logger = GlobalDependencies.Kernel.Get<Microsoft.Extensions.Logging.ILogger<CommentPanel>>();
+            await BiliEmoteService.EnsureLoadedAsync(cookie, logger).ConfigureAwait(false);
+            refresh();
+        }
+        catch (Exception ex)
+        {
+            // 表情拉不到不影响评论正文显示.
+            Microsoft.Extensions.Logging.LoggerExtensions.LogDebug(
+                GlobalDependencies.Kernel.Get<Microsoft.Extensions.Logging.ILogger<CommentPanel>>(),
+                ex,
+                "评论表情加载失败");
+        }
+    }
+
+    /// <summary>
+    /// 评论正文：有表情占位就渲染富文本，否则用普通 TextBlock.
+    /// </summary>
+    private static Element BuildCommentContent(string text)
+    {
+        if (string.IsNullOrEmpty(text) || !text.Contains('['))
+        {
+            return TextBlock(text).FontSize(13).TextWrapping(TextWrapping.Wrap);
+        }
+
+        return new XamlHostElement(
+            () => CreateRichText(text),
+            element =>
+            {
+                var block = (RichTextBlock)element;
+                block.Blocks.Clear();
+                block.Blocks.Add(BuildParagraph(text));
+            });
+    }
+
+    private static RichTextBlock CreateRichText(string text)
+    {
+        var block = new RichTextBlock
+        {
+            FontSize = 13,
+            TextWrapping = TextWrapping.Wrap,
+            IsTextSelectionEnabled = true,
+        };
+        block.Blocks.Add(BuildParagraph(text));
+        return block;
+    }
+
+    private static Paragraph BuildParagraph(string text)
+    {
+        var paragraph = new Paragraph();
+        foreach (var (chunk, emote) in SplitEmotes(text))
+        {
+            if (emote is null)
+            {
+                paragraph.Inlines.Add(new Run { Text = chunk });
+                continue;
+            }
+
+            var size = emote.Size >= 2 ? 32d : 22d;
+            var image = new Image
+            {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(emote.Url)),
+                Width = size,
+                Height = size,
+                Stretch = Stretch.Uniform,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            ToolTipService.SetToolTip(image, emote.Token);
+            paragraph.Inlines.Add(new InlineUIContainer { Child = image });
+        }
+
+        return paragraph;
+    }
+
+    /// <summary>
+    /// 把正文按 [名字] 切成文本段和表情段.
+    /// </summary>
+    private static IEnumerable<(string Chunk, BiliEmote? Emote)> SplitEmotes(string text)
+    {
+        var start = 0;
+        while (start < text.Length)
+        {
+            var open = text.IndexOf('[', start);
+            var close = open < 0 ? -1 : text.IndexOf(']', open + 1);
+            if (open < 0 || close < 0 || close - open > 32)
+            {
+                yield return (text[start..], null);
+                yield break;
+            }
+
+            if (open > start)
+            {
+                yield return (text[start..open], null);
+            }
+
+            var token = text[open..(close + 1)];
+            var emote = BiliEmoteService.TryGet(token);
+            if (emote is null)
+            {
+                yield return (token, null);
+            }
+            else
+            {
+                yield return (token, emote);
+            }
+
+            start = close + 1;
+        }
     }
 }
