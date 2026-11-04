@@ -25,6 +25,9 @@ namespace BiliCopilot.UI.Reactor;
 public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 {
     private ScrollView? _interactionScrollView;
+
+    // 粉丝团勋章用小号字 + Segoe UI Variable Small，和 B 站直播间观感一致.
+    private const string MedalFontFamily = "Segoe UI Variable Small";
     private readonly PlayerViewModel _viewModel;
     private int _version;
     private SelectorBar? _tabBar;
@@ -461,9 +464,22 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
         Element badge = item.HasMedal
             ? Border(
-                TextBlock(item.MedalName)
-                    .FontSize(9)
-                    .Opacity(0.75))
+                item.MedalLevel > 0
+                    ? HStack(
+                        3,
+                        TextBlock(item.MedalName)
+                            .FontSize(9)
+                            .Opacity(0.75)
+                            .FontFamily(MedalFontFamily),
+                        TextBlock(item.MedalLevel.ToString())
+                            .FontSize(9)
+                            .SemiBold()
+                            .Opacity(0.92)
+                            .FontFamily(MedalFontFamily))
+                    : TextBlock(item.MedalName)
+                        .FontSize(9)
+                        .Opacity(0.75)
+                        .FontFamily(MedalFontFamily))
                 .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
                 .CornerRadius(3)
                 .Padding(4, 0, 4, 0)
