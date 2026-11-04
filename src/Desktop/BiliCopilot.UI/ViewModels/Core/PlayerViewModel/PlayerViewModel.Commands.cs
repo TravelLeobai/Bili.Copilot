@@ -597,6 +597,37 @@ public sealed partial class PlayerViewModel
 
         try
         {
+            if (IsLive)
+            {
+                // 直播：弹一个输入框，直接把弹幕发进直播间（点播那条链路保持不动）.
+                var input = new TextBox
+                {
+                    PlaceholderText = "发送直播弹幕…",
+                    MaxLength = 30,
+                    AcceptsReturn = false,
+                };
+                var liveDialog = new ContentDialog
+                {
+                    Title = "发送弹幕",
+                    Content = input,
+                    PrimaryButtonText = "发送",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Primary,
+                    XamlRoot = Window!.XamlRoot,
+                };
+                if (await liveDialog.ShowAsync() == ContentDialogResult.Primary)
+                {
+                    var text = input.Text?.Trim();
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        LiveDanmakuInput = text;
+                        await SendLiveDanmakuAsync();
+                    }
+                }
+
+                return;
+            }
+
             await ApplyPauseAsync();
             var dialog = new DanmakuSendDialog(DanmakuSend, () => IsPopupVisible = true)
             {

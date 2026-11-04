@@ -298,10 +298,13 @@ public static class LiveRoomApi
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.live.bilibili.com/msg/send");
-            request.Headers.TryAddWithoutValidation("Referer", "https://live.bilibili.com/");
+            request.Headers.TryAddWithoutValidation("Referer", $"https://live.bilibili.com/{roomId}");
+            request.Headers.TryAddWithoutValidation("Origin", "https://live.bilibili.com");
+            request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
             request.Headers.TryAddWithoutValidation("Cookie", cookie);
             request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
+                ["bubble"] = "0",
                 ["color"] = "16777215",
                 ["fontsize"] = "25",
                 ["mode"] = "1",
@@ -313,7 +316,36 @@ public static class LiveRoomApi
             });
 
             using var response = await Client.SendAsync(request).ConfigureAwait(false);
-            return response.IsSuccessStatusCode;
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var code = -1;
+            var message = string.Empty;
+            try
+            {
+                using var document = JsonDocument.Parse(body);
+                if (document.RootElement.TryGetProperty("code", out var codeNode))
+                {
+                    code = codeNode.GetInt32();
+                }
+
+                if (document.RootElement.TryGetProperty("message", out var msgNode))
+                {
+                    message = msgNode.GetString() ?? string.Empty;
+                }
+            }
+            catch (JsonException)
+            {
+                logger?.LogWarning("直播弹幕返回不是 JSON：{Body}", body.Length > 200 ? body[..200] : body);
+            }
+
+            logger?.LogInformation("直播弹幕发送返回：code={Code} message={Message}", code, message);
+            if (code == 0)
+            {
+                return true;
+            }
+
+            // 10030 内容被拒、10031 频率过快、1003212 未实名，都是服务端明确拒绝.
+            logger?.LogWarning("直播弹幕被拒：code={Code} message={Message}", code, message);
+            return false;
         }
         catch (Exception ex)
         {
@@ -322,7 +354,7 @@ public static class LiveRoomApi
         }
     }
 
-/// <summary>
+    /// <summary>
     /// 兜底取主播 UID（房间接口可能拿不到时用）.
     /// </summary>
     public static async Task<long> GetAnchorUidAsync(string roomId, string cookie, ILogger? logger = null)

@@ -497,12 +497,14 @@ public sealed partial class PlayerViewModel
 
         try
         {
-            var sent = _liveClient is not null && await _liveClient.SendDanmakuAsync(LiveRoomId, text);
-            if (!sent)
+            // 先用 REST：服务端会回 code，能判断到底发没发出去；WS 发完没有回执.
+            var cookie = GetCookieString();
+            var csrf = ExtractCookie(cookie, "bili_jct");
+            var sent = await LiveRoomApi.SendDanmakuAsync(LiveRoomId, text, cookie, csrf, logger);
+            if (!sent && _liveClient is not null)
             {
-                var cookie = GetCookieString();
-                var csrf = ExtractCookie(cookie, "bili_jct");
-                sent = await LiveRoomApi.SendDanmakuAsync(LiveRoomId, text, cookie, csrf, logger);
+                logger.LogInformation("REST 发送失败，改用弹幕连接发送");
+                sent = await _liveClient.SendDanmakuAsync(LiveRoomId, text);
             }
 
             LiveDanmakuInput = sent ? string.Empty : LiveDanmakuInput;

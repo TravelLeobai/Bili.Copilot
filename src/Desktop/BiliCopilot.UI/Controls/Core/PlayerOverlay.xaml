@@ -139,17 +139,6 @@
                             Text="跳过广告片段" />
                     </StackPanel>
                 </Button>
-                <!--  控制栏隐藏时也能点的「回到最新」：直播落后就一直在，不跟着控制栏一起消失  -->
-                <Button
-                    x:Name="CatchUpFloatingButton"
-                    Margin="0,0,20,96"
-                    Padding="12,6"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Bottom"
-                    Command="{x:Bind ViewModel.CatchUpToLiveCommand, Mode=OneWay}"
-                    Content="回到最新"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Visibility="{x:Bind ViewModel.IsCatchUpButtonVisible, Mode=OneWay}" />
                 <local:OverlayTransportControls
                     x:Name="TransportControls"
                     HorizontalAlignment="Stretch"
