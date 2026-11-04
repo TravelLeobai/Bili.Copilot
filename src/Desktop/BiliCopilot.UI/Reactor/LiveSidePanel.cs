@@ -24,6 +24,7 @@ namespace BiliCopilot.UI.Reactor;
 /// </summary>
 public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 {
+    private ScrollView? _interactionScrollView;
     private readonly PlayerViewModel _viewModel;
     private int _version;
 
@@ -49,7 +50,16 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             () =>
             {
                 void OnProperty(object? sender, PropertyChangedEventArgs e) => setVersion(++_version);
-                void OnCollection(object? sender, NotifyCollectionChangedEventArgs e) => setVersion(++_version);
+                void OnCollection(object? sender, NotifyCollectionChangedEventArgs e)
+                {
+                    // 新弹幕进来后滚到底，老弹幕自然往上顶.
+                    if (ReferenceEquals(sender, vm.LiveInteractions))
+                    {
+                        ScrollToLatest();
+                    }
+
+                    setVersion(++_version);
+                }
                 vm.PropertyChanged += OnProperty;
                 vm.LiveInteractions.CollectionChanged += OnCollection;
                 vm.LiveRanks.CollectionChanged += OnCollection;
@@ -61,6 +71,15 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                     vm.LiveRanks.CollectionChanged -= OnCollection;
                     vm.LiveGuards.CollectionChanged -= OnCollection;
                 };
+            },
+            Array.Empty<object>());
+
+        UseEffect(
+            () =>
+            {
+                // 新弹幕进来后滚到底，老弹幕自然往上顶.
+                ScrollToLatest();
+                return () => { };
             },
             Array.Empty<object>());
 
@@ -209,9 +228,42 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             }).FontSize(12).Opacity(0.6).HAlign(HorizontalAlignment.Center).Margin(0, 24, 0, 0));
         }
 
-        return ScrollView(VStack(0, [.. rows]).Padding(12, 0, 12, 12))
+        var list = ScrollView(VStack(0, [.. rows]).Padding(12, 0, 12, 8))
             .Padding(0)
-            .VerticalScrollMode(ScrollingScrollMode.Enabled);
+            .VerticalScrollMode(ScrollingScrollMode.Enabled)
+            .OnMountAdd(element =>
+            {
+                if (element is ScrollView scroll)
+                {
+                    _interactionScrollView = scroll;
+                    ScrollToLatest();
+                }
+            })
+            .OnUnmountAdd(element =>
+            {
+                if (ReferenceEquals(_interactionScrollView, element))
+                {
+                    _interactionScrollView = null;
+                }
+            });
+
+        return list;
+    }
+
+    /// <summary>
+    /// 把互动列表滚到最底部（最新一条）.
+    /// </summary>
+    private void ScrollToLatest()
+    {
+        var scroll = _interactionScrollView;
+        if (scroll is null)
+        {
+            return;
+        }
+
+        _ = scroll.DispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => scroll.ScrollTo(0, scroll.ScrollableHeight));
     }
 
     private Element BuildFooter(PlayerViewModel vm)
@@ -268,37 +320,68 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 _ => { }).WithKey("live-send")).Padding(12, 8, 12, 12);
     }
 
+    /// <summary>
+    /// 一条互动消息，按评论卡片的样子排版：头像 + 名字/勋章 + 正文.
+    /// 高度压得比评论卡片紧一点，同屏能多塞几条.
+    /// </summary>
     private static Element BuildInteractionRow(LiveInteractionViewModel item)
     {
         var isGift = item.Kind == LiveInteractionKind.Gift;
-        var headline = isGift
-            ? $"{item.UserName} 送出 {item.GiftName} ×{item.GiftCount}"
-            : item.UserName;
-        var body = isGift ? $"{item.GiftPrice} 金瓜子" : item.Text;
-        var color = isGift ? "SystemFillColorAttentionBrush" : "TextFillColorPrimaryBrush";
+        var body = isGift
+            ? $"送出 {item.GiftName} ×{item.GiftCount}（{item.GiftPrice} 金瓜子）"
+            : item.Text;
+        var nameColor = isGift || item.IsSuperChat
+            ? "SystemFillColorAttentionBrush"
+            : "TextFillColorPrimaryBrush";
 
-        return Border(
-            Grid(
-                new[] { GridSize.Star(), GridSize.Auto },
-                new[] { GridSize.Auto, GridSize.Auto },
-                TextBlock(headline)
-                    .FontSize(12)
-                    .FontWeight(FontWeights.SemiBold)
-                    .Foreground(ResolveBrush(color))
-                    .Grid(row: 0, column: 0),
+        Element badge = item.HasMedal
+            ? Border(
                 TextBlock(item.MedalName)
-                    .FontSize(10)
-                    .Opacity(0.55)
-                    .Grid(row: 0, column: 1),
-                TextBlock(body)
-                    .FontSize(12)
-                    .TextWrapping(TextWrapping.Wrap)
-                    .Margin(0, 2, 0, 0)
-                    .Grid(row: 1, column: 0, columnSpan: 2)))
+                    .FontSize(9)
+                    .Opacity(0.75))
+                .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
+                .CornerRadius(3)
+                .Padding(4, 0, 4, 0)
+                .Margin(6, 0, 0, 0)
+                .VAlign(VerticalAlignment.Center)
+            : (Element)TextBlock(string.Empty);
+
+        var header = HStack(
+            0,
+            TextBlock(item.UserName)
+                .FontSize(12)
+                .FontWeight(FontWeights.SemiBold)
+                .Foreground(ResolveBrush(nameColor))
+                .VAlign(VerticalAlignment.Center),
+            badge);
+
+        Element avatar = string.IsNullOrWhiteSpace(item.Avatar)
+            ? Border(TextBlock(item.UserName[..1]).FontSize(11).HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
+                .CornerRadius(12)
+                .Size(24, 24)
+            : Border(Image(item.Avatar).Size(24, 24).AccessibilityHidden())
+                .CornerRadius(12)
+                .Background(ResolveBrush("ControlFillColorSecondaryBrush"));
+
+        var content = Grid(
+            new[] { GridSize.Auto, GridSize.Star() },
+            new[] { GridSize.Auto, GridSize.Auto },
+            avatar
+                .VAlign(VerticalAlignment.Top)
+                .Grid(row: 0, rowSpan: 2, column: 0),
+            header.Grid(row: 0, column: 1).Margin(8, 0, 0, 0),
+            TextBlock(body)
+                .FontSize(12)
+                .TextWrapping(TextWrapping.Wrap)
+                .Margin(8, 2, 0, 0)
+                .Grid(row: 1, column: 1));
+
+        return Border(content)
             .Background(ResolveBrush("CardBackgroundFillColorDefaultBrush"))
-            .CornerRadius(6)
-            .Padding(8, 6, 8, 6)
-            .Margin(0, 0, 0, 6)
+            .CornerRadius(8)
+            .Padding(8, 5, 8, 5)
+            .Margin(0, 0, 0, 4)
             .WithKey("live-msg-" + item.GetHashCode());
     }
 
