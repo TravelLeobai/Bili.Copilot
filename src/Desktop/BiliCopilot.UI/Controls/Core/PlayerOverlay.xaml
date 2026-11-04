@@ -120,15 +120,25 @@
                     IsHitTestVisible="False"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}"
                     Visibility="{x:Bind local:PlayerOverlay.GetLiveDanmakuVisibility(ViewModel.IsLive, ViewModel.IsLiveDanmakuVisible), Mode=OneWay}" />
+                <!--  药丸状跳过提示：左下角，命中广告片段时出现，点一下跳到片段末尾  -->
                 <Button
                     x:Name="SkipPromptButton"
-                    Margin="0,16,24,0"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
+                    Margin="24,0,0,96"
+                    Padding="16,8"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Bottom"
                     Command="{x:Bind ViewModel.SkipPromptSegmentCommand}"
-                    Content="跳过广告"
+                    CornerRadius="18"
                     Style="{StaticResource AccentButtonStyle}"
-                    Visibility="{x:Bind local:PlayerOverlay.GetSkipPromptVisibility(ViewModel.IsSkipPromptVisible), Mode=OneWay}" />
+                    Visibility="{x:Bind local:PlayerOverlay.GetSkipPromptVisibility(ViewModel.IsSkipPromptVisible), Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ic:SymbolIcon FontSize="14" Symbol="FastForward" />
+                        <TextBlock
+                            x:Name="SkipPromptText"
+                            FontSize="13"
+                            Text="跳过广告片段" />
+                    </StackPanel>
+                </Button>
                 <!--  控制栏隐藏时也能点的「回到最新」：直播落后就一直在，不跟着控制栏一起消失  -->
                 <Button
                     x:Name="CatchUpFloatingButton"

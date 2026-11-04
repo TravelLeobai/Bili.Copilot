@@ -591,9 +591,54 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         return merged;
     }
 
+    /// <summary>
+    /// 自检开关：LocalState 下放一个 adskip-test.txt，就把整段视频当成广告片段，用来验证跳过链路.
+    /// </summary>
+    private static bool IsWholeVideoAdTestEnabled()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Windows.Storage.ApplicationData.Current.LocalFolder.Path,
+                "adskip-test.txt");
+            return System.IO.File.Exists(path);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private void CheckSponsorBlock()
     {
-        if (_sponsorSegments.Count == 0 || Player is null || Player.Duration <= 0)
+        if (Player is null || Player.Duration <= 0)
+        {
+            HideSkipPrompt();
+            return;
+        }
+
+        // 整段当广告的自检模式：只看播放位置，不看片段表.
+        if (IsWholeVideoAdTestEnabled())
+        {
+            if (Player.Position < Player.Duration - 3)
+            {
+                ShowSkipPrompt(new SponsorSegment
+                {
+                    Start = 0,
+                    End = Player.Duration - 1,
+                    Category = "test",
+                    Source = "test",
+                });
+            }
+            else
+            {
+                HideSkipPrompt();
+            }
+
+            return;
+        }
+
+        if (_sponsorSegments.Count == 0)
         {
             HideSkipPrompt();
             return;
