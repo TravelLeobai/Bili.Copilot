@@ -32,33 +32,6 @@
             Visibility="{x:Bind ViewModel.SelectedDetail, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
 
         <StackPanel Grid.Column="2" Orientation="Horizontal">
-            <Grid Visibility="{x:Bind ViewModel.SelectedDetail, Mode=OneWay, Converter={StaticResource ObjectToVisibilityReverseConverter}}">
-                <HyperlinkButton
-                    Margin="0,0,12,0"
-                    Click="OnFollowRoomButtonClick"
-                    Content="{ext:Locale Name=FollowLiveRoom}"
-                    Visibility="{x:Bind ViewModel.IsFollowRoomsEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
-                    <FlyoutBase.AttachedFlyout>
-                        <Flyout Placement="Bottom">
-                            <repeater:AppRepeater
-                                x:Name="FollowRoomsRepeater"
-                                MinWidth="280"
-                                Margin="4,0"
-                                ItemsSource="{x:Bind ViewModel.FollowRooms, Mode=OneWay}">
-                                <repeater:AppRepeater.ItemTemplate>
-                                    <DataTemplate x:DataType="items:LiveItemViewModel">
-                                        <components:LiveCardControl Style="{StaticResource FollowLiveCardStyle}" ViewModel="{x:Bind}" />
-                                    </DataTemplate>
-                                </repeater:AppRepeater.ItemTemplate>
-                                <repeater:AppRepeater.Layout>
-                                    <StackLayout Spacing="8" />
-                                </repeater:AppRepeater.Layout>
-                            </repeater:AppRepeater>
-                        </Flyout>
-                    </FlyoutBase.AttachedFlyout>
-                </HyperlinkButton>
-            </Grid>
-
             <Button
                 VerticalAlignment="Center"
                 AutomationProperties.Name="{ext:Locale Name=Refresh}"

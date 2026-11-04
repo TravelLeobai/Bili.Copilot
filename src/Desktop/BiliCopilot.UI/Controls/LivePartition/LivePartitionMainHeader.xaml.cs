@@ -1,6 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
-
-using Microsoft.UI.Xaml.Controls.Primitives;
+// Copyright (c) Bili Copilot. All rights reserved.
 
 namespace BiliCopilot.UI.Controls.LivePartition;
 
@@ -13,7 +11,4 @@ public sealed partial class LivePartitionMainHeader : LivePartitionPageControlBa
     /// Initializes a new instance of the <see cref="LivePartitionMainHeader"/> class.
     /// </summary>
     public LivePartitionMainHeader() => InitializeComponent();
-
-    private void OnFollowRoomButtonClick(object sender, RoutedEventArgs e)
-        => FlyoutBase.ShowAttachedFlyout(sender as FrameworkElement);
 }

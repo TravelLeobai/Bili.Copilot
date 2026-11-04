@@ -180,6 +180,7 @@ public sealed class LivePartitionShell : Component
     private readonly LivePartitionMainHeader _mainHeader = new();
     private readonly LiveRecommendMainBody _recommendBody = new();
     private readonly LiveSubPartitionMainBody _subBody = new();
+    private readonly FollowedLiveBar _followBar = new();
     private readonly Richasy.WinUIKernel.Share.Base.ColumnSplitter _mainSplitter;
     private readonly Richasy.WinUIKernel.Share.Base.ColumnSplitter _subSplitter;
 
@@ -189,6 +190,7 @@ public sealed class LivePartitionShell : Component
     public LivePartitionShell(LivePartitionPageViewModel viewModel)
     {
         _viewModel = viewModel;
+        _followBar.ViewModel = viewModel;
 
         _mainSplitter = new Richasy.WinUIKernel.Share.Base.ColumnSplitter();
         _mainSplitter.ColumnWidth = viewModel.NavColumnWidth;
@@ -213,7 +215,7 @@ public sealed class LivePartitionShell : Component
         var subWidth = vm.SubNavColumnWidth;
 
         var title = navVisible
-            ? TextBlock("直播").FontSize(14).FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)
+            ? TextBlock("直播").FontSize(18).FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)
                 .VAlign(VerticalAlignment.Center)
                 .Margin(16, 0, -6, 0)
             : (Element)TextBlock(string.Empty);
@@ -237,6 +239,11 @@ public sealed class LivePartitionShell : Component
             ? ViewLaterShell.Host(_recommendBody, control => control.ViewModel = vm, vm).Grid(row: 2, column: 4).Margin(-6, 0, 0, 0)
             : ViewLaterShell.Host(_subBody, control => control.ViewModel = vm.SelectedDetail, vm).Grid(row: 2, column: 4).Margin(-6, 0, 0, 0);
 
+        var followedBar = vm.IsFollowRoomsEmpty
+            ? (Element)TextBlock(string.Empty)
+            : ViewLaterShell.Host(_followBar, control => control.ViewModel = vm, vm)
+                .Grid(row: 1, column: 0, columnSpan: 5);
+
         return Grid(
             [
                 GridSize.Px(navVisible ? navWidth : 0),
@@ -245,17 +252,18 @@ public sealed class LivePartitionShell : Component
                 GridSize.Auto,
                 GridSize.Star(),
             ],
-            [GridSize.Px(56), GridSize.Px(1), GridSize.Star()],
+            [GridSize.Px(56), GridSize.Auto, GridSize.Px(1), GridSize.Star()],
             title.Grid(row: 0, column: 0),
             subTitle.Grid(row: 0, column: 2),
-            ViewLaterShell.Divider().Grid(row: 1, column: 0, columnSpan: 5),
-            mainSide,
-            subSide,
+            followedBar,
+            ViewLaterShell.Divider().Grid(row: 2, column: 0, columnSpan: 5),
+            mainSide.Grid(row: 3),
+            subSide.Grid(row: 3),
             ViewLaterShell.Host(_mainHeader, control => control.ViewModel = vm, vm).Grid(row: 0, column: 4).Margin(-6, 0, 0, 0),
-            body,
-            ViewLaterShell.Host(_mainSplitter, _ => { }, vm).Grid(row: 0, rowSpan: 3, column: 1),
+            body.Grid(row: 3),
+            ViewLaterShell.Host(_mainSplitter, _ => { }, vm).Grid(row: 0, rowSpan: 4, column: 1),
             subVisible
-                ? ViewLaterShell.Host(_subSplitter, _ => { }, vm).Grid(row: 0, rowSpan: 3, column: 3)
+                ? ViewLaterShell.Host(_subSplitter, _ => { }, vm).Grid(row: 0, rowSpan: 4, column: 3)
                 : TextBlock(string.Empty));
     }
 
