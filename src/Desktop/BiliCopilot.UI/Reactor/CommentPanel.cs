@@ -28,16 +28,15 @@ namespace BiliCopilot.UI.Reactor;
 /// </summary>
 public sealed class CommentPanel : Component
 {
-    private const double LoadMoreThreshold = 400d;
 
     // 和 XAML 版评论卡片保持一致（ControlCornerRadius = 8）
     private const double ControlCornerRadiusValue = 8d;
 
     private readonly CommentMainViewModel _viewModel;
     private int _version;
-    private ScrollView? _scrollView;
-    private ScrollView? _detailScrollView;
 
+    private int _renderCount;
+    private int _totalCount;
     /// <summary>
     /// Initializes a new instance of the <see cref="CommentPanel"/> class.
     /// </summary>
@@ -96,37 +95,30 @@ public sealed class CommentPanel : Component
 
         if (viewModel.SelectedItem is { } detail)
         {
-            var detailCards = new List<Element>
-            {
-                CreateCard(detail.Data, null, false, "detail-main", () => setVersion(++_version)),
-            };
-
+            // 回复列表同样走 VirtualList：第一条是主评论，后面是回复
+            var replyItems = new List<CommentItemViewModel> { detail.Data };
             foreach (var reply in detail.Comments)
             {
-                detailCards.Add(CreateCard(reply, null, false, "reply-" + reply.Data.Id, () => setVersion(++_version)));
+                replyItems.Add(reply);
             }
 
-            var detailList = ScrollView(
-                VStack(0, detailCards.ToArray()).Padding(12, 4, 12, 12))
-                .Padding(0)
-                .VerticalScrollMode(ScrollingScrollMode.Enabled)
-                .OnMountAdd(element =>
+            var detailList = VirtualList(
+                replyItems.Count,
+                index =>
                 {
-                    if (element is ScrollView scroll)
-                    {
-                        _detailScrollView = scroll;
-                        scroll.ViewChanged += OnDetailScrollChanged;
-                    }
-                })
-                .OnUnmountAdd(element =>
+                    var item = replyItems[index];
+                    var key = index == 0 ? "detail-main" : "reply-" + item.Data.Id;
+                    return CreateCard(item, null, false, key, () => setVersion(++_version)).Margin(12, 4, 12, 4);
+                },
+                index => index == 0 ? "detail-main" : replyItems[index].Data.Id.ToString(),
+                estimatedItemHeight: 132,
+                spacing: 0,
+                onVisibleRangeChanged: (_, last) =>
                 {
-                    if (element is ScrollView scroll)
+                    // 快到底部时取下一页回复
+                    if (last >= replyItems.Count - 3)
                     {
-                        scroll.ViewChanged -= OnDetailScrollChanged;
-                        if (ReferenceEquals(_detailScrollView, scroll))
-                        {
-                            _detailScrollView = null;
-                        }
+                        detail.LoadItemsCommand.Execute(default);
                     }
                 });
 
@@ -160,6 +152,7 @@ public sealed class CommentPanel : Component
                 .Padding(0, 6, 0, 12);
         }
 
+
         var sorts = viewModel.Sorts ?? new List<CommentSortType>();
         var sortNames = sorts.Select(GetSortName).ToArray();
         var selectedIndex = Math.Max(sorts.IndexOf(viewModel.SortType), 0);
@@ -189,40 +182,48 @@ public sealed class CommentPanel : Component
 
         void Refresh() => setVersion(++_version);
 
-        var cards = new List<Element>();
+        // 置顶 + 普通评论拼成一个序列，交给 VirtualList 做真虚拟化（滚出屏幕的卡片会被回收）
+        var listItems = new List<(CommentItemViewModel Data, ICommand? ShowMore)>();
         if (viewModel.TopItem is not null)
         {
-            cards.Add(CreateCard(viewModel.TopItem.Data, viewModel.TopItem.ShowMoreCommand, true, "top", Refresh));
+            listItems.Add((viewModel.TopItem.Data, viewModel.TopItem.ShowMoreCommand));
         }
 
         foreach (var comment in viewModel.Comments)
         {
-            cards.Add(CreateCard(comment.Data, comment.ShowMoreCommand, true, comment.Data.Data.Id, Refresh));
+            listItems.Add((comment.Data, comment.ShowMoreCommand));
         }
 
-        var list = ScrollView(
-            VStack(0, cards.ToArray()).Padding(12, 4, 12, 12))
-            .Padding(0)
-            .VerticalScrollMode(ScrollingScrollMode.Enabled)
-            .OnMountAdd(element =>
+        _renderCount = 0;
+        _totalCount = listItems.Count;
+
+        var list = VirtualList(
+            listItems.Count,
+            index =>
             {
-                if (element is ScrollView scroll)
-                {
-                    _scrollView = scroll;
-                    scroll.ViewChanged += OnScrollChanged;
-                }
-            })
-            .OnUnmountAdd(element =>
+                _renderCount++;
+                var item = listItems[index];
+                return CreateCard(item.Data, item.ShowMore, true, "c-" + item.Data.Data.Id, Refresh).Margin(12, 4, 12, 4);
+            },
+            index => listItems[index].Data.Data.Id.ToString(),
+            estimatedItemHeight: 132,
+            spacing: 0,
+            onVisibleRangeChanged: (first, last) =>
             {
-                if (element is ScrollView scroll)
+                Serilog.Log.Information(
+                    "评论虚拟化：可见 {First}-{Last}，已渲染 {Rendered} 项，总数 {Total}",
+                    first,
+                    last,
+                    _renderCount,
+                    _totalCount);
+
+                // 快到底部时取下一页
+                if (last >= listItems.Count - 3)
                 {
-                    scroll.ViewChanged -= OnScrollChanged;
-                    if (ReferenceEquals(_scrollView, scroll))
-                    {
-                        _scrollView = null;
-                    }
+                    viewModel.LoadItemsCommand.Execute(default);
                 }
             });
+
 
         Element status = viewModel.IsLoading
             ? TextBlock("正在加载…").FontSize(12).Opacity(0.6).Margin(0, 8, 0, 0).HAlign(HorizontalAlignment.Center)
@@ -254,22 +255,6 @@ public sealed class CommentPanel : Component
 
     private static string GetSortName(CommentSortType sortType)
         => sortType == CommentSortType.Time ? "最新评论" : "最热评论";
-
-    private void OnDetailScrollChanged(ScrollView sender, object args)
-    {
-        if (sender.ScrollableHeight - sender.VerticalOffset < LoadMoreThreshold)
-        {
-            _viewModel.SelectedItem?.LoadItemsCommand.Execute(default);
-        }
-    }
-
-    private void OnScrollChanged(ScrollView sender, object args)
-    {
-        if (sender.ScrollableHeight - sender.VerticalOffset < LoadMoreThreshold)
-        {
-            _viewModel.LoadItemsCommand.Execute(default);
-        }
-    }
 
     private static Element CreateCard(CommentItemViewModel comment, ICommand? showMore, bool isMoreEnabled, string key, Action refresh)
     {
