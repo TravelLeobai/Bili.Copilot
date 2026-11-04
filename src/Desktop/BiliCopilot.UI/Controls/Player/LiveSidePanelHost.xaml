@@ -10,62 +10,58 @@
 
     <!--  外层不铺底色：按钮单独浮在视频上，只有面板本体带亚克力底  -->
     <Grid Background="Transparent">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-        <!--  收起按钮 + 面板：按钮在左上角，面板顶部因此多留出一条边距  -->
-        <Grid Grid.Column="0">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <!--  收起按钮：与底栏表情/礼物同尺寸（32x32），实色底 + 叉号，放在面板左上角  -->
+        <Button
+            x:Name="CollapseButton"
+            Grid.Row="0"
+            Width="32"
+            Height="32"
+            Margin="8,8,0,6"
+            Padding="0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Background="{ThemeResource ControlFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            Click="OnCollapseClick"
+            CornerRadius="8"
+            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+            ToolTipService.ToolTip="收起直播面板">
+            <ic:SymbolIcon FontSize="12" Symbol="Dismiss" />
+        </Button>
 
-            <Button
-                x:Name="CollapseButton"
-                Height="28"
-                Margin="4,10,0,0"
-                Padding="10,0"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Center"
-                Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Click="OnCollapseClick"
-                CornerRadius="14"
-                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                ToolTipService.ToolTip="收起直播面板">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <ic:SymbolIcon FontSize="11" Symbol="ChevronRight" />
-                    <TextBlock FontSize="11" Text="收起" />
-                </StackPanel>
-            </Button>
-
-            <!--  折叠后的展开按钮：同样独立，不跟着面板一起上底色  -->
-            <Button
-                x:Name="ExpandButton"
-                Height="64"
-                Padding="0"
-                VerticalAlignment="Center"
-                Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Click="OnExpandClick"
-                CornerRadius="10"
-                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                Visibility="Collapsed"
-                Width="24">
-                <ic:SymbolIcon FontSize="12" Symbol="ChevronLeft" />
-            </Button>
-
-            <Grid
-                x:Name="PanelRoot"
-                Grid.Row="1"
-                Width="360"
-                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
-                <Grid x:Name="ReactorHost" />
-            </Grid>
+        <!--  面板本体，顶部因此多出一条边距  -->
+        <Grid
+            x:Name="PanelRoot"
+            Grid.Row="1"
+            Width="360"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
+            <Grid x:Name="ReactorHost" />
         </Grid>
+
+        <!--  折叠态：变成箭头贴在右侧中间  -->
+        <Button
+            x:Name="ExpandButton"
+            Grid.RowSpan="2"
+            Width="26"
+            Height="64"
+            Padding="0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Center"
+            Background="{ThemeResource ControlFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            Click="OnExpandClick"
+            CornerRadius="8,0,0,8"
+            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+            ToolTipService.ToolTip="展开直播面板"
+            Visibility="Collapsed">
+            <ic:SymbolIcon FontSize="12" Symbol="ChevronLeft" />
+        </Button>
     </Grid>
 </UserControl>
