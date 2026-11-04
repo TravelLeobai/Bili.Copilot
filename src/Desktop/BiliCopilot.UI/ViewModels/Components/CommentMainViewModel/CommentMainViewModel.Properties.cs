@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -22,6 +22,8 @@ public sealed partial class CommentMainViewModel
     private bool _preventLoadMore;
     private CommentTargetType _targetType;
     private long _offset;
+
+    private int _page;
     private CommentItemViewModel? _replyItem;
 
     [ObservableProperty]

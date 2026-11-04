@@ -37,7 +37,6 @@ public sealed class SettingsShell : Component
             new CacheSettingControl(),
             new NavigationSettingControl(),
             new ScrollSettingControl(),
-            new SearchRecommendSettingSection(),
             new NotificationSettingControl(),
             new LoggerSettingControl(),
             new AboutSettingControl(),

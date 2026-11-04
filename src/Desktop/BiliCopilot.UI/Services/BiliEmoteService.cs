@@ -157,6 +157,29 @@ internal static class BiliEmoteService
         }
     }
 
+    /// <summary>
+    /// 往缓存里补一个表情（来自评论原文的 content.emote）.
+    /// </summary>
+    /// <param name="token">占位文本.</param>
+    /// <param name="url">图片地址.</param>
+    /// <param name="size">尺寸档位.</param>
+    /// <returns>是否新增.</returns>
+    public static bool AddDynamic(string token, string url, int size)
+    {
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(url) || Cache.ContainsKey(token))
+        {
+            return false;
+        }
+
+        Cache[token] = new BiliEmote(token, url, size);
+        return true;
+    }
+
+    /// <summary>
+    /// 把当前缓存写回磁盘（运行期补充的表情也要留住）.
+    /// </summary>
+    public static void SaveCache() => SaveToCache();
+
     private static string CacheFile
         => Path.Combine(Windows.Storage.ApplicationData.Current.LocalFolder.Path, "emote-cache.txt");
 

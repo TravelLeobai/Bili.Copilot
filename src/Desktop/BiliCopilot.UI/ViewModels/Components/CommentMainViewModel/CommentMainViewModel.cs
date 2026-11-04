@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.Input;
@@ -34,6 +34,7 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
     public void Initialize(string sourceId, CommentTargetType targetType, CommentSortType sortType)
     {
         Clear();
+        _page = 0;
         Id = sourceId;
         _targetType = targetType;
         SortType = sortType;
@@ -58,6 +59,7 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         var targetType = _targetType;
         var sortType = SortType;
         Clear();
+        _page = 0;
         Id = targetId;
         _targetType = targetType;
         SortType = sortType;
@@ -76,6 +78,11 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         {
             IsLoading = true;
             var view = await _service.GetCommentsAsync(Id, _targetType, SortType, _offset);
+
+            // 先补一页评论原文里的表情映射，装扮表情不在内核表情表里.
+            _page++;
+            var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+            await Services.CommentEmoteEnricher.EnrichAsync(Id, (int)_targetType, _page, cookie, _logger);
             _preventLoadMore = view.IsEnd;
             if (view.TopComment is not null)
             {

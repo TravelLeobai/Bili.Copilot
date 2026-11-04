@@ -100,6 +100,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         ProxyServerCn = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerCn, string.Empty);
         ReplaceCdnEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ReplaceCdnEnabled, true);
         CdnReplaceMode = SettingsToolkit.ReadLocalSetting(SettingNames.CdnReplaceMode, CdnReplaceMode.PcdnOnly);
+        CdnReplaceModeIndex = (int)CdnReplaceMode;
         CdnAutoSelect = SettingsToolkit.ReadLocalSetting(SettingNames.CdnAutoSelect, true);
         CdnFilterPort = SettingsToolkit.ReadLocalSetting(SettingNames.CdnFilterPort, true);
         CdnRewriteAkamai = SettingsToolkit.ReadLocalSetting(SettingNames.CdnRewriteAkamai, false);
@@ -548,13 +549,28 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyServerCn, value);
 
     partial void OnReplaceCdnEnabledChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.ReplaceCdnEnabled, value);
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.ReplaceCdnEnabled, value); 
+        if (value && CdnReplaceMode == CdnReplaceMode.None)
+        {
+            // 打开开关却停在「不替换」等于没开，这里顺手把模式推到仅替换 PCDN.
+            CdnReplaceModeIndex = (int)CdnReplaceMode.PcdnOnly;
+        }
+
+        Serilog.Log.Information($"CDN 设置已保存：替换={value} 模式={CdnReplaceMode} 自动优选={CdnAutoSelect}");
+    }
 
     partial void OnCdnReplaceModeChanged(CdnReplaceMode value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.CdnReplaceMode, value);
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.CdnReplaceMode, value);
+        Serilog.Log.Information("CDN 替换模式已保存：{Mode}", value);
+    }
 
     partial void OnCdnAutoSelectChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.CdnAutoSelect, value);
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.CdnAutoSelect, value);
+        Serilog.Log.Information("CDN 自动优选已保存：{Value}", value);
+    }
 
     partial void OnCdnFilterPortChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.CdnFilterPort, value);
