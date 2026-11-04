@@ -29,6 +29,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
     private int _version;
     private SelectorBar? _tabBar;
     private bool _suppressTabChange;
+    private TextBox? _liveInputBox;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveSidePanel"/> class.
@@ -377,24 +378,38 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             _ => { })
             .WithKey("live-gift");
 
-    private static Element BuildInputBox(PlayerViewModel vm)
+    private Element BuildInputBox(PlayerViewModel vm)
         => new XamlHostElement(
             () =>
             {
                 var box = new TextBox
                 {
                     PlaceholderText = "发个弹幕…",
-                    Text = vm.LiveDanmakuInput ?? string.Empty,
                     MinWidth = 0,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                 };
-                box.TextChanged += (s, _) => vm.LiveDanmakuInput = ((TextBox)s).Text;
+
+                // 输入过程中不往 ViewModel 回写：回写会触发重渲染，重建/重置输入框导致吞字.
+                box.KeyDown += (s, args) =>
+                {
+                    if (args.Key == Windows.System.VirtualKey.Enter)
+                    {
+                        args.Handled = true;
+                        SendLiveInput(vm);
+                    }
+                };
+
+                _liveInputBox = box;
                 return box;
             },
             element =>
             {
                 var box = (TextBox)element;
-                if (box.Text != vm.LiveDanmakuInput)
+                _liveInputBox = box;
+
+                // 只在没聚焦时同步外部值（例如发送成功后清空）.
+                if (box.FocusState == FocusState.Unfocused
+                    && box.Text != (vm.LiveDanmakuInput ?? string.Empty))
                 {
                     box.Text = vm.LiveDanmakuInput ?? string.Empty;
                 }
@@ -402,7 +417,25 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             .HAlign(HorizontalAlignment.Stretch)
             .WithKey("live-input");
 
-    private static Element BuildSendButton(PlayerViewModel vm)
+    private void SendLiveInput(PlayerViewModel vm)
+    {
+        var text = _liveInputBox?.Text?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        vm.LiveDanmakuInput = text;
+        vm.SendLiveDanmakuCommand.Execute(default);
+
+        // 发送后本地先清空，不等 ViewModel 回调（重渲染期间光标会乱）.
+        if (_liveInputBox is not null)
+        {
+            _liveInputBox.Text = string.Empty;
+        }
+    }
+
+    private Element BuildSendButton(PlayerViewModel vm)
         => new XamlHostElement(
             () =>
             {
@@ -417,7 +450,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
     /// 一条互动消息.
     /// 进场/系统提示压缩成一行小字，其余按评论卡片的样子排版：头像 + 名字/勋章 + 正文.
     /// </summary>
-    private static Element BuildInteractionRow(LiveInteractionViewModel item)
+    internal static Element BuildInteractionRow(LiveInteractionViewModel item)
     {
         if (item.Kind is LiveInteractionKind.Enter or LiveInteractionKind.System)
         {

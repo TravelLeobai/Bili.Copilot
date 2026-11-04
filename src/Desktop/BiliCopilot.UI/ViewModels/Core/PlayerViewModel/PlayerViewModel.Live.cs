@@ -497,6 +497,7 @@ public sealed partial class PlayerViewModel
 
             LiveDanmakuInput = sent ? string.Empty : LiveDanmakuInput;
             LiveStatusText = sent ? "弹幕已发送" : "弹幕发送失败";
+            logger.LogInformation("直播弹幕发送：{Text} 结果={Sent}", text, sent);
         }
         catch (Exception ex)
         {
