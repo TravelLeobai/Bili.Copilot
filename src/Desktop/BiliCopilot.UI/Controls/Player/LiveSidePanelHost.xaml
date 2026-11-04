@@ -17,6 +17,7 @@
 
         <!--  顶部按钮条：和面板同底色、同宽，收起按钮在左，刷新在右  -->
         <Border
+            x:Name="HeaderBar"
             Grid.Row="0"
             Width="360"
             Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">

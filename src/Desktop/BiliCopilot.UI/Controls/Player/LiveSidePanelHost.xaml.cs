@@ -101,6 +101,8 @@ public sealed partial class LiveSidePanelHost : UserControl
     private void ApplyCollapsedState()
     {
         PanelRoot.Visibility = _isCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        // 顶栏（含关闭、刷新）只在展开态出现，收起后只留右侧那根箭头.
+        HeaderBar.Visibility = _isCollapsed ? Visibility.Collapsed : Visibility.Visible;
         ExpandButton.Visibility = _isCollapsed ? Visibility.Visible : Visibility.Collapsed;
         // 收起后左侧只剩展开条，收起按钮要跟着藏起来.
         CollapseButton.Visibility = _isCollapsed ? Visibility.Collapsed : Visibility.Visible;
