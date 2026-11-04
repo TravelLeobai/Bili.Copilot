@@ -184,6 +184,7 @@ public sealed partial class PlayerViewModel
         if (duration > 0 && position > duration - 0.3)
         {
             var clamped = Math.Max(0, duration - 0.3);
+            PushAdSkipLog($"目标 {FormatSkipStamp(position)} 超出时长，夹到 {FormatSkipStamp(clamped)}");
             logger.LogInformation(
                 "跳转目标 {Target:F1}s 超出或贴住时长 {Duration:F1}s，夹到 {Clamped:F1}s",
                 position,
@@ -211,10 +212,12 @@ public sealed partial class PlayerViewModel
         try
         {
             await ApplySeekAsync(position);
+            PushAdSkipLog($"已跳转到 {FormatSkipStamp(position)}");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "跳转执行失败：目标 {Target:F1}s", position);
+            PushAdSkipLog($"跳转失败：目标 {FormatSkipStamp(position)}");
         }
     }
 

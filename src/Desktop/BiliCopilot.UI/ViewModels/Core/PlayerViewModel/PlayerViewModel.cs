@@ -478,6 +478,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             {
                 logger.LogInformation("共找到 {Count} 段可跳过片段（来源：{Sources}）", _sponsorSegments.Count,
                     string.Join("/", _sponsorSegments.Select(p => p.Source).Distinct()));
+                var stamps = string.Join("、", _sponsorSegments.Take(3).Select(p => $"{FormatSkipStamp(p.Start)}–{FormatSkipStamp(p.End)}"));
+                var more = _sponsorSegments.Count > 3 ? $"…共 {_sponsorSegments.Count} 段" : string.Empty;
+                PushAdSkipLog($"监测到广告片段 {stamps}{more}");
             }
         }
         catch (Exception ex)
@@ -862,6 +865,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             MuteForSponsoredSegment();
             HideSkipPrompt();
+            PushAdSkipLog($"静音段 {FormatSkipStamp(current.Start)}→{FormatSkipStamp(current.End)}，已压低音量");
             return;
         }
 
@@ -888,6 +892,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _lastSponsorSkipPosition = target;
         _lastSponsorSkipTime = DateTime.Now;
         HideSkipPrompt();
+        var skipMethod = current.Source switch
+        {
+            "ai" => "AI 识别",
+            "cloud" => "云端广告库",
+            "test" => "自检",
+            _ => "空降助手",
+        };
+        PushAdSkipLog($"自动跳过（{skipMethod}）{FormatSkipStamp(current.Start)}→{FormatSkipStamp(current.End)}（{current.Duration:F0}s）");
         logger.LogInformation(
             "自动跳过{Category}：{Start:F1}s -> {End:F1}s（目标 {Target:F1}s，跳过 {Duration:F1}s）",
             current.CategoryName,
@@ -954,6 +966,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         var end = segment.End;
         _lastSponsorSkipPosition = end;
         HideSkipPrompt();
+        PushAdSkipLog($"手动跳过 {FormatSkipStamp(segment.Start)}→{FormatSkipStamp(segment.End)}（{segment.Duration:F0}s）");
         logger.LogInformation(
             "手动跳过{Category}：{Start:F1}s -> {End:F1}s（跳过 {Duration:F1}s）",
             segment.CategoryName,
