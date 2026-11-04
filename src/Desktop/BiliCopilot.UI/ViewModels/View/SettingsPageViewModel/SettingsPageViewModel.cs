@@ -62,6 +62,24 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
         RememberPlaybackEnhancements = SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true);
         CdnPoolStatusText = CdnPoolService.StatusText;
+        SponsorManualMode = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false);
+        SponsorMinDuration = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockMinDuration, 3d);
+        SponsorIncludeSelfPromo = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockIncludeSelfPromo, true);
+        SponsorIncludeIntro = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockIncludeIntro, false);
+        SponsorIncludeOutro = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockIncludeOutro, false);
+        AdCloudEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AdCloudEnabled, false);
+        AdCloudUrl = SettingsToolkit.ReadLocalSetting(SettingNames.AdCloudUrl, string.Empty);
+        AiAdEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdEnabled, false);
+        AiInterestEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AiInterestEnabled, true);
+        AiAdEndpoint = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdEndpoint, string.Empty);
+        AiAdKey = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdKey, string.Empty);
+        AiAdModel = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdModel, string.Empty);
+        AiAdPrompt = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdPrompt, Services.AiAdAnalyzer.DefaultPrompt);
+        AiAutoSave = SettingsToolkit.ReadLocalSetting(SettingNames.AiAutoSave, true);
+        AiTestStatusText = string.Empty;
+        AudioAdEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AudioAdEnabled, false);
+        DashScopeKey = SettingsToolkit.ReadLocalSetting(SettingNames.DashScopeKey, string.Empty);
+        DashScopeModel = SettingsToolkit.ReadLocalSetting(SettingNames.DashScopeModel, "paraformer-v2");
         QualityUnlockEnabled = Services.QualityUnlockService.IsEnabled;
         QualityUnlockAutoMax = Services.QualityUnlockService.AutoMaxQuality;
         QualityUnlockSendCookie = Services.QualityUnlockService.SendCookie;
@@ -84,7 +102,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CdnRewriteAkamai = SettingsToolkit.ReadLocalSetting(SettingNames.CdnRewriteAkamai, false);
         CdnStallSwitch = SettingsToolkit.ReadLocalSetting(SettingNames.CdnStallSwitch, true);
         CdnReplaceModeCollection = Enum.GetValues<CdnReplaceMode>().ToList();
-        CdnServerCollection = new List<string> { PlayUrlOptimizer.DefaultCdnHost }.Concat(CdnAccelerator.CandidatePool).Distinct().ToList();
+        CdnServerCollection = new List<string> { PlayUrlOptimizer.DefaultCdnHost }.Concat(CdnPoolService.GetCandidates(40)).Distinct().ToList();
         CdnServerSelected = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, PlayUrlOptimizer.DefaultCdnHost);
         CdnReplaceModeIndex = (int)CdnReplaceMode;
         CdnServerIndex = Math.Max(0, CdnServerCollection.IndexOf(CdnServerSelected));
@@ -577,52 +595,82 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     }
 
     partial void OnSponsorManualModeChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockManualMode, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockManualMode, value);
 
     partial void OnSponsorMinDurationChanged(double value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockMinDuration, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockMinDuration, value);
 
     partial void OnSponsorIncludeSelfPromoChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeSelfPromo, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeSelfPromo, value);
 
     partial void OnSponsorIncludeIntroChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeIntro, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeIntro, value);
 
     partial void OnSponsorIncludeOutroChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeOutro, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockIncludeOutro, value);
 
     partial void OnAdCloudEnabledChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AdCloudEnabled, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.AdCloudEnabled, value);
 
     partial void OnAdCloudUrlChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AdCloudUrl, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.AdCloudUrl, value);
 
     partial void OnAiInterestEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.AiInterestEnabled, value);
 
     partial void OnAiAdEnabledChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEnabled, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEnabled, value);
 
     partial void OnAiAdEndpointChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEndpoint, value);
+    {
+        if (AiAutoSave)
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEndpoint, value);
+        }
+    }
 
     partial void OnAiAdKeyChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdKey, value);
+    {
+        if (AiAutoSave)
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.AiAdKey, value);
+        }
+    }
 
     partial void OnAiAdModelChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdModel, value);
+    {
+        if (AiAutoSave)
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.AiAdModel, value);
+        }
+    }
 
     partial void OnAiAdPromptChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdPrompt, value);
+    {
+        if (AiAutoSave)
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.AiAdPrompt, value);
+        }
+    }
 
     partial void OnAudioAdEnabledChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.AudioAdEnabled, value);
+    => SettingsToolkit.WriteLocalSetting(SettingNames.AudioAdEnabled, value);
 
     partial void OnDashScopeKeyChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeKey, value);
+    {
+        if (AiAutoSave)
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeKey, value);
+        }
+    }
 
     partial void OnDashScopeModelChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeModel, value);
+    {
+        if (AiAutoSave)
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeModel, value);
+        }
+    }
 
     [RelayCommand]
     private void ResetAiAdPrompt()
@@ -655,7 +703,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     private async Task TestCdnLatencyAsync()
     {
         CdnLatencyText = "测试中…";
-        var tasks = CdnAccelerator.CandidatePool
+        var tasks = CdnPoolService.GetCandidates(16)
             .Select(async host =>
             {
                 var ms = await CdnAccelerator.TestLatencyAsync(
@@ -849,5 +897,37 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CdnPoolStatusText = result.Success
             ? $"{result.Count} 个节点（{result.Source}）· 上次同步 {CdnPoolService.LastSync:MM-dd HH:mm}"
             : $"{CdnPoolService.StatusText}（刷新失败）";
+    }
+    partial void OnAiAutoSaveChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiAutoSave, value);
+
+    [RelayCommand]
+    private void SaveAiSettings()
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEndpoint, AiAdEndpoint ?? string.Empty);
+        SettingsToolkit.WriteLocalSetting(SettingNames.AiAdKey, AiAdKey ?? string.Empty);
+        SettingsToolkit.WriteLocalSetting(SettingNames.AiAdModel, AiAdModel ?? string.Empty);
+        SettingsToolkit.WriteLocalSetting(SettingNames.AiAdPrompt, AiAdPrompt ?? string.Empty);
+        SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeKey, DashScopeKey ?? string.Empty);
+        SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeModel, DashScopeModel ?? string.Empty);
+        AiTestStatusText = $"已保存（{DateTime.Now:HH:mm:ss}）";
+    }
+
+    [RelayCommand]
+    private async Task TestAiApiAsync()
+    {
+        AiTestStatusText = "正在测试接口…";
+        var (ok, message) = await AiEndpointTester.TestApiAsync(AiAdEndpoint, AiAdKey);
+        AiTestStatusText = (ok ? "接口正常：" : "接口有问题：") + message;
+        AdSkipStatusText = AiTestStatusText;
+    }
+
+    [RelayCommand]
+    private async Task TestAiModelAsync()
+    {
+        AiTestStatusText = "正在测试模型…";
+        var (ok, message) = await AiEndpointTester.TestModelAsync(AiAdEndpoint, AiAdKey, AiAdModel);
+        AiTestStatusText = (ok ? "模型正常：" : "模型有问题：") + message;
+        AdSkipStatusText = AiTestStatusText;
     }
 }

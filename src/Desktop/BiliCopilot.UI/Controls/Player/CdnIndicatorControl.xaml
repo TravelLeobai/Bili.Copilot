@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Player.CdnIndicatorControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:base="using:Richasy.WinUIKernel.Share.Base"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <DropDownButton
+        x:Name="RootButton"
+        Padding="8,4"
+        VerticalAlignment="Center"
+        HorizontalContentAlignment="Stretch"
+        VerticalContentAlignment="Center"
+        ToolTipService.ToolTip="当前 CDN 节点，点开可以开关优选或换节点">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+            <ic:SymbolIcon
+                x:Name="StateIcon"
+                VerticalAlignment="Center"
+                FontSize="13"
+                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                Symbol="Globe" />
+            <base:TrimTextBlock
+                x:Name="HostText"
+                MaxWidth="132"
+                VerticalAlignment="Center"
+                FontSize="12"
+                MaxLines="1"
+                Text="CDN" />
+        </StackPanel>
+        <DropDownButton.Flyout>
+            <MenuFlyout Placement="Bottom">
+                <ToggleMenuFlyoutItem
+                    x:Name="ToggleItem"
+                    MinWidth="180"
+                    Text="CDN 优选"
+                    Click="OnToggleClick" />
+                <MenuFlyoutItem
+                    x:Name="SwitchItem"
+                    MinWidth="180"
+                    Text="换一个节点"
+                    Click="OnSwitchClick" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem
+                    x:Name="InfoItem"
+                    IsEnabled="False"
+                    Text="" />
+            </MenuFlyout>
+        </DropDownButton.Flyout>
+    </DropDownButton>
+</UserControl>

@@ -73,7 +73,25 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="RootGrid">
+    <Grid x:Name="RootGrid" RightTapped="OnRootGridRightTapped">
+        <Grid.ContextFlyout>
+            <MenuFlyout x:Name="CdnContextMenu" Opening="OnCdnContextMenuOpening">
+                <ToggleMenuFlyoutItem
+                    x:Name="CdnToggleItem"
+                    MinWidth="200"
+                    Text="CDN 优选"
+                    Click="OnCdnToggleClick" />
+                <MenuFlyoutItem
+                    MinWidth="200"
+                    Text="换一个 CDN 节点"
+                    Click="OnCdnSwitchClick" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem
+                    x:Name="CdnHostItem"
+                    IsEnabled="False"
+                    Text="" />
+            </MenuFlyout>
+        </Grid.ContextFlyout>
         <danmaku:VideoDanmakuPanel
             x:Name="DanmakuPanel"
             Margin="4"
@@ -505,6 +523,8 @@
                                     </Flyout>
                                 </DropDownButton.Flyout>
                             </DropDownButton>
+                            <player:CdnIndicatorControl Margin="8,0,0,0" VerticalAlignment="Center" />
+                            <player:AdSkipIndicatorControl Margin="8,0,0,0" VerticalAlignment="Center" />
                             <Button
                                 Width="32"
                                 Height="32"

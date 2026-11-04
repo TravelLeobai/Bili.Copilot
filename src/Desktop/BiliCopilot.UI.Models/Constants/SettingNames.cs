@@ -22,6 +22,7 @@ public enum SettingNames
     AiAdKey,
     AiAdModel,
     AiAdPrompt,
+    AiAutoSave,
     AudioAdEnabled,
     DashScopeKey,
     DashScopeModel,

@@ -347,4 +347,40 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     /// </summary>
     public static Visibility GetLiveDanmakuVisibility(bool isLive, bool isVisible)
         => isLive && isVisible ? Visibility.Visible : Visibility.Collapsed;
+    private void OnRootGridRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        // 视频区域右键也弹出菜单；已经由 ContextFlyout 处理的不重复弹.
+        if (CdnContextMenu is null || e.Handled)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        CdnContextMenu.ShowAt(RootGrid, e.GetPosition(RootGrid));
+    }
+
+    private void OnCdnContextMenuOpening(object sender, object e)
+        => RefreshCdnMenuState();
+
+    private void RefreshCdnMenuState()
+    {
+        var enabled = Services.CdnAccelerator.IsEnabled;
+        CdnToggleItem.IsChecked = enabled;
+        var host = Services.CdnAccelerator.ActiveHostDisplay;
+        CdnHostItem.Text = enabled
+            ? $"当前节点：{(string.IsNullOrWhiteSpace(host) ? "默认" : host)}"
+            : "CDN 替换已关闭";
+    }
+
+    private void OnCdnToggleClick(object sender, object e)
+    {
+        Services.CdnAccelerator.SetEnabled(!Services.CdnAccelerator.IsEnabled);
+        RefreshCdnMenuState();
+    }
+
+    private void OnCdnSwitchClick(object sender, object e)
+    {
+        Services.CdnAccelerator.RotateHost();
+        RefreshCdnMenuState();
+    }
 }

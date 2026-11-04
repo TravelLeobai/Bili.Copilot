@@ -96,6 +96,22 @@
                 <TextBox MinWidth="240" Text="{x:Bind ViewModel.DashScopeModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
+            <base:SettingsCard Description="填完点这里存下来；关掉下面的自动保存时必须用它" Header="AI 设置">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Command="{x:Bind ViewModel.SaveAiSettingsCommand}" Content="保存" />
+                    <Button Command="{x:Bind ViewModel.TestAiApiCommand}" Content="测试接口" />
+                    <Button Command="{x:Bind ViewModel.TestAiModelCommand}" Content="测试模型" />
+                </StackPanel>
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="输入框一改就写进设置；关掉后只在点「保存」时落盘" Header="自动保存输入内容">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.AiAutoSave, Mode=TwoWay}" />
+            </base:SettingsCard>
+
+            <base:SettingsCard Description="保存、测试结果的回显" Header="配置状态">
+                <TextBlock MaxWidth="520" Text="{x:Bind ViewModel.AiTestStatusText, Mode=OneWay}" TextWrapping="Wrap" />
+            </base:SettingsCard>
+
             <base:SettingsCard Description="最近一次操作结果" Header="状态">
                 <TextBlock MaxWidth="520" Text="{x:Bind ViewModel.AdSkipStatusText, Mode=OneWay}" TextWrapping="Wrap" />
             </base:SettingsCard>

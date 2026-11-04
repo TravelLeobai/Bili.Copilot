@@ -28,17 +28,6 @@ internal static class CdnAccelerator
     /// <summary>
     /// 候选 CDN 主机池（取自用户脚本）.
     /// </summary>
-    public static readonly IReadOnlyList<string> CandidatePool = new[]
-    {
-        "upos-sz-mirrorcosov.bilivideo.com",
-        "upos-sz-mirroraliov.bilivideo.com",
-        "upos-sz-mirrorhwov.bilivideo.com",
-        "upos-sz-mirrorali.bilivideo.com",
-        "upos-tf-all-hw.bilivideo.com",
-        "upos-sz-mirrorhw.bilivideo.com",
-        "upos-sz-mirrorcos.bilivideo.com",
-        "upos-tf-all-tx.bilivideo.com",
-    };
 
     /// <summary>
     /// 内置的公共解析服务器（可自行替换）.
@@ -50,6 +39,11 @@ internal static class CdnAccelerator
         "https://api.example.com",
     };
 
+    /// <summary>
+    /// 当前使用的节点发生变化：自动优选换了节点、或用户手动切换.
+    /// </summary>
+    public static event EventHandler? HostChanged;
+
     private static readonly ConcurrentDictionary<string, HostSpeed> Speeds = new();
     private static readonly HttpClient HttpClient = CreateHttpClient();
     private static DateTime _lastProbeTime = DateTime.MinValue;
@@ -60,6 +54,42 @@ internal static class CdnAccelerator
     /// </summary>
     public static bool IsEnabled
         => SettingsToolkit.ReadLocalSetting(SettingNames.ReplaceCdnEnabled, true);
+
+    /// <summary>
+    /// 给界面显示的当前节点（去掉了 .bilivideo.com 后缀）.
+    /// </summary>
+    public static string ActiveHostDisplay
+    {
+        get
+        {
+            if (!IsEnabled || Mode == CdnReplaceMode.None)
+            {
+                return string.Empty;
+            }
+
+            var host = CurrentHost;
+            const string suffix = ".bilivideo.com";
+            return host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                ? host[..^suffix.Length]
+                : host;
+        }
+    }
+
+    /// <summary>
+    /// 开关 CDN 替换.
+    /// </summary>
+    /// <param name="value">是否启用.</param>
+    public static void SetEnabled(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.ReplaceCdnEnabled, value);
+        RaiseHostChanged();
+    }
+
+    /// <summary>
+    /// 通知界面刷新节点显示.
+    /// </summary>
+    public static void RaiseHostChanged()
+        => HostChanged?.Invoke(null, EventArgs.Empty);
 
     /// <summary>
     /// 当前替换模式.
@@ -181,6 +211,7 @@ internal static class CdnAccelerator
             _rotateCursor = (_rotateCursor + 1) % pool.Count;
         }
 
+        RaiseHostChanged();
         return pool[_rotateCursor];
     }
 
@@ -222,6 +253,7 @@ internal static class CdnAccelerator
         var ranking = valid.Select(p => p.Host).ToList();
         SettingsToolkit.WriteLocalSetting(SettingNames.CdnRankingCache, string.Join(",", ranking));
         logger?.LogInformation("CDN 优选完成：{Ranking}", string.Join(" > ", ranking));
+        RaiseHostChanged();
         return ranking;
     }
 

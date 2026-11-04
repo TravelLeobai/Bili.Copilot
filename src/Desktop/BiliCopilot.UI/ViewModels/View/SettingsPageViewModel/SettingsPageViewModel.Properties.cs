@@ -210,6 +210,12 @@ public sealed partial class SettingsPageViewModel
     private bool _aiInterestEnabled = true;
 
     [ObservableProperty]
+    private bool _aiAutoSave = true;
+
+    [ObservableProperty]
+    private string _aiTestStatusText;
+
+    [ObservableProperty]
     private string _aiAdEndpoint;
 
     [ObservableProperty]
