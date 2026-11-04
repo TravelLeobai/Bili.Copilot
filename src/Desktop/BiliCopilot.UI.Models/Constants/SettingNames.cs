@@ -109,6 +109,11 @@ public enum SettingNames
     CdnFilterPort,
     CdnRewriteAkamai,
     CdnStallSwitch,
+
+    /// <summary>
+    /// 多线程分块加速（本地代理 + 多节点并行下载）.
+    /// </summary>
+    CdnMultiThreadEnabled,
     CdnBlockP2P,
     CdnRankingCache,
     CdnPoolCache,

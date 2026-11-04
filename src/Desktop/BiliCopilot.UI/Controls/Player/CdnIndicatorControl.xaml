@@ -43,6 +43,11 @@
                     MinWidth="180"
                     Text="换一个节点"
                     Click="OnSwitchClick" />
+                <ToggleMenuFlyoutItem
+                    x:Name="MultiThreadItem"
+                    MinWidth="180"
+                    Text="多线程分块加速"
+                    Click="OnMultiThreadClick" />
                 <MenuFlyoutSeparator />
                 <MenuFlyoutItem
                     x:Name="InfoItem"

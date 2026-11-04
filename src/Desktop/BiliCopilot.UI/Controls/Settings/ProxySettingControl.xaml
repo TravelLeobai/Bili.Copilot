@@ -63,6 +63,10 @@
                 <ToggleSwitch IsOn="{x:Bind ViewModel.CdnStallSwitch, Mode=TwoWay}" />
             </base:SettingsCard>
 
+            <base:SettingsCard Description="把视频按 1MB 分块，从多个 CDN 节点并行下载再交给播放器；开关和状态在播放界面右上角 CDN 按钮里" Header="多线程分块加速">
+                <ToggleSwitch IsOn="{x:Bind ViewModel.CdnMultiThreadEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
+
             <base:SettingsCard Description="替换后使用的 CDN 节点，可先测试延迟再选" Header="替换 CDN 服务器">
                 <ComboBox
                     x:Name="CdnServerComboBox"

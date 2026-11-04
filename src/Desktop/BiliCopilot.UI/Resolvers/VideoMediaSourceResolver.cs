@@ -254,7 +254,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                     : CdnAccelerator.Rewrite(proxied.Value.Audio, true);
 
                 SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, selectedFormat.Quality);
-                return (proxiedVideo, proxiedAudio);
+                return (CdnAccelerator.SpeedUp(proxiedVideo, userAgent), CdnAccelerator.SpeedUp(proxiedAudio, userAgent));
             }
         }
 
@@ -266,7 +266,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             : await PlayUrlOptimizer.PickPlayableUrlAsync(aSeg.BaseUrl, aSeg.BackupUrls, userAgent, referer, logger);
 
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, selectedFormat.Quality);
-        return (videoUrl, audioUrl);
+        return (CdnAccelerator.SpeedUp(videoUrl, userAgent), CdnAccelerator.SpeedUp(audioUrl, userAgent));
     }
 
     private static string ExtractCookie(string cookie, string name)

@@ -104,6 +104,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CdnFilterPort = SettingsToolkit.ReadLocalSetting(SettingNames.CdnFilterPort, true);
         CdnRewriteAkamai = SettingsToolkit.ReadLocalSetting(SettingNames.CdnRewriteAkamai, false);
         CdnStallSwitch = SettingsToolkit.ReadLocalSetting(SettingNames.CdnStallSwitch, true);
+        CdnMultiThreadEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.CdnMultiThreadEnabled, false);
         CdnReplaceModeCollection = Enum.GetValues<CdnReplaceMode>().ToList();
         CdnServerSelected = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, PlayUrlOptimizer.DefaultCdnHost);
         RebuildCdnServerList();
@@ -563,6 +564,17 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnCdnStallSwitchChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.CdnStallSwitch, value);
+
+    partial void OnCdnMultiThreadEnabledChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.CdnMultiThreadEnabled, value);
+        if (value)
+        {
+            _ = Services.CdnStreamProxy.EnsureStarted();
+        }
+
+        Services.CdnStatusBus.Report(value ? "多线程分块加速已开启" : "多线程分块加速已关闭");
+    }
 
     partial void OnCdnServerSelectedChanged(string value)
     {

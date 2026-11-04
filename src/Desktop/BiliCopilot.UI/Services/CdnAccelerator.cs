@@ -163,6 +163,34 @@ internal static class CdnAccelerator
     }
 
     /// <summary>
+    /// 多线程分块加速：开启时把播放地址换成走本机代理.
+    /// </summary>
+    /// <param name="url">原始播放地址.</param>
+    /// <param name="userAgent">请求用的 UA.</param>
+    /// <returns>可直接播放的地址.</returns>
+    public static string SpeedUp(string url, string userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(url)
+            || !SettingsToolkit.ReadLocalSetting(SettingNames.CdnMultiThreadEnabled, false))
+        {
+            return url;
+        }
+
+        var proxied = CdnStreamProxy.Wrap(url, userAgent);
+        if (proxied == url)
+        {
+            return url;
+        }
+
+        var hosts = GetRankedHosts();
+        var preview = hosts.Count > 0
+            ? string.Join("/", hosts.Take(3))
+            : "默认节点";
+        CdnStatusBus.Report($"多线程加速已接管：3 路并行下载，节点 {preview}");
+        return proxied;
+    }
+
+    /// <summary>
     /// 按当前设置改写播放链接.
     /// </summary>
     /// <param name="url">原始播放地址.</param>
@@ -196,6 +224,34 @@ internal static class CdnAccelerator
 
         var replaced = ReplaceHost(url, targetHost);
         return replaced ?? url;
+    }
+
+    /// <summary>
+    /// 把链接里的 CDN 主机换成指定主机（不管当前开关）.
+    /// </summary>
+    /// <param name="url">原始地址.</param>
+    /// <param name="host">目标主机.</param>
+    /// <returns>替换后的地址；失败返回空串.</returns>
+    public static string SwapHost(string url, string host)
+    {
+        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(host))
+        {
+            return string.Empty;
+        }
+
+        var replaced = ReplaceHost(url, host);
+        if (string.IsNullOrEmpty(replaced) || replaced == url)
+        {
+            return string.Empty;
+        }
+
+        var display = Uri.TryCreate(replaced, UriKind.Absolute, out var uri) ? uri.Host : host;
+        if (!string.Equals(display, host, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return replaced;
     }
 
     /// <summary>
@@ -307,6 +363,31 @@ internal static class CdnAccelerator
         }
         catch (Exception)
         {
+            // 样本链接不可用时退化成 TCP 握手测速：节点活着就能给个大致延迟.
+            return await ProbeTcpLatencyAsync(host).ConfigureAwait(false);
+        }
+    }
+
+
+    /// <summary>
+    /// 直接连 443，粗略衡量节点可达性与延迟.
+    /// </summary>
+    /// <param name="host">CDN 主机.</param>
+    /// <returns>毫秒；失败 -1.</returns>
+    private static async Task<int> ProbeTcpLatencyAsync(string host)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+            await client.ConnectAsync(host, 443, timeout.Token).ConfigureAwait(false);
+            stopwatch.Stop();
+            return client.Connected ? (int)stopwatch.ElapsedMilliseconds : -1;
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Debug(ex, "CDN 节点 TCP 测速失败：{Host}", host);
             return -1;
         }
     }
