@@ -27,7 +27,8 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
     private ScrollView? _interactionScrollView;
     private readonly PlayerViewModel _viewModel;
     private int _version;
-
+    private SelectorBar? _tabBar;
+    private bool _suppressTabChange;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveSidePanel"/> class.
@@ -155,39 +156,85 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             HStack(8, qualityHost)).Padding(12, 10, 12, 8);
     }
 
+    /// <summary>
+    /// 互动 / 榜单 / 大航海，用 SelectorBar，和动态页顶栏的「视频 / 综合」同一种样式.
+    /// </summary>
     private Element BuildTabs(PlayerViewModel vm)
     {
-        var titles = new[] { "互动", "榜单", "大航海" };
-        var children = new List<Element>();
-        for (var i = 0; i < titles.Length; i++)
-        {
-            var index = i;
-            children.Add(new XamlHostElement(
-                () =>
-                {
-                    var button = new ToggleButton
-                    {
-                        Content = titles[index],
-                        Padding = new Thickness(10, 4, 10, 4),
-                        IsChecked = vm.LivePanelTab == index,
-                    };
-                    button.Click += (_, _) => vm.SwitchLiveTabCommand.Execute(index);
-                    return button;
-                },
-                element => ((ToggleButton)element).IsChecked = vm.LivePanelTab == index)
-                .WithKey("live-tab-" + index));
-        }
+        var selectorHost = new XamlHostElement(
+            () => CreateTabSelector(vm),
+            _ => SyncTabSelection(vm))
+            .VAlign(VerticalAlignment.Center);
 
-        children.Add(new XamlHostElement(
+        var refreshHost = new XamlHostElement(
             () =>
             {
-                var button = new Button { Content = "刷新", Padding = new Thickness(8, 4, 8, 4) };
+                var button = new Button
+                {
+                    Padding = new Thickness(8, 4, 8, 4),
+                    Content = new FluentIcons.WinUI.SymbolIcon
+                    {
+                        Symbol = FluentIcons.Common.Symbol.ArrowClockwise,
+                        FontSize = 12,
+                    },
+                };
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, "刷新");
                 button.Click += (_, _) => vm.RefreshLiveInfoCommand.Execute(default);
                 return button;
             },
-            _ => { }).WithKey("live-refresh"));
+            _ => { }).WithKey("live-refresh");
 
-        return HStack(6, [.. children]).Padding(12, 0, 12, 8);
+        return HStack(8, selectorHost, refreshHost)
+            .Padding(12, 0, 12, 8);
+    }
+
+    private SelectorBar CreateTabSelector(PlayerViewModel vm)
+    {
+        if (_tabBar is not null)
+        {
+            return _tabBar;
+        }
+
+        var bar = new SelectorBar { VerticalAlignment = VerticalAlignment.Center };
+        foreach (var title in new[] { "互动", "榜单", "大航海" })
+        {
+            bar.Items.Add(new SelectorBarItem { Text = title });
+        }
+
+        bar.SelectionChanged += (sender, _) =>
+        {
+            if (_suppressTabChange || sender is not SelectorBar selector)
+            {
+                return;
+            }
+
+            var index = selector.Items.IndexOf(selector.SelectedItem);
+            if (index >= 0)
+            {
+                vm.SwitchLiveTabCommand.Execute(index);
+            }
+        };
+
+        _tabBar = bar;
+        return bar;
+    }
+
+    private void SyncTabSelection(PlayerViewModel vm)
+    {
+        if (_tabBar is null || !_tabBar.Items.Any())
+        {
+            return;
+        }
+
+        var target = _tabBar.Items[Math.Clamp(vm.LivePanelTab, 0, _tabBar.Items.Count - 1)];
+        if (ReferenceEquals(_tabBar.SelectedItem, target))
+        {
+            return;
+        }
+
+        _suppressTabChange = true;
+        _tabBar.SelectedItem = target;
+        _suppressTabChange = false;
     }
 
     private Element BuildContent(PlayerViewModel vm)
@@ -286,7 +333,16 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             new XamlHostElement(
                 () =>
                 {
-                    var button = new Button { Content = "礼物", Padding = new Thickness(8, 4, 8, 4) };
+                    var button = new Button
+                    {
+                        Padding = new Thickness(8, 4, 8, 4),
+                        Content = new FluentIcons.WinUI.SymbolIcon
+                        {
+                            Symbol = FluentIcons.Common.Symbol.Gift,
+                            FontSize = 14,
+                        },
+                    };
+                    Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, "我的礼物");
                     button.Click += (_, _) => ShowGiftFlyout(button);
                     return button;
                 },
