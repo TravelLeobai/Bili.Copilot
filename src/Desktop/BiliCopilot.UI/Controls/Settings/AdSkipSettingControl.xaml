@@ -22,8 +22,9 @@
             </base:SettingsCard>
             <base:SettingsCard Description="SponsorBlock 数据源，可换 B 站专用镜像或自建实例" Header="片段数据服务器">
                 <StackPanel Orientation="Horizontal" Spacing="10">
-                    <ComboBox MinWidth="200" SelectedIndex="{x:Bind ViewModel.SponsorServerIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="官方 sponsor.ajay.app" />
+                    <ComboBox MinWidth="240" SelectedIndex="{x:Bind ViewModel.SponsorServerIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="自动（自建镜像 → bsbsb → 官方）" />
+                        <ComboBoxItem Content="赞助官方 sponsor.ajay.app" />
                         <ComboBoxItem Content="B站镜像 bsbsb.top" />
                         <ComboBoxItem Content="自定义" />
                     </ComboBox>

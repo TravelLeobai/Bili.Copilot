@@ -3,6 +3,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Buffers;
 using System.Text.Json;
 using BiliCopilot.UI.Models.Constants;
 using Microsoft.Extensions.Logging;
@@ -50,6 +51,12 @@ public static class AiAdAnalyzer
         => SettingsToolkit.ReadLocalSetting(SettingNames.AudioAdEnabled, false);
 
     /// <summary>
+    /// 是否配置了阿里云 DashScope Key（没配就跳过音频识别，别发无效请求）.
+    /// </summary>
+    public static bool HasDashScopeKey
+        => !string.IsNullOrWhiteSpace(SettingsToolkit.ReadLocalSetting(SettingNames.DashScopeKey, string.Empty));
+
+    /// <summary>
     /// 用字幕做广告识别.
     /// </summary>
     /// <param name="subtitleText">字幕文本（含时间轴）.</param>
@@ -67,9 +74,14 @@ public static class AiAdAnalyzer
         var prompt = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdPrompt, DefaultPrompt);
         if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(key))
         {
-            logger?.LogDebug("AI 广告识别已启用，但未配置接口或密钥");
+            logger?.LogWarning(
+                "AI 广告识别已启用，但没配接口或密钥（endpoint={HasEndpoint} key={HasKey}）",
+                !string.IsNullOrWhiteSpace(endpoint),
+                !string.IsNullOrWhiteSpace(key));
             return Array.Empty<SponsorSegment>();
         }
+
+        logger?.LogInformation("AI 广告识别请求：{Endpoint} 模型 {Model}", endpoint, model);
 
         // 字幕过长时截断，避免超出上下文.
         const int maxLength = 48000;
@@ -80,16 +92,9 @@ public static class AiAdAnalyzer
 
         try
         {
-            var payload = new
-            {
-                model,
-                temperature = 0.2,
-                messages = new object[]
-                {
-                    new { role = "system", content = prompt },
-                    new { role = "user", content = subtitleText },
-                },
-            };
+            // 注意：裁剪后的程序里 JsonSerializer 禁止反射序列化（匿名对象会直接抛异常），
+            // 这里用 JsonSerializer 的 source-gen 不可行，手工拼 JSON 最稳.
+            var payloadJson = BuildChatPayload(model, 0.2, prompt, subtitleText);
 
             var url = endpoint.TrimEnd('/');
             if (!url.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
@@ -99,7 +104,7 @@ public static class AiAdAnalyzer
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-            request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+            request.Content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
             using var response = await Client.SendAsync(request);
             var content = await response.Content.ReadAsStringAsync();
@@ -281,17 +286,12 @@ public static class AiAdAnalyzer
 
     private static async Task<string?> TranscribeAsync(string fileUrl, string apiKey, string model, ILogger? logger)
     {
-        var submitPayload = new
-        {
-            model,
-            input = new { file_urls = new[] { fileUrl } },
-            parameters = new { channel_id = new[] { 0 }, language = "zh" },
-        };
+        var submitPayload = BuildTranscriptionPayload(model, fileUrl);
 
         using var submitRequest = new HttpRequestMessage(HttpMethod.Post, $"{DashScopeBase}/api/v1/services/audio/asr/transcription");
         submitRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         submitRequest.Headers.TryAddWithoutValidation("X-DashScope-Async", "enable");
-        submitRequest.Content = new StringContent(JsonSerializer.Serialize(submitPayload), Encoding.UTF8, "application/json");
+        submitRequest.Content = new StringContent(submitPayload, Encoding.UTF8, "application/json");
 
         using var submitResponse = await Client.SendAsync(submitRequest);
         var submitBody = await submitResponse.Content.ReadAsStringAsync();
@@ -448,5 +448,58 @@ public static class AiAdAnalyzer
     {
         var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All };
         return new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
+    }
+    /// <summary>
+    /// 手工拼 chat/completions 请求体（避开裁剪程序的反射序列化限制）.
+    /// </summary>
+    private static string BuildChatPayload(string model, double temperature, string systemPrompt, string userContent)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("model", model);
+            writer.WriteNumber("temperature", temperature);
+            writer.WriteStartArray("messages");
+            writer.WriteStartObject();
+            writer.WriteString("role", "system");
+            writer.WriteString("content", systemPrompt);
+            writer.WriteEndObject();
+            writer.WriteStartObject();
+            writer.WriteString("role", "user");
+            writer.WriteString("content", userContent);
+            writer.WriteEndObject();
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    /// <summary>
+    /// 手工拼阿里云语音转写任务提交体.
+    /// </summary>
+    private static string BuildTranscriptionPayload(string model, string fileUrl)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("model", model);
+            writer.WriteStartObject("input");
+            writer.WriteStartArray("file_urls");
+            writer.WriteStringValue(fileUrl);
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+            writer.WriteStartObject("parameters");
+            writer.WriteStartArray("channel_id");
+            writer.WriteNumberValue(0);
+            writer.WriteEndArray();
+            writer.WriteString("language", "zh");
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }

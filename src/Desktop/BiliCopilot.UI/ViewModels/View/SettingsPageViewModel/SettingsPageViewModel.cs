@@ -593,28 +593,29 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     }
 
     private static int ResolveSponsorServerIndex(string server)
-        => server switch
+        => (server ?? string.Empty).TrimEnd('/') switch
         {
-            "https://bsbsb.top/api" => 1,
-            "https://sponsor.ajay.app" or "" => 0,
-            _ => 2,
+            "" or SponsorBlockService.FallbackServer => 0,
+            "https://sponsor.ajay.app" => 1,
+            "https://bsbsb.top" or "https://bsbsb.top/api" => 2,
+            _ => 3,
         };
 
     partial void OnSponsorServerIndexChanged(int value)
     {
         var server = value switch
         {
-            0 => "https://sponsor.ajay.app",
-            1 => "https://bsbsb.top/api",
+            0 => SponsorBlockService.DefaultServer,
+            1 => "https://sponsor.ajay.app",
+            2 => "https://bsbsb.top",
             _ => string.IsNullOrWhiteSpace(SponsorServerCustom) ? SponsorBlockService.DefaultServer : SponsorServerCustom,
         };
 
         SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockServer, server);
     }
-
     partial void OnSponsorServerCustomChanged(string value)
     {
-        if (SponsorServerIndex == 2 && !string.IsNullOrWhiteSpace(value))
+        if (SponsorServerIndex == 3 && !string.IsNullOrWhiteSpace(value))
         {
             SettingsToolkit.WriteLocalSetting(SettingNames.SponsorBlockServer, value);
         }

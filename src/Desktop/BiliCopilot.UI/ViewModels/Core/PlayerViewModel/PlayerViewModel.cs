@@ -413,20 +413,41 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        var videoId = snapshot.Type == BiliMediaType.Video ? snapshot.Video?.Identifier.Id : null;
-        if (string.IsNullOrEmpty(videoId) || _isSponsorLoading)
+        var rawId = snapshot.Type == BiliMediaType.Video ? snapshot.Video?.Identifier.Id : null;
+        if (string.IsNullOrEmpty(rawId) || _isSponsorLoading)
         {
+            return;
+        }
+
+        // 快照里给的是 aid（114929466089407），SponsorBlock 要的是 BV 号，先换一下.
+        var videoId = await SponsorBlockService.ResolveBvidAsync(rawId, logger);
+        if (string.IsNullOrEmpty(videoId))
+        {
+            logger.LogWarning("拿不到 BV 号，空降助手跳过本次查询");
             return;
         }
 
         _isSponsorLoading = true;
         try
         {
+            logger.LogInformation(
+                "空降助手设置：开关={Enabled} 手动={Manual} 最短={Min:F0}s 服务器={Server} AI={Ai} 云端={Cloud}",
+                SettingsToolkit.ReadLocalSetting(SettingNames.EnableSponsorBlock, true),
+                SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false),
+                SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockMinDuration, 3d),
+                SponsorBlockService.CurrentServer,
+                AiAdAnalyzer.IsEnabled,
+                AdCloudService.IsEnabled);
+
             // 三路来源合并：SponsorBlock（可换镜像）、云端广告库、AI 识别.
             var segments = new List<SponsorSegment>();
-            var sponsorSegments = await SponsorBlockService.GetSegmentsAsync(videoId);
+            var sponsorSegments = await SponsorBlockService.GetSegmentsAsync(videoId, logger);
             segments.AddRange(sponsorSegments);
-            logger.LogInformation("片段来源 sponsorblock：{Count} 段（服务器 {Server}）", sponsorSegments.Count, SponsorBlockService.CurrentServer);
+            logger.LogInformation("片段来源 sponsorblock：{Count} 段（视频 {VideoId}，服务器 {Server}）", sponsorSegments.Count, videoId, SponsorBlockService.CurrentServer);
+            foreach (var item in sponsorSegments)
+            {
+                logger.LogInformation("  片段 {Start:F1}-{End:F1}s {Category}({Action})", item.Start, item.End, item.CategoryName, item.ActionType);
+            }
 
             if (AdCloudService.IsEnabled)
             {
@@ -471,18 +492,32 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private async Task<IReadOnlyList<SponsorSegment>> AnalyzeAdsWithAiAsync(string videoId, MediaSnapshot snapshot)
     {
-        var subtitleText = await GetSubtitleTextAsync(snapshot);
+        // 自检：LocalState 下放 adskip-ai-test.txt，内容当作字幕直接喂给 AI，用来验证识别流程.
+        var subtitleText = ReadAiTestSubtitle() ?? await GetSubtitleTextAsync(snapshot);
         if (!string.IsNullOrWhiteSpace(subtitleText))
         {
+            logger.LogInformation("字幕识别素材：{Length} 字", subtitleText.Length);
             var result = await AiAdAnalyzer.AnalyzeSubtitleAsync(subtitleText, logger);
+            logger.LogInformation("AI 字幕识别结果：{Count} 段", result.Count);
             if (result.Count > 0)
             {
                 return result;
             }
         }
+        else
+        {
+            logger.LogInformation("没有可用字幕，准备走音频识别");
+        }
 
         if (!AiAdAnalyzer.IsAudioEnabled || _sourceResolver is null)
         {
+            logger.LogInformation("音频识别未启用或没有播放源，跳过");
+            return Array.Empty<SponsorSegment>();
+        }
+
+        if (!AiAdAnalyzer.HasDashScopeKey)
+        {
+            logger.LogInformation("未配置阿里云 DashScope Key，音频识别跳过（无字幕时 AI 跳过不可用）");
             return Array.Empty<SponsorSegment>();
         }
 
@@ -492,6 +527,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             var audioUrl = source?.Options?.AudioTracks?.FirstOrDefault();
             if (string.IsNullOrEmpty(audioUrl))
             {
+                logger.LogInformation("没有音轨地址，音频识别跳过");
                 return Array.Empty<SponsorSegment>();
             }
 
@@ -520,14 +556,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             var metas = await service.GetSubtitleMetasAsync(aid, cid);
             if (metas is null || metas.Count == 0)
             {
-                return null;
+                logger.LogInformation("BiliKernel 没有字幕元数据，改走 player/v2 接口");
+                return await GetSubtitleTextFromApiAsync(aid, cid);
             }
 
             var meta = metas.FirstOrDefault(p => !p.IsAI) ?? metas[0];
             var url = meta.Url?.ToString();
             if (string.IsNullOrEmpty(url))
             {
-                return null;
+                logger.LogInformation("字幕元数据没有地址，改走 player/v2 接口");
+                return await GetSubtitleTextFromApiAsync(aid, cid);
             }
 
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
@@ -560,6 +598,109 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             logger.LogDebug(ex, "获取字幕文本失败");
             return null;
         }
+    }
+
+    /// <summary>
+    /// 备用字幕通道：直接打 B 站 player/v2 接口拿字幕地址（对齐 bilijump-ai 的做法）.
+    /// BiliKernel 的 ISubtitleService 拿不到时用这条路.
+    /// </summary>
+    private async Task<string?> GetSubtitleTextFromApiAsync(string aid, string cid)
+    {
+        try
+        {
+            var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", "https://www.bilibili.com/");
+            if (!string.IsNullOrEmpty(cookie))
+            {
+                client.DefaultRequestHeaders.TryAddWithoutValidation("Cookie", cookie);
+            }
+
+            var metaJson = await client.GetStringAsync($"https://api.bilibili.com/x/player/v2?aid={aid}&cid={cid}");
+            using var metaDocument = System.Text.Json.JsonDocument.Parse(metaJson);
+            if (!metaDocument.RootElement.TryGetProperty("data", out var data) ||
+                !data.TryGetProperty("subtitle", out var subtitle) ||
+                !subtitle.TryGetProperty("subtitles", out var subtitles) ||
+                subtitles.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var candidates = new List<(string Url, double Weight)>();
+            foreach (var item in subtitles.EnumerateArray())
+            {
+                var url = item.TryGetProperty("subtitle_url", out var urlNode) ? urlNode.GetString() : null;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    continue;
+                }
+
+                if (url.StartsWith("//", StringComparison.Ordinal))
+                {
+                    url = "https:" + url;
+                }
+
+                var weight = item.TryGetProperty("weight", out var weightNode) && weightNode.TryGetDouble(out var w) ? w : 0;
+                candidates.Add((Url: url, Weight: weight));
+            }
+
+            var content = await FetchSubtitleBodyAsync(client, candidates);
+            if (content is null)
+            {
+                logger.LogInformation("字幕接口有 {Count} 条字幕地址，但都没取到内容", candidates.Count);
+                return null;
+            }
+
+            return content;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "备用字幕接口失败");
+            return null;
+        }
+    }
+
+    private async Task<string?> FetchSubtitleBodyAsync(HttpClient client, IReadOnlyList<(string Url, double Weight)> candidates)
+    {
+        foreach (var candidate in candidates.OrderByDescending(p => p.Weight))
+        {
+            try
+            {
+                var json = await client.GetStringAsync(candidate.Url);
+                using var document = System.Text.Json.JsonDocument.Parse(json);
+                if (!document.RootElement.TryGetProperty("body", out var body) || body.ValueKind != System.Text.Json.JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                var builder = new System.Text.StringBuilder();
+                foreach (var item in body.EnumerateArray())
+                {
+                    var from = item.TryGetProperty("from", out var fromNode) ? fromNode.GetDouble() : 0;
+                    var to = item.TryGetProperty("to", out var toNode) ? toNode.GetDouble() : 0;
+                    var text = item.TryGetProperty("content", out var textNode) ? textNode.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        continue;
+                    }
+
+                    builder.AppendLine($"{from:F2} --> {to:F2}");
+                    builder.AppendLine(text);
+                }
+
+                if (builder.Length > 0)
+                {
+                    return builder.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "下载字幕失败：{Url}", candidate.Url);
+            }
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<SponsorSegment> MergeSegments(IEnumerable<SponsorSegment> segments)
@@ -609,6 +750,50 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 
+    /// <summary>
+    /// 自检开关：LocalState 下放 adskip-manual.txt，就强制走手动模式（只弹提示不自动跳），
+    /// 用来验证药丸提示与点击跳转.
+    /// </summary>
+    private static bool IsManualAdSkipTestEnabled()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path,
+                "adskip-manual.txt");
+            return System.IO.File.Exists(path);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 自检：把 adskip-ai-test.txt 的内容当作字幕，验证 AI 识别链路.
+    /// </summary>
+    private string? ReadAiTestSubtitle()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path,
+                "adskip-ai-test.txt");
+            if (!System.IO.File.Exists(path))
+            {
+                return null;
+            }
+
+            var text = System.IO.File.ReadAllText(path);
+            logger.LogInformation("AI 自检字幕已加载：{Length} 字", text.Length);
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private void CheckSponsorBlock()
     {
         if (Player is null || Player.Duration <= 0)
@@ -651,14 +836,25 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        var manual = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false);
+        var manual = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false) || IsManualAdSkipTestEnabled();
         var position = Player.Position;
         var current = _sponsorSegments.FirstOrDefault(p => position >= p.Start && position < p.End - 0.3);
         if (current is null)
         {
+            RestoreSponsoredMute();
             HideSkipPrompt();
             return;
         }
+
+        // mute 类片段：不跳，只在区间内把音量压掉（SponsorBlock 的 actionType=mute）.
+        if (string.Equals(current.ActionType, "mute", StringComparison.OrdinalIgnoreCase))
+        {
+            MuteForSponsoredSegment();
+            HideSkipPrompt();
+            return;
+        }
+
+        RestoreSponsoredMute();
 
         if (manual)
         {
@@ -671,8 +867,39 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             _lastSponsorSkipPosition = current.End;
             HideSkipPrompt();
+            logger.LogInformation(
+                "自动跳过{Category}：{Start:F1}s -> {End:F1}s（跳过 {Duration:F1}s）",
+                current.CategoryName,
+                current.Start,
+                current.End,
+                current.Duration);
             _ = ChangePositionAsync(current.End);
         }
+    }
+
+    private void MuteForSponsoredSegment()
+    {
+        if (_sponsorMuteApplied)
+        {
+            return;
+        }
+
+        _sponsorMuteApplied = true;
+        _sponsorMuteBackupVolume = Player?.Volume ?? 100;
+        logger.LogInformation("片段要求静音：音量 {Volume} -> 0", _sponsorMuteBackupVolume);
+        _ = ApplyVolumeAsync(0);
+    }
+
+    private void RestoreSponsoredMute()
+    {
+        if (!_sponsorMuteApplied)
+        {
+            return;
+        }
+
+        _sponsorMuteApplied = false;
+        logger.LogInformation("静音片段结束，恢复音量 {Volume}", _sponsorMuteBackupVolume);
+        _ = ApplyVolumeAsync(_sponsorMuteBackupVolume);
     }
 
     private void ShowSkipPrompt(SponsorSegment segment)
@@ -702,9 +929,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        var end = SkipPromptSegment.End;
+        var segment = SkipPromptSegment;
+        var end = segment.End;
         _lastSponsorSkipPosition = end;
         HideSkipPrompt();
+        logger.LogInformation(
+            "手动跳过{Category}：{Start:F1}s -> {End:F1}s（跳过 {Duration:F1}s）",
+            segment.CategoryName,
+            segment.Start,
+            segment.End,
+            segment.Duration);
         await ChangePositionAsync(end);
     }
 }
