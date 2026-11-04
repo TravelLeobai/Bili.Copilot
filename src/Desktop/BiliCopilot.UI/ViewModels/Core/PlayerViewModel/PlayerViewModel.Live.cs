@@ -587,6 +587,7 @@ public sealed partial class PlayerViewModel
         if (emote.IsLocked)
         {
             LiveStatusText = "这个表情还没解锁";
+            logger.LogInformation("表情未解锁，跳过发送：{Unique}", emote.Unique);
             return;
         }
 

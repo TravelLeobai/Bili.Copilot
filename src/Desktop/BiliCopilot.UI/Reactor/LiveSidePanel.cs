@@ -482,7 +482,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
         var avatar = AvatarOrFallback(item.Avatar, item.UserName, 24, 11);
 
-        // 表情弹幕：正文位置直接画表情图，文字留作提示.
+        // 表情弹幕：正文位置直接画表情图，和文字一样靠左，别被拉伸居中.
         Element bodyElement = item.HasEmote && NormalizeEmoteUrl(item.EmoteUrl) is { } emoteUri
             ? new XamlHostElement(
                 () => new Image
@@ -490,9 +490,11 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                     Width = 64,
                     Height = 64,
                     Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
+                    HorizontalAlignment = HorizontalAlignment.Left,
                     Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(emoteUri)),
                 },
                 _ => { })
+                .HAlign(HorizontalAlignment.Left)
                 .Margin(8, 2, 0, 0)
                 .Grid(row: 1, column: 1)
             : TextBlock(body)

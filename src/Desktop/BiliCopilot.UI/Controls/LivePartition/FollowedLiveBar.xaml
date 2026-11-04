@@ -25,13 +25,14 @@
                 </ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="items:LiveItemViewModel">
-                        <ItemContainer
+                        <Button
                             Width="64"
                             Height="70"
                             Padding="0"
                             Background="Transparent"
-                            Style="{StaticResource AppItemContainerStyle}"
-                            Tapped="OnRoomTapped"
+                            BorderThickness="0"
+                            Command="{x:Bind PlayCommand}"
+                            CornerRadius="8"
                             ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
                             <Grid RowSpacing="2">
                                 <Grid.RowDefinitions>
@@ -64,7 +65,7 @@
                                     Text="{x:Bind Author, Mode=OneWay}"
                                     TextTrimming="CharacterEllipsis" />
                             </Grid>
-                        </ItemContainer>
+                        </Button>
                     </DataTemplate>
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>

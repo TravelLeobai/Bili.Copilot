@@ -170,7 +170,12 @@ public static class LiveMessageParser
                     continue;
                 }
 
-                item.EmoteUrl = emoteUrl.StartsWith("//", StringComparison.Ordinal) ? "https:" + emoteUrl : emoteUrl;
+                // 接口给的是 http，WinUI 加载会被拦，统一换成 https.
+                item.EmoteUrl = emoteUrl.StartsWith("//", StringComparison.Ordinal)
+                    ? "https:" + emoteUrl
+                    : emoteUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        ? "https://" + emoteUrl["http://".Length..]
+                        : emoteUrl;
                 break;
             }
         }
