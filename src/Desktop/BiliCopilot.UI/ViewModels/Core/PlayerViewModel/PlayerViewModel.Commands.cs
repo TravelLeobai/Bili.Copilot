@@ -167,12 +167,55 @@ public sealed partial class PlayerViewModel
     /// <returns><see cref="Task"/>.</returns>
     public async Task ChangePositionAsync(double position)
     {
-        if (Player is null || position < 0 || position > Player.Duration || Math.Abs(Player.Position - position) < 2)
+        if (Player is null)
         {
+            logger.LogWarning("跳转失败：播放器还没就绪");
             return;
         }
 
-        await ApplySeekAsync(position);
+        if (position < 0)
+        {
+            logger.LogWarning("跳转被拒：目标时间是负数 {Target:F1}s", position);
+            return;
+        }
+
+        // 片段结束时间常常正好卡在视频时长上，直接拒绝会让整段跳过失效；夹到片尾前 0.3 秒.
+        var duration = Player.Duration;
+        if (duration > 0 && position > duration - 0.3)
+        {
+            var clamped = Math.Max(0, duration - 0.3);
+            logger.LogInformation(
+                "跳转目标 {Target:F1}s 超出或贴住时长 {Duration:F1}s，夹到 {Clamped:F1}s",
+                position,
+                duration,
+                clamped);
+            position = clamped;
+        }
+
+        if (Math.Abs(Player.Position - position) < 2)
+        {
+            logger.LogInformation(
+                "跳转被忽略：目标 {Target:F1}s 与当前位置 {Position:F1}s 差不到 2 秒",
+                position,
+                Player.Position);
+            return;
+        }
+
+        logger.LogInformation(
+            "跳转到 {Target:F1}s（当前位置 {Position:F1}s，时长 {Duration:F1}s，引擎 {Engine}）",
+            position,
+            Player.Position,
+            Player.Duration,
+            IsWebEngine ? "web" : "mpv");
+
+        try
+        {
+            await ApplySeekAsync(position);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "跳转执行失败：目标 {Target:F1}s", position);
+        }
     }
 
     /// <summary>

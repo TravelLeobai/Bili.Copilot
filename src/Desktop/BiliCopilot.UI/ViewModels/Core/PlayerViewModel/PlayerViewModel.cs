@@ -471,7 +471,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 logger.LogInformation("AI 识别未启用，跳过该来源");
             }
 
-            _sponsorSegments = MergeSegments(segments);
+            var testRanges = ReadSegmentRangeTest();
+            _sponsorSegments = testRanges.Count > 0 ? testRanges : MergeSegments(segments);
             logger.LogInformation("跳过片段检查完成：{Count} 段", _sponsorSegments.Count);
             if (_sponsorSegments.Count > 0)
             {
@@ -713,8 +714,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         var merged = new List<SponsorSegment>();
         foreach (var segment in ordered)
         {
-            // 与上一段重叠或几乎相接时合并，避免重复跳过.
-            if (merged.Count > 0 && segment.Start <= merged[^1].End + 0.5)
+            // 只合并「同一分类」的相邻段：赞助广告和三连提醒贴着的时候，
+            // 合到一块会让结束时间顶到片尾，跳转目标超出时长就被拒掉了.
+            if (merged.Count > 0 &&
+                string.Equals(merged[^1].Category, segment.Category, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(merged[^1].Source, segment.Source, StringComparison.OrdinalIgnoreCase) &&
+                segment.Start <= merged[^1].End + 0.5)
             {
                 merged[^1].End = Math.Max(merged[^1].End, segment.End);
                 continue;
@@ -726,6 +731,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 End = segment.End,
                 Category = segment.Category,
                 Source = segment.Source,
+                ActionType = segment.ActionType,
             });
         }
 
@@ -836,7 +842,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        var manual = SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false) || IsManualAdSkipTestEnabled();
+        var manual = (SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false) || IsManualAdSkipTestEnabled()) && !IsForceAutoSkipTestEnabled();
         var position = Player.Position;
         var current = _sponsorSegments.FirstOrDefault(p => position >= p.Start && position < p.End - 0.3);
         if (current is null)
@@ -844,6 +850,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             RestoreSponsoredMute();
             HideSkipPrompt();
             return;
+        }
+
+        if (!manual)
+        {
+            logger.LogInformation("进入待跳过区间：{Category} {Start:F1}-{End:F1}s，当前 {Position:F1}s，时长 {Duration:F1}s", current.CategoryName, current.Start, current.End, position, Player.Duration);
         }
 
         // mute 类片段：不跳，只在区间内把音量压掉（SponsorBlock 的 actionType=mute）.
@@ -863,18 +874,28 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        if (Math.Abs(_lastSponsorSkipPosition - current.End) > 0.5)
+        // 目标夹到片尾前 0.3 秒：有些片段的结束时间正好是视频时长，直接拿去跳会被拒.
+        var target = Math.Min(current.End, Math.Max(0, Player.Duration - 0.3));
+
+        // 同一个目标 3 秒内只尝试一次：跳转没生效（例如缓冲中）时允许重试，
+        // 否则一旦第一次 seek 被吞掉，这段就永远跳不过去.
+        var isSameTarget = Math.Abs(_lastSponsorSkipPosition - target) <= 0.5;
+        if (isSameTarget && DateTime.Now - _lastSponsorSkipTime < TimeSpan.FromSeconds(3))
         {
-            _lastSponsorSkipPosition = current.End;
-            HideSkipPrompt();
-            logger.LogInformation(
-                "自动跳过{Category}：{Start:F1}s -> {End:F1}s（跳过 {Duration:F1}s）",
-                current.CategoryName,
-                current.Start,
-                current.End,
-                current.Duration);
-            _ = ChangePositionAsync(current.End);
+            return;
         }
+
+        _lastSponsorSkipPosition = target;
+        _lastSponsorSkipTime = DateTime.Now;
+        HideSkipPrompt();
+        logger.LogInformation(
+            "自动跳过{Category}：{Start:F1}s -> {End:F1}s（目标 {Target:F1}s，跳过 {Duration:F1}s）",
+            current.CategoryName,
+            current.Start,
+            current.End,
+            target,
+            current.Duration);
+        _ = ChangePositionAsync(target);
     }
 
     private void MuteForSponsoredSegment()
@@ -940,5 +961,68 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             segment.End,
             segment.Duration);
         await ChangePositionAsync(end);
+    }
+    /// <summary>
+    /// 自检：LocalState/adskip-range.txt 每行写成 "开始,结束"（秒），直接当片段表用，
+    /// 用来复现「片段结束时间正好等于视频时长」这类边界情况.
+    /// </summary>
+    private List<SponsorSegment> ReadSegmentRangeTest()
+    {
+        var result = new List<SponsorSegment>();
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path,
+                "adskip-range.txt");
+            if (!System.IO.File.Exists(path))
+            {
+                return result;
+            }
+
+            foreach (var line in System.IO.File.ReadAllLines(path))
+            {
+                var parts = line.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2 ||
+                    !double.TryParse(parts[0], out var start) ||
+                    !double.TryParse(parts[1], out var end) ||
+                    end <= start)
+                {
+                    continue;
+                }
+
+                result.Add(new SponsorSegment
+                {
+                    Start = start,
+                    End = end,
+                    Category = "sponsor",
+                    Source = "test",
+                });
+            }
+
+            logger.LogInformation("区间自检：载入 {Count} 段（{Ranges}）", result.Count, string.Join(" / ", result.Select(p => $"{p.Start:F0}-{p.End:F0}")));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "读取区间自检文件失败");
+        }
+
+        return result;
+    }
+    /// <summary>
+    /// 自检：LocalState/adskip-auto.txt 存在时强制走自动跳过（覆盖设置里的手动模式）.
+    /// </summary>
+    private static bool IsForceAutoSkipTestEnabled()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path,
+                "adskip-auto.txt");
+            return System.IO.File.Exists(path);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

@@ -48,6 +48,7 @@ public sealed partial class PlayerViewModel
     private bool _isBroken;
     private IReadOnlyList<SponsorSegment> _sponsorSegments = Array.Empty<SponsorSegment>();
     private double _lastSponsorSkipPosition = -1;
+    private DateTime _lastSponsorSkipTime = DateTime.MinValue;
     private bool _sponsorMuteApplied;
     private double _sponsorMuteBackupVolume = 100;
     private bool _isSponsorLoading;
