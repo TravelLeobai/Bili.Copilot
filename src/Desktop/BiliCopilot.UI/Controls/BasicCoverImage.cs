@@ -18,7 +18,9 @@ public sealed partial class BasicCoverImage : ImageExBase
     /// </summary>
     public BasicCoverImage()
     {
-        // Source 或解码宽度变化时把地址补成服务端缩略图：列表只下缩略图.
+        // Source 或解码宽度变化时把地址补成服务端缩略图。
+        // 注意：B 站接口返回的封面大多自带 @672w_378h_1c 这类参数，
+        // 这一步只对没有参数、且属于图床域名的地址做兜底。
         RegisterPropertyChangedCallback(SourceProperty, (_, _) => NormalizeSource());
         RegisterPropertyChangedCallback(DecodeWidthProperty, (_, _) => NormalizeSource());
     }
@@ -70,7 +72,7 @@ public sealed partial class BasicCoverImage : ImageExBase
     }
 
     /// <summary>
-    /// 把 Source 换成带服务端缩略参数的地址；不支持或已在缩略图上时保持原样.
+    /// 把 Source 换成带服务端缩略参数的地址；不支持或已有参数时保持原样.
     /// </summary>
     private void NormalizeSource()
     {
@@ -86,7 +88,7 @@ public sealed partial class BasicCoverImage : ImageExBase
         }
 
         var thumbnail = ImageUrlToolkit.BuildThumbnailSource(current, DecodeWidth);
-        if (thumbnail is not Uri thumbUri || Equals(thumbUri, current))
+        if (thumbnail is null || Equals(thumbnail, current))
         {
             return;
         }
@@ -94,7 +96,7 @@ public sealed partial class BasicCoverImage : ImageExBase
         _isNormalizingSource = true;
         try
         {
-            Source = thumbUri;
+            SetValue(SourceProperty, thumbnail);
         }
         finally
         {
