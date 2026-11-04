@@ -127,7 +127,7 @@ internal static class AiEndpointTester
             var content = ReadReply(body);
             return string.IsNullOrWhiteSpace(content)
                 ? (false, "模型返回内容为空")
-                : (true, $"模型可用（{watch.ElapsedMilliseconds} ms）：{Shorten(content, 60)}");
+                : (true, $"模型可用（{watch.ElapsedMilliseconds} ms）：{Shorten(content, 48)}");
         }
         catch (Exception ex)
         {

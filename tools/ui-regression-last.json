@@ -1,0 +1,132 @@
+[
+  {
+    "Test": "应用启动",
+    "Status": "PASS",
+    "Detail": "窗口 1866x1050，日志 log-2026-11-04.txt"
+  },
+  {
+    "Test": "设置·AI 接口地址回填",
+    "Status": "PASS",
+    "Detail": "读到 https://api.deepseek.com/v1"
+  },
+  {
+    "Test": "设置·AI 设置",
+    "Status": "PASS",
+    "Detail": "卡片/按钮存在"
+  },
+  {
+    "Test": "设置·自动保存输入内容",
+    "Status": "PASS",
+    "Detail": "卡片/按钮存在"
+  },
+  {
+    "Test": "设置·配置状态",
+    "Status": "PASS",
+    "Detail": "卡片/按钮存在"
+  },
+  {
+    "Test": "设置·测试接口",
+    "Status": "PASS",
+    "Detail": "卡片/按钮存在"
+  },
+  {
+    "Test": "设置·测试模型",
+    "Status": "PASS",
+    "Detail": "卡片/按钮存在"
+  },
+  {
+    "Test": "设置·测试模型结果",
+    "Status": "PASS",
+    "Detail": "模型正常：模型可用（764 ms）：The user wants only two characters: from the con…"
+  },
+  {
+    "Test": "设置·CDN 节点池",
+    "Status": "PASS",
+    "Detail": "卡片存在"
+  },
+  {
+    "Test": "设置·CDN 节点池状态",
+    "Status": "PASS",
+    "Detail": "48 个节点 · 上次同步 11-04 05:31"
+  },
+  {
+    "Test": "动态·已看过栏",
+    "Status": "PASS",
+    "Detail": "有「观看超过 1 分钟」说明"
+  },
+  {
+    "Test": "动态·观看兴趣分析",
+    "Status": "PASS",
+    "Detail": "有 AI 分析块"
+  },
+  {
+    "Test": "历史记录页",
+    "Status": "PASS",
+    "Detail": "顶栏 y=140"
+  },
+  {
+    "Test": "稍后再看页",
+    "Status": "PASS",
+    "Detail": "顶栏 y=45"
+  },
+  {
+    "Test": "收藏页",
+    "Status": "PASS",
+    "Detail": "已进入收藏相关界面"
+  },
+  {
+    "Test": "播放器打开",
+    "Status": "PASS",
+    "Detail": "窗口 "
+  },
+  {
+    "Test": "播放器·CDN 节点显示",
+    "Status": "PASS",
+    "Detail": "cn-tj-cm-02-01"
+  },
+  {
+    "Test": "播放器·空降按钮",
+    "Status": "PASS",
+    "Detail": "空降·提示"
+  },
+  {
+    "Test": "播放器·AI 跳过按钮",
+    "Status": "PASS",
+    "Detail": "AI 跳过"
+  },
+  {
+    "Test": "播放器·侧栏分区",
+    "Status": "WARN",
+    "Detail": "侧栏默认收起，需要手动展开后再看"
+  },
+  {
+    "Test": "日志·播放增强恢复",
+    "Status": "PASS",
+    "Detail": "2026-11-04 11:45:08.762 +08:00 [INF] 恢复播放增强：Anime4K=\"None\" ArtCNN=\"None\" NNEDI3=\"Basic\" RAVU=\"None\" VSR=\"x2_0\""
+  },
+  {
+    "Test": "日志·CDN 优选完成",
+    "Status": "PASS",
+    "Detail": "2026-11-04 11:37:23.787 +08:00 [INF] CDN 优选完成：cn-tj-cm-02-01.bilivideo.com > upos-sz-mirrorhw.bilivideo.com > "
+  },
+  {
+    "Test": "日志·直播连接",
+    "Status": "WARN",
+    "Detail": "本次运行没有这条日志"
+  },
+  {
+    "Test": "日志·CDN 节点池同步",
+    "Status": "WARN",
+    "Detail": "本次运行没有这条日志"
+  },
+  {
+    "Test": "日志·兴趣分析",
+    "Status": "PASS",
+    "Detail": "2026-11-04 11:43:05.327 +08:00 [INF] 观看兴趣分析完成：116 字"
+  },
+  {
+    "Test": "日志·错误条目",
+    "Status": "WARN",
+    "Detail": "5 条 ERR，最新：2026-11-04 11:30:02.936 +08:00 [ERR] 获取弹幕分片失败： 35"
+  }
+]
