@@ -22,6 +22,8 @@ public sealed partial class PlayerViewModel
     [ObservableProperty]
     private bool _isLiveBehind;
 
+    private bool _liveBehindSticky;
+
     /// <summary>
     /// 当前进度在可播放窗口里的位置，1 = 贴合最新.
     /// </summary>
@@ -47,18 +49,26 @@ public sealed partial class PlayerViewModel
 
         if (duration <= 1)
         {
-            // 拿不到滑动窗口长度时只能说明是直播，不给拖动.
+            // 拿不到滑动窗口长度（切源、布局重建的那一瞬间）时保留上一次的「落后」状态，
+            // 否则「回到最新」按钮会跟着闪一下没掉.
             LiveLatencySeconds = 0;
             LiveEdgeRatio = 1;
-            IsLiveBehind = false;
-            LiveLatencyText = "直播中";
+            if (!_liveBehindSticky)
+            {
+                LiveLatencyText = "直播中";
+            }
+
             return;
         }
 
         var latency = Math.Max(0, duration - position);
         LiveLatencySeconds = latency;
         LiveEdgeRatio = Math.Clamp(position / duration, 0, 1);
-        IsLiveBehind = latency > 8;
+
+        // 带滞回：落后 3 秒就亮出来，回落到 1.5 秒内才收掉，避免在阈值附近来回闪.
+        _liveBehindSticky = latency >= 3
+            || (_liveBehindSticky && latency >= 1.5);
+        IsLiveBehind = _liveBehindSticky;
         LiveLatencyText = latency switch
         {
             < 3 => "实时",
@@ -152,4 +162,11 @@ public sealed partial class PlayerViewModel
     public Thickness LivePanelInsetThickness => new(0, 0, _livePanelInset, 0);
 
     private double _livePanelInset;
+    /// <summary>
+    /// 悬浮的「回到最新」：控制栏自动隐藏时也能点，直播并落后时才出现.
+    /// </summary>
+    public bool IsCatchUpButtonVisible => IsLive && IsLiveBehind && !IsControlsVisible;
+
+    partial void OnIsLiveBehindChanged(bool value)
+        => OnPropertyChanged(nameof(IsCatchUpButtonVisible));
 }
