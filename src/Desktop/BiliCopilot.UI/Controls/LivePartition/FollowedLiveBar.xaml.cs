@@ -1,13 +1,15 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.ViewModels.Items;
 using BiliCopilot.UI.ViewModels.View;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace BiliCopilot.UI.Controls.LivePartition;
 
 /// <summary>
-/// 直播页顶部的「已关注且正在直播的 UP 主」横条.
-/// 点击头像直接进对应直播间.
+/// 直播页顶部的「已关注且正在直播的 UP 主」横条，样式与动态页顶部关注条一致.
 /// </summary>
 public sealed partial class FollowedLiveBar : UserControl
 {
@@ -19,7 +21,7 @@ public sealed partial class FollowedLiveBar : UserControl
     public FollowedLiveBar() => InitializeComponent();
 
     /// <summary>
-    /// 页面视图模型，赋值后自动接管关注直播间集合.
+    /// 页面视图模型，赋值后接管关注直播间集合.
     /// </summary>
     public LivePartitionPageViewModel? ViewModel
     {
@@ -33,6 +35,14 @@ public sealed partial class FollowedLiveBar : UserControl
 
             _viewModel = value;
             RoomRepeater.ItemsSource = value?.FollowRooms;
+        }
+    }
+
+    private void OnRoomTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is LiveItemViewModel room)
+        {
+            room.PlayCommand.Execute(default);
         }
     }
 }

@@ -10,55 +10,61 @@
     xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
-    <Grid Height="56" Padding="8,0">
+    <!--  样式对齐动态页顶部关注 UP 主条：76 高、44 圆头像、10 号名字、横向排开  -->
+    <Grid Height="76" Padding="16,6,16,0">
         <ScrollViewer
             HorizontalScrollBarVisibility="Hidden"
-            HorizontalScrollMode="Enabled"
+            HorizontalScrollMode="Auto"
             VerticalScrollBarVisibility="Disabled"
             VerticalScrollMode="Disabled">
             <ItemsRepeater x:Name="RoomRepeater">
                 <ItemsRepeater.Layout>
                     <StackLayout
                         Orientation="Horizontal"
-                        Spacing="8" />
+                        Spacing="4" />
                 </ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="items:LiveItemViewModel">
-                        <Button
-                            Padding="6,4"
-                            VerticalAlignment="Center"
+                        <ItemContainer
+                            Width="64"
+                            Height="70"
+                            Padding="0"
                             Background="Transparent"
-                            BorderThickness="0"
-                            Command="{x:Bind PlayCommand}"
-                            CornerRadius="10"
+                            Style="{StaticResource AppItemContainerStyle}"
+                            Tapped="OnRoomTapped"
                             ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Grid>
+                            <Grid RowSpacing="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid
+                                    Width="44"
+                                    Height="44"
+                                    HorizontalAlignment="Center">
                                     <controls:BasicCoverImage
-                                        Width="32"
-                                        Height="32"
-                                        VerticalAlignment="Center"
-                                        CornerRadius="16"
-                                        DecodeWidth="64"
+                                        Width="44"
+                                        Height="44"
+                                        CornerRadius="22"
+                                        DecodeWidth="100"
                                         Source="{x:Bind Avatar, Mode=OneWay}" />
-                                    <Border
+                                    <Ellipse
                                         Width="8"
                                         Height="8"
                                         HorizontalAlignment="Right"
                                         VerticalAlignment="Bottom"
-                                        Background="#FFFF4D4F"
-                                        BorderBrush="White"
-                                        BorderThickness="1"
-                                        CornerRadius="4" />
+                                        Fill="#FFFF4D4F" />
                                 </Grid>
                                 <TextBlock
-                                    MaxWidth="96"
-                                    VerticalAlignment="Center"
-                                    FontSize="13"
+                                    Grid.Row="1"
+                                    HorizontalAlignment="Center"
+                                    FontSize="10"
+                                    MaxLines="1"
+                                    Opacity="0.7"
                                     Text="{x:Bind Author, Mode=OneWay}"
                                     TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </Button>
+                            </Grid>
+                        </ItemContainer>
                     </DataTemplate>
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>

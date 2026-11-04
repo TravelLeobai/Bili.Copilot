@@ -5,11 +5,14 @@ using BiliCopilot.UI.Controls.History;
 using BiliCopilot.UI.Controls.LivePartition;
 using BiliCopilot.UI.Controls.ViewLater;
 using BiliCopilot.UI.ViewModels.Components;
+using BiliCopilot.UI.ViewModels.Items;
 using BiliCopilot.UI.ViewModels.View;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
@@ -169,103 +172,177 @@ public sealed class FavoritesShell : Component
 }
 
 /// <summary>
-/// 直播分区页面外壳.
-/// 主分栏 + 次分栏 + 内容，标题栏高度与原页面保持一致.
+/// 直播页外壳：顶栏（标题 + 筛选 + 刷新）、关注 UP 主条、瀑布流卡片.
+/// 左边栏已经去掉，分区选择收进顶栏的筛选按钮.
 /// </summary>
 public sealed class LivePartitionShell : Component
 {
     private readonly LivePartitionPageViewModel _viewModel;
-    private readonly LivePartitionMainSideBody _mainSideBody = new();
-    private readonly LivePartitionSubSideBody _subSideBody = new();
-    private readonly LivePartitionMainHeader _mainHeader = new();
     private readonly LiveRecommendMainBody _recommendBody = new();
-    private readonly LiveSubPartitionMainBody _subBody = new();
-    private readonly FollowedLiveBar _followBar = new();
-    private readonly Richasy.WinUIKernel.Share.Base.ColumnSplitter _mainSplitter;
-    private readonly Richasy.WinUIKernel.Share.Base.ColumnSplitter _subSplitter;
+    private readonly LiveSubPartitionMainBody _partitionBody = new();
+    private readonly FollowedLiveBar _followedBar = new();
+    private Flyout? _filterFlyout;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LivePartitionShell"/> class.
     /// </summary>
+    /// <param name="viewModel">页面视图模型.</param>
     public LivePartitionShell(LivePartitionPageViewModel viewModel)
     {
         _viewModel = viewModel;
-        _followBar.ViewModel = viewModel;
-
-        _mainSplitter = new Richasy.WinUIKernel.Share.Base.ColumnSplitter();
-        _mainSplitter.ColumnWidth = viewModel.NavColumnWidth;
-        _mainSplitter.IsHide = viewModel.IsNavColumnManualHide;
-        _mainSplitter.PointerReleased += (s, _) =>
-            viewModel.NavColumnWidth = ((Richasy.WinUIKernel.Share.Base.ColumnSplitter)s).ColumnWidth;
-
-        _subSplitter = new Richasy.WinUIKernel.Share.Base.ColumnSplitter();
-        _subSplitter.ColumnWidth = viewModel.SubNavColumnWidth;
-        _subSplitter.IsHide = viewModel.IsNavColumnManualHide;
-        _subSplitter.PointerReleased += (s, _) =>
-            viewModel.SubNavColumnWidth = ((Richasy.WinUIKernel.Share.Base.ColumnSplitter)s).ColumnWidth;
+        _followedBar.ViewModel = viewModel;
     }
 
     /// <inheritdoc/>
     public override Element Render()
     {
         var vm = UseObservableTree(_viewModel);
-        var navVisible = !vm.IsNavColumnManualHide;
-        var subVisible = vm.IsSubNavEnabled;
-        var navWidth = vm.NavColumnWidth;
-        var subWidth = vm.SubNavColumnWidth;
+        var followVisible = !vm.IsFollowRoomsEmpty;
+        var inPartition = vm.SelectedDetail is not null;
 
-        var title = navVisible
-            ? TextBlock("直播").FontSize(18).FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)
-                .VAlign(VerticalAlignment.Center)
-                .Margin(16, 0, -6, 0)
-            : (Element)TextBlock(string.Empty);
-
-        var subTitle = subVisible
-            ? TextBlock(vm.SelectedMainSection?.Title ?? string.Empty).FontSize(14)
-                .FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)
-                .VAlign(VerticalAlignment.Center)
-                .Margin(10, 0, -6, 0)
-            : (Element)TextBlock(string.Empty);
-
-        var mainSide = navVisible
-            ? ViewLaterShell.Host(_mainSideBody, control => control.ViewModel = vm, vm).Grid(row: 2, column: 0).Margin(0, 0, -6, 0)
-            : (Element)TextBlock(string.Empty);
-
-        var subSide = subVisible
-            ? ViewLaterShell.Host(_subSideBody, control => control.ViewModel = vm, vm).Grid(row: 2, column: 2).Margin(-6, 0, -6, 0)
-            : (Element)TextBlock(string.Empty);
-
-        Element body = vm.SelectedDetail is null
-            ? ViewLaterShell.Host(_recommendBody, control => control.ViewModel = vm, vm).Grid(row: 2, column: 4).Margin(-6, 0, 0, 0)
-            : ViewLaterShell.Host(_subBody, control => control.ViewModel = vm.SelectedDetail, vm).Grid(row: 2, column: 4).Margin(-6, 0, 0, 0);
-
-        var followedBar = vm.IsFollowRoomsEmpty
-            ? (Element)TextBlock(string.Empty)
-            : ViewLaterShell.Host(_followBar, control => control.ViewModel = vm, vm)
-                .Grid(row: 1, column: 0, columnSpan: 5);
+        Element body = inPartition
+            ? ViewLaterShell.Host(_partitionBody, control => control.ViewModel = vm.SelectedDetail, vm).Grid(row: 3).Margin(16, 0, 16, 0)
+            : ViewLaterShell.Host(_recommendBody, control => control.ViewModel = vm, vm).Grid(row: 3).Margin(16, 0, 16, 0);
 
         return Grid(
-            [
-                GridSize.Px(navVisible ? navWidth : 0),
-                GridSize.Auto,
-                GridSize.Px(subVisible ? subWidth : 0),
-                GridSize.Auto,
-                GridSize.Star(),
-            ],
-            [GridSize.Px(56), GridSize.Auto, GridSize.Px(1), GridSize.Star()],
-            title.Grid(row: 0, column: 0),
-            subTitle.Grid(row: 0, column: 2),
-            followedBar,
-            ViewLaterShell.Divider().Grid(row: 2, column: 0, columnSpan: 5),
-            mainSide.Grid(row: 3),
-            subSide.Grid(row: 3),
-            ViewLaterShell.Host(_mainHeader, control => control.ViewModel = vm, vm).Grid(row: 0, column: 4).Margin(-6, 0, 0, 0),
-            body.Grid(row: 3),
-            ViewLaterShell.Host(_mainSplitter, _ => { }, vm).Grid(row: 0, rowSpan: 4, column: 1),
-            subVisible
-                ? ViewLaterShell.Host(_subSplitter, _ => { }, vm).Grid(row: 0, rowSpan: 4, column: 3)
-                : TextBlock(string.Empty));
+            [GridSize.Star()],
+            [GridSize.Px(56), GridSize.Px(followVisible ? 76 : 0), GridSize.Px(1), GridSize.Star()],
+            BuildHeader(vm).Grid(row: 0),
+            followVisible
+                ? ViewLaterShell.Host(_followedBar, control => control.ViewModel = vm, vm).Grid(row: 1)
+                : TextBlock(string.Empty),
+            ViewLaterShell.Divider().Grid(row: 2),
+            body);
     }
 
+    private Element BuildHeader(LivePartitionPageViewModel vm)
+        => Grid(
+            [GridSize.Star(), GridSize.Auto],
+            [GridSize.Star()],
+            TextBlock("直播")
+                .FontSize(18)
+                .FontWeight(Microsoft.UI.Text.FontWeights.SemiBold)
+                .VAlign(VerticalAlignment.Center)
+                .Margin(16, 0, 0, 0)
+                .Grid(row: 0, column: 0),
+            HStack(
+                8,
+                BuildFilterButton(vm),
+                BuildRefreshButton(vm))
+                .Grid(row: 0, column: 1)
+                .Margin(0, 0, 16, 0)
+                .VAlign(VerticalAlignment.Center));
 
+    private static Element BuildRefreshButton(LivePartitionPageViewModel vm)
+        => new XamlHostElement(
+            () =>
+            {
+                var button = CreateToolbarButton("刷新", FluentIcons.Common.Symbol.ArrowSync);
+                button.Click += (_, _) => vm.RefreshCommand.Execute(default);
+                return button;
+            },
+            _ => { })
+            .WithKey("live-refresh");
+
+    private Element BuildFilterButton(LivePartitionPageViewModel vm)
+        => new XamlHostElement(
+            () =>
+            {
+                var button = CreateToolbarButton("筛选", FluentIcons.Common.Symbol.Filter);
+                button.Click += (_, _) => ShowFilterFlyout(vm, button);
+                return button;
+            },
+            _ => { })
+            .WithKey("live-filter");
+
+    private static Button CreateToolbarButton(string text, FluentIcons.Common.Symbol symbol)
+    {
+        var icon = new FluentIcons.WinUI.SymbolIcon
+        {
+            Symbol = symbol,
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = ViewLaterShell.ResolveBrush("AccentTextFillColorPrimaryBrush"),
+        };
+
+        var label = new TextBlock
+        {
+            Text = text,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        panel.Children.Add(icon);
+        panel.Children.Add(label);
+        var button = new Button
+        {
+            Content = panel,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Content 是面板时自动化名字是空的，补一个给 UIA 用.
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, text);
+        return button;
+    }
+
+    private void ShowFilterFlyout(LivePartitionPageViewModel vm, FrameworkElement anchor)
+    {
+        var panel = new StackPanel { MinWidth = 200, Spacing = 2 };
+
+        var all = vm.MainSections.FirstOrDefault(p => p.Data.Id == "_");
+        panel.Children.Add(CreateSectionRow(vm, all, "全部直播"));
+
+        // 「推荐的直播分区」只是分组标题，不是能筛的分区，跳过.
+        var groupTitle = global::BiliCopilot.UI.Toolkits.ResourceToolkit.GetLocalizedString(
+            global::BiliCopilot.UI.Models.Constants.StringNames.RecommendLivePartition);
+
+        foreach (var section in vm.MainSections)
+        {
+            if (ReferenceEquals(section, all) || string.Equals(section.Title, groupTitle, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            panel.Children.Add(CreateSectionRow(vm, section, section.Title));
+        }
+
+        _filterFlyout = new Flyout
+        {
+            Placement = FlyoutPlacementMode.Bottom,
+            Content = new ScrollViewer
+            {
+                MaxHeight = 420,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = panel,
+            },
+        };
+
+        _filterFlyout.ShowAt(anchor);
+    }
+
+    private Button CreateSectionRow(LivePartitionPageViewModel vm, PartitionViewModel? section, string title)
+    {
+        var button = new Button
+        {
+            Content = title,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(12, 8, 12, 8),
+        };
+
+        button.Click += (_, _) =>
+        {
+            if (section is not null && !section.Equals(vm.SelectedMainSection) && vm.SelectMainSectionCommand.CanExecute(section))
+            {
+                vm.SelectMainSectionCommand.Execute(section);
+            }
+
+            _filterFlyout?.Hide();
+        };
+
+        return button;
+    }
 }
+

@@ -14,7 +14,7 @@
     xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
     mc:Ignorable="d">
 
-    <Grid>
+    <Grid Padding="0,0,16,0">
         <controls:IncrementVerticalScrollControl x:Name="View" LoadMoreCommand="{x:Bind ViewModel.LoadRoomsCommand, Mode=OneWay}">
             <controls:IncrementVerticalScrollControl.Element>
                 <Grid Margin="0,16">
