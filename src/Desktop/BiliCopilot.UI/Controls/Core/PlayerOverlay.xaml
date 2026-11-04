@@ -73,30 +73,7 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid x:Name="RootGrid" RightTapped="OnRootGridRightTapped">
-        <Grid.ContextFlyout>
-            <MenuFlyout x:Name="CdnContextMenu" Opening="OnCdnContextMenuOpening">
-                <MenuFlyoutItem
-                    MinWidth="200"
-                    Text="重载"
-                    Click="OnReloadPlayerClick" />
-                <MenuFlyoutSeparator />
-                <ToggleMenuFlyoutItem
-                    x:Name="CdnToggleItem"
-                    MinWidth="200"
-                    Text="CDN 优选"
-                    Click="OnCdnToggleClick" />
-                <MenuFlyoutItem
-                    MinWidth="200"
-                    Text="换一个 CDN 节点"
-                    Click="OnCdnSwitchClick" />
-                <MenuFlyoutSeparator />
-                <MenuFlyoutItem
-                    x:Name="CdnHostItem"
-                    IsEnabled="False"
-                    Text="" />
-            </MenuFlyout>
-        </Grid.ContextFlyout>
+    <Grid x:Name="RootGrid">
         <danmaku:VideoDanmakuPanel
             x:Name="DanmakuPanel"
             Margin="4"
@@ -110,13 +87,6 @@
             Fill="Black"
             Visibility="{x:Bind ViewModel.IsBlackBackgroundVisible, Mode=OneWay}" />
         <local:PlayerInteractivePanel ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
-
-        <!--  右上角的 CDN 状态按钮：显示当前正在用的节点，点开能开关和换节点  -->
-        <player:CdnIndicatorControl
-            Margin="0,68,16,0"
-            HorizontalAlignment="Right"
-            VerticalAlignment="Top"
-            Visibility="{x:Bind ViewModel.IsControlsVisible, Mode=OneWay}" />
         <Rectangle
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"

@@ -93,6 +93,7 @@ public sealed partial class AppViewModel : ViewModelBase
     [RelayCommand]
     private async Task LaunchAsync()
     {
+        PreloadEmotePanel();
         StartVisorService();
 
         // 清除所有之前的badges.
@@ -399,5 +400,30 @@ public sealed partial class AppViewModel : ViewModelBase
         {
             this.Get<NotificationViewModel>().TryStartCommand.Execute(default);
         }
+    }
+    /// <summary>
+    /// 启动时预拉表情面板：评论正文里的装扮表情依赖它，不预拉第一屏会显示成占位文本.
+    /// </summary>
+    private void PreloadEmotePanel()
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (BiliCopilot.UI.Services.BiliEmoteService.IsReady)
+                {
+                    return;
+                }
+
+                var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+                await BiliCopilot.UI.Services.BiliEmoteService
+                    .EnsureLoadedAsync(cookie, this.Get<Microsoft.Extensions.Logging.ILogger<AppViewModel>>())
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Debug(ex, "预拉表情面板失败");
+            }
+        });
     }
 }

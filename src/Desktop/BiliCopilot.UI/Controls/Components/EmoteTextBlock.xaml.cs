@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Forms;
 using Microsoft.UI.Xaml.Documents;
@@ -124,11 +124,21 @@ public sealed partial class EmoteTextBlock : LayoutUserControlBase
                 if (emojiRegex.IsMatch(content))
                 {
                     _ = emotes.TryGetValue(content, out var emoji);
-                    if (emoji != null && emoji.Uri is not null)
+                    var url = emoji?.Uri;
+
+                    // 内核返回的表情表只有常用表情，装扮表情（xxx表情包_yyy）不在里面，
+                    // 这里补一层本地表情面板的兜底，面板里有的直接用它的图.
+                    if (url is null && BiliCopilot.UI.Services.BiliEmoteService.TryGet(content) is { } extra
+                        && !string.IsNullOrWhiteSpace(extra.Url))
+                    {
+                        url = new Uri(extra.Url);
+                    }
+
+                    if (url is not null)
                     {
                         var inlineCon = new InlineUIContainer();
                         var img = new Image() { Width = 20, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 2, -4) };
-                        var bitmap = new BitmapImage(emoji.Uri) { DecodePixelWidth = 40 };
+                        var bitmap = new BitmapImage(url) { DecodePixelWidth = 40 };
                         img.Source = bitmap;
                         inlineCon.Child = img;
                         para.Inlines.Add(inlineCon);

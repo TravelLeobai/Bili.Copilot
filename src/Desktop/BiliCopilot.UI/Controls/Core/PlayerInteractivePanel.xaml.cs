@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -420,6 +420,11 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
     private void OnFlyoutOpened(object sender, object e)
     {
         ViewModel.IsPopupVisible = true;
+        CdnToggleItem.IsChecked = Services.CdnAccelerator.IsEnabled;
+        var activeHost = Services.CdnAccelerator.ActiveHostDisplay;
+        CdnHostItem.Text = Services.CdnAccelerator.IsEnabled
+            ? $"当前节点：{(string.IsNullOrWhiteSpace(activeHost) ? "默认" : activeHost)}"
+            : "CDN 替换已关闭";
         foreach (var item in Anime4KItem.Items.OfType<RadioMenuFlyoutItem>())
         {
             var tag = item.Tag.ToString();
@@ -530,5 +535,28 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
         {
             ViewModel.ChangeRavuModeCommand.Execute(mode);
         }
+    }
+    /// <summary>
+    /// 重载当前视频.
+    /// </summary>
+    private async void OnReloadPlayerClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is not null)
+        {
+            await ViewModel.ReloadAsync();
+        }
+    }
+
+    private void OnCdnToggleClick(object sender, RoutedEventArgs e)
+        => Services.CdnAccelerator.SetEnabled(!Services.CdnAccelerator.IsEnabled);
+
+    private async void OnCdnSwitchClick(object sender, RoutedEventArgs e)
+    {
+        if (Services.CdnAccelerator.GetRankedHosts().Count == 0)
+        {
+            await Services.CdnPoolService.SyncAsync();
+        }
+
+        Services.CdnAccelerator.RotateHost();
     }
 }

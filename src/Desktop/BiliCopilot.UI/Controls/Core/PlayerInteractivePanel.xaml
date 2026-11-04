@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <local:PlayerControlBase
     x:Class="BiliCopilot.UI.Controls.Core.PlayerInteractivePanel"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -39,6 +39,26 @@
             x:Name="ContextMenu"
             Closed="OnFlyoutClosed"
             Opened="OnFlyoutOpened">
+            <MenuFlyoutItem
+                x:Name="ReloadItem"
+                Click="OnReloadPlayerClick"
+                Style="{StaticResource ContextMenuFlyoutItemStyle}"
+                Text="重载" />
+            <ToggleMenuFlyoutItem
+                x:Name="CdnToggleItem"
+                Click="OnCdnToggleClick"
+                Style="{StaticResource ContextMenuFlyoutItemStyle}"
+                Text="CDN 优选" />
+            <MenuFlyoutItem
+                x:Name="CdnSwitchItem"
+                Click="OnCdnSwitchClick"
+                Style="{StaticResource ContextMenuFlyoutItemStyle}"
+                Text="换一个 CDN 节点" />
+            <MenuFlyoutItem
+                x:Name="CdnHostItem"
+                IsEnabled="False"
+                Text="" />
+            <MenuFlyoutSeparator />
             <MenuFlyoutItem
                 Command="{x:Bind ViewModel.TakeScreenshotCommand, Mode=OneWay}"
                 Style="{StaticResource ContextMenuFlyoutItemStyle}"
