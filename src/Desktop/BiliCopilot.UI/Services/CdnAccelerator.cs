@@ -82,6 +82,9 @@ internal static class CdnAccelerator
     public static void SetEnabled(bool value)
     {
         SettingsToolkit.WriteLocalSetting(SettingNames.ReplaceCdnEnabled, value);
+        CdnStatusBus.Report(value
+            ? $"CDN 优选已开启，当前节点 {(string.IsNullOrWhiteSpace(ActiveHostDisplay) ? "默认" : ActiveHostDisplay)}"
+            : "CDN 优选已关闭，走官方默认线路");
         RaiseHostChanged();
     }
 
@@ -212,6 +215,7 @@ internal static class CdnAccelerator
         }
 
         RaiseHostChanged();
+        CdnStatusBus.Report($"卡顿换线：{pool[_rotateCursor]}");
         return pool[_rotateCursor];
     }
 

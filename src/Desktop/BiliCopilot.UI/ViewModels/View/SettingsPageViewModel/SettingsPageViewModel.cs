@@ -730,6 +730,10 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
             .OrderBy(p => p.ms < 0 ? int.MaxValue : p.ms)
             .Select(p => p.ms < 0 ? $"{p.host}: 不可用" : $"{p.host}: {p.ms}ms"));
         CdnLatencyText = text;
+        var best = results.Where(p => p.ms >= 0).OrderBy(p => p.ms).FirstOrDefault();
+        Services.CdnStatusBus.Report(best.host is null
+            ? "CDN 延迟测试：全部节点不可用"
+            : $"CDN 延迟测试完成，最快 {best.host}（{best.ms}ms）");
     }
 
     partial void OnDefaultDownloadPathChanged(string value)
@@ -901,6 +905,10 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CdnPoolStatusText = result.Success
             ? $"{result.Count} 个节点（{result.Source}）· 上次同步 {CdnPoolService.LastSync:MM-dd HH:mm}"
             : $"{CdnPoolService.StatusText}（刷新失败）";
+        Services.CdnStatusBus.Report(result.Success
+            ? $"CDN 节点池已刷新：{result.Count} 个（{result.Source}）"
+            : "CDN 节点池刷新失败，继续用旧列表");
+        RebuildCdnServerList();
     }
     partial void OnAiAutoSaveChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.AiAutoSave, value);

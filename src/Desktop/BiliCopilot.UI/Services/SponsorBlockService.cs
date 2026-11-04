@@ -85,7 +85,14 @@ public static class SponsorBlockService
 
         foreach (var server in candidates)
         {
-            var url = $"{server.TrimEnd('/')}/api/skipSegments?videoID={WebUtility.UrlEncode(videoId)}&categories={WebUtility.UrlEncode(categories)}";
+            // 用户/迁移可能把地址填成 https://bsbsb.top/api，直接拼 /api/skipSegments 会变成 /api/api/... 打 404.
+            var root = server.TrimEnd('/');
+            if (root.EndsWith("/api", StringComparison.OrdinalIgnoreCase))
+            {
+                root = root[..^4];
+            }
+
+            var url = $"{root}/api/skipSegments?videoID={WebUtility.UrlEncode(videoId)}&categories={WebUtility.UrlEncode(categories)}";
             var result = await TryQueryAsync(url, server);
             if (result is not null)
             {

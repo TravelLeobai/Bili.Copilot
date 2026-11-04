@@ -249,13 +249,17 @@ public sealed class VideoSeasonPanel : Component
                 box.Items.Clear();
                 foreach (var season in viewModel.Seasons)
                 {
-                    box.Items.Add(season);
+                    box.Items.Add(CreateSeasonItem(season));
                 }
 
-                box.SelectedItem = viewModel.SelectedSeason;
+                box.SelectedItem = box.Items
+                    .OfType<ComboBoxItem>()
+                    .FirstOrDefault(p => ReferenceEquals(p.Tag, viewModel.SelectedSeason))
+                    ?? box.Items.FirstOrDefault();
                 box.SelectionChanged += (_, _) =>
                 {
-                    if (box.SelectedItem is VideoSeason season && !ReferenceEquals(season, viewModel.SelectedSeason))
+                    if (box.SelectedItem is ComboBoxItem { Tag: VideoSeason season }
+                        && !ReferenceEquals(season, viewModel.SelectedSeason))
                     {
                         viewModel.ChangeSeasonCommand.Execute(season);
                     }
@@ -294,21 +298,23 @@ public sealed class VideoSeasonPanel : Component
 
     private static ComboBox BuildSeasonComboBox(IEnumerable<VideoSeason> seasons, VideoSeason? selected)
     {
-        var box = new ComboBox
-        {
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            DisplayMemberPath = "Title",
-        };
-
-        // 直接赋 ItemsSource 在某些投影下会抛 ArgumentException，这里逐项添加.
+        // DisplayMemberPath 走传统 Binding，POCO 没有 ICustomProperty 会显示成空白，
+        // 所以每项包一个 ComboBoxItem，文字直接写 Content，选中项靠 Tag 回查.
+        var box = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         foreach (var season in seasons)
         {
-            box.Items.Add(season);
+            box.Items.Add(CreateSeasonItem(season));
         }
 
-        box.SelectedItem = selected;
+        box.SelectedItem = box.Items
+            .OfType<ComboBoxItem>()
+            .FirstOrDefault(p => ReferenceEquals(p.Tag, selected))
+            ?? box.Items.FirstOrDefault();
         return box;
     }
+
+    private static ComboBoxItem CreateSeasonItem(VideoSeason season)
+        => new() { Content = season.Title, Tag = season };
 
     private static VideoCardControl BuildCard(VideoItemViewModel item, string styleKey)
         => new() { Style = ResolveStyle(styleKey), ViewModel = item };

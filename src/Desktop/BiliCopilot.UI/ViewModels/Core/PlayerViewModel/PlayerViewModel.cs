@@ -86,6 +86,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     {
         _snapshot = snapshot;
         IsLive = snapshot.Type == BiliMediaType.Live;
+        HookCdnStatus();
         _sponsorSegments = Array.Empty<SponsorSegment>();
         _lastSponsorSkipPosition = -1;
         _ = LoadSponsorBlockAsync(snapshot);

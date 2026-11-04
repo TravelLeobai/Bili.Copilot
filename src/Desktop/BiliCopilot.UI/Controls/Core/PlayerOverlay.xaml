@@ -110,6 +110,13 @@
             Fill="Black"
             Visibility="{x:Bind ViewModel.IsBlackBackgroundVisible, Mode=OneWay}" />
         <local:PlayerInteractivePanel ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+
+        <!--  右上角的 CDN 状态按钮：显示当前正在用的节点，点开能开关和换节点  -->
+        <player:CdnIndicatorControl
+            Margin="0,68,16,0"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Visibility="{x:Bind ViewModel.IsControlsVisible, Mode=OneWay}" />
         <Rectangle
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
