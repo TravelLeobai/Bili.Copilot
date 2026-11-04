@@ -406,6 +406,7 @@ public sealed partial class PlayerViewModel
 
     private void UpdateUptime()
     {
+        UpdateLiveLatency();
         if (_liveUptimeBase == DateTimeOffset.MinValue)
         {
             LiveUptimeText = "00:00:00";

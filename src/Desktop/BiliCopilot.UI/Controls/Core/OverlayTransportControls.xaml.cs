@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
@@ -396,4 +396,26 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
         });
     }
 #pragma warning restore CA1822
+    /// <summary>
+    /// 直播进度条：0~1 的比例，1 表示最新.
+    /// </summary>
+    private async void OnLiveProgressValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (!ViewModel.IsLive)
+        {
+            return;
+        }
+
+        var ratio = e.NewValue;
+        if (Math.Abs(ratio - ViewModel.LiveEdgeRatio) < 0.002)
+        {
+            return;
+        }
+
+        await ViewModel.SeekLiveRatioAsync(ratio);
+    }
+    /// <summary>
+    /// 落后直播时红点更亮，实时时淡一点.
+    /// </summary>
+    internal static double GetLiveDotOpacity(bool isBehind) => isBehind ? 1d : 0.45d;
 }

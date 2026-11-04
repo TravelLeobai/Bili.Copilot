@@ -387,7 +387,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     }
 
     private void CheckBottomProgressBarVisible()
-        => IsBottomProgressBarVisible = !IsControlsVisible && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
+        => IsBottomProgressBarVisible = !IsLive
+            && !IsControlsVisible
+            && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
 
     partial void OnIsControlsVisibleChanged(bool value)
         => Window?.SetCaptionButtonVisibility(value);

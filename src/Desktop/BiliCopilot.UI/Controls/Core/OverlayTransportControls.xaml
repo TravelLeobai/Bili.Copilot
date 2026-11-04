@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <local:PlayerControlBase
     x:Class="BiliCopilot.UI.Controls.Core.OverlayTransportControls"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -583,6 +583,56 @@
                 RequestedTheme="Dark"
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Text="{x:Bind GetTimeText(ViewModel.Player.Duration), Mode=OneWay}" />
+
+            <!--  直播进度：只表达离最新直播差多少，不给时间戳  -->
+            <Grid
+                Grid.ColumnSpan="3"
+                ColumnSpacing="10"
+                Visibility="{x:Bind ViewModel.IsLive, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="6">
+                    <Ellipse
+                        Width="7"
+                        Height="7"
+                        VerticalAlignment="Center"
+                        Fill="#FFFF4D4F"
+                        Opacity="{x:Bind local:OverlayTransportControls.GetLiveDotOpacity(ViewModel.IsLiveBehind), Mode=OneWay}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="White"
+                        IsTextScaleFactorEnabled="False"
+                        Opacity="0.9"
+                        Text="{x:Bind ViewModel.LiveLatencyText, Mode=OneWay}" />
+                </StackPanel>
+                <Slider
+                    x:Name="LiveProgressSlider"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    IsEnabled="{x:Bind ViewModel.IsLiveSeekable, Mode=OneWay}"
+                    IsThumbToolTipEnabled="False"
+                    Maximum="1"
+                    Minimum="0"
+                    StepFrequency="0.001"
+                    Style="{StaticResource PlayerSliderStyle}"
+                    ValueChanged="OnLiveProgressValueChanged"
+                    Value="{x:Bind ViewModel.LiveEdgeRatio, Mode=OneWay}" />
+                <Button
+                    Grid.Column="2"
+                    Padding="10,4"
+                    VerticalAlignment="Center"
+                    Command="{x:Bind ViewModel.CatchUpToLiveCommand, Mode=OneWay}"
+                    Content="回到最新"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Visibility="{x:Bind ViewModel.IsLiveBehind, Mode=OneWay}" />
+            </Grid>
         </Grid>
 
         <TeachingTip
