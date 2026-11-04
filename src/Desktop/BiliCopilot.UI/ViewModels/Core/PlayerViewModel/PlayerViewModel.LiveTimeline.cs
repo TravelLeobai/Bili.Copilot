@@ -133,6 +133,13 @@ public sealed partial class PlayerViewModel
             && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
         OnPropertyChanged(nameof(IsVodProgressVisible));
         OnPropertyChanged(nameof(IsVodTimelineVisible));
+        OnPropertyChanged(nameof(IsCatchUpButtonVisible));
+        OnPropertyChanged(nameof(LivePanelInsetThickness));
+        if (!value)
+        {
+            // 离开直播时把让位清零，别把点播界面也挤窄.
+            LivePanelInset = 0;
+        }
     }
 
     partial void OnIsPreviewProgressChangingChanged(bool value)
@@ -157,9 +164,10 @@ public sealed partial class PlayerViewModel
     }
 
     /// <summary>
-    /// 给覆盖层用的让位边距.
+    /// 给覆盖层用的让位边距：只有直播才让位，点播/番剧保持整窗布局.
     /// </summary>
-    public Thickness LivePanelInsetThickness => new(0, 0, _livePanelInset, 0);
+    public Thickness LivePanelInsetThickness
+        => IsLive ? new Thickness(0, 0, _livePanelInset, 0) : default;
 
     private double _livePanelInset;
     /// <summary>

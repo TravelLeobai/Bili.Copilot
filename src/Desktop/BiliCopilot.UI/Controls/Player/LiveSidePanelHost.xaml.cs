@@ -117,6 +117,18 @@ public sealed partial class LiveSidePanelHost : UserControl
             return;
         }
 
+        // 只在直播时让位：点播/番剧界面不该被这块面板影响.
+        if (ViewModel?.IsLive != true)
+        {
+            Services.MpvSurfaceService.ApplyRightInset(handle, 0, XamlRoot?.RasterizationScale ?? 1d);
+            if (ViewModel is not null)
+            {
+                ViewModel.LivePanelInset = 0;
+            }
+
+            return;
+        }
+
         // 用实际宽度算让位，按钮列宽度改了也不用同步改常量.
         var measured = ActualWidth;
         var inset = _isCollapsed
