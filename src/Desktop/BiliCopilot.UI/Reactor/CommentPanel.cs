@@ -27,6 +27,9 @@ public sealed class CommentPanel : Component
 {
     private const double LoadMoreThreshold = 400d;
 
+    // 和 XAML 版评论卡片保持一致（ControlCornerRadius = 8）
+    private const double ControlCornerRadiusValue = 8d;
+
     private readonly CommentMainViewModel _viewModel;
     private int _version;
     private ScrollView? _scrollView;
@@ -275,9 +278,9 @@ public sealed class CommentPanel : Component
                 TextBlock("置顶")
                     .FontSize(10)
                     .Foreground(ResolveBrush("AccentTextFillColorPrimaryBrush", Microsoft.UI.Colors.SkyBlue)))
-                .CornerRadius(4)
-                .Padding(6, 0, 6, 0)
-                .Margin(0, 8, 0, 0)
+                .CornerRadius(ControlCornerRadiusValue)
+                .Padding(2)
+                .Margin(0, 12, 0, 0)
                 .WithBorder(ThemeBrush("AccentFillColorDefaultBrush"), 1)
             : (Element)TextBlock(string.Empty);
 
