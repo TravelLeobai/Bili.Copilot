@@ -3,6 +3,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using BiliCopilot.UI.ViewModels.Core;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.Services.Live;
 using BiliCopilot.UI.ViewModels.Items;
 using BiliCopilot.UI.Extensions;
@@ -612,7 +613,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         foreach (var gift in _viewModel.LiveGiftBag)
         {
             var row = new Microsoft.UI.Xaml.Controls.Grid();
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new Microsoft.UI.Xaml.GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var name = new TextBlock { Text = gift.GiftName, FontSize = 12 };
             var count = new TextBlock { Text = "×" + gift.Number, FontSize = 12, Opacity = 0.7 };
@@ -720,151 +721,311 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private async Task FillEmoteFlyoutAsync(PlayerViewModel vm, Flyout flyout)
     {
-        if (flyout.Content is StackPanel)
+        if (flyout.Content is Grid)
         {
             return;
         }
 
-        var root = new StackPanel { Spacing = 8, MaxWidth = 420 };
+        var root = new global::Microsoft.UI.Xaml.Controls.Grid
+        {
+            MinWidth = 392,
+            MaxWidth = 460,
+            Height = 320,
+            ColumnSpacing = 6,
+        };
+
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new Microsoft.UI.Xaml.GridLength(52) });
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new Microsoft.UI.Xaml.GridLength(1) });
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new Microsoft.UI.Xaml.GridLength(1, GridUnitType.Star) });
+
+        var categoryPanel = new StackPanel { Spacing = 4 };
+        var categoryScroll = new ScrollViewer
+        {
+            Content = categoryPanel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+        root.Children.Add(categoryScroll);
+
+        var divider = new Microsoft.UI.Xaml.Shapes.Rectangle
+        {
+            Width = 1,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Fill = ResolveBrush("DividerStrokeColorDefaultBrush"),
+        };
+        global::Microsoft.UI.Xaml.Controls.Grid.SetColumn(divider, 1);
+        root.Children.Add(divider);
+
+        var emoteHost = new global::Microsoft.UI.Xaml.Controls.Grid();
+        global::Microsoft.UI.Xaml.Controls.Grid.SetColumn(emoteHost, 2);
+        root.Children.Add(emoteHost);
+
         flyout.Content = root;
 
-        var loading = new TextBlock { Text = "加载表情中…", Opacity = 0.6, FontSize = 12 };
-        root.Children.Add(loading);
+        var loading = new TextBlock { Text = "加载表情中…", Opacity = 0.6, FontSize = 12, Margin = new Thickness(8, 8, 0, 0) };
+        emoteHost.Children.Add(loading);
 
+        List<EmoteCategory> categories;
         try
         {
-            var packages = new List<(string Name, List<(string Token, string Url)> Items)>();
-
-            // 0) 直播间表情（带 emoticon_unique）：点一下直接发出去，不再只是塞文本.
-            if (vm.LiveEmotes.Count > 0)
-            {
-                root.Children.Remove(loading);
-                var emoteWrap = new StackPanel { Spacing = 4 };
-                var items = vm.LiveEmotes.ToList();
-                for (var i = 0; i < items.Count; i += 8)
-                {
-                    var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-                    foreach (var emote in items.Skip(i).Take(8))
-                    {
-                        var safeUrl = NormalizeEmoteUrl(emote.Url);
-                        if (safeUrl is null)
-                        {
-                            continue;
-                        }
-
-                        var emoteButton = new Button
-                        {
-                            Width = 40,
-                            Height = 40,
-                            Padding = new Thickness(0),
-                            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                            BorderThickness = new Thickness(0),
-                            Content = new Image
-                            {
-                                Width = 28,
-                                Height = 28,
-                                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(safeUrl)),
-                            },
-                        };
-                        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(
-                            emoteButton,
-                            emote.IsLocked ? $"{emote.Text}（未解锁）" : emote.Text);
-                        emoteButton.Click += (_, _) =>
-                        {
-                            vm.SendLiveEmoteCommand.Execute(emote);
-                            flyout.Hide();
-                        };
-                        row.Children.Add(emoteButton);
-                    }
-
-                    emoteWrap.Children.Add(row);
-                }
-
-                root.Children.Add(emoteWrap);
-                return;
-            }
-
-            // 1) 直播间专属 / UP 主大表情.
-            var roomEmotes = await BiliCopilot.UI.Services.LiveEmoteService.GetRoomEmotesAsync(
-                vm.LiveRoomIdText,
-                vm.LiveCookieText);
-            foreach (var package in roomEmotes)
-            {
-                packages.Add((package.Name, package.Emotes.Select(p => (p.Token, p.Url)).ToList()));
-            }
-
-            // 2) 平时发评论能用的表情.
-            var commentEmotes = BiliCopilot.UI.Services.BiliEmoteService.GetAll();
-            if (commentEmotes.Count > 0)
-            {
-                packages.Add(("常用表情", commentEmotes.Select(p => (p.Token, p.Url)).ToList()));
-            }
-
-            root.Children.Remove(loading);
-            if (packages.Count == 0)
-            {
-                root.Children.Add(new TextBlock { Text = "没有可用表情（可能需要登录）", Opacity = 0.6, FontSize = 12 });
-                return;
-            }
-
-            foreach (var (name, items) in packages)
-            {
-                root.Children.Add(new TextBlock
-                {
-                    Text = name,
-                    FontSize = 12,
-                    Opacity = 0.7,
-                    Margin = new Thickness(0, 4, 0, 0),
-                });
-
-                var wrap = new StackPanel { Spacing = 4 };
-                for (var i = 0; i < items.Count; i += 8)
-                {
-                    var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-                    foreach (var (token, url) in items.Skip(i).Take(8))
-                    {
-                        var safeUrl = NormalizeEmoteUrl(url);
-                        if (safeUrl is null)
-                        {
-                            continue;
-                        }
-
-                        var emoteButton = new Button
-                        {
-                            Width = 36,
-                            Height = 36,
-                            Padding = new Thickness(0),
-                            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                            BorderThickness = new Thickness(0),
-                            Content = new Image
-                            {
-                                Width = 24,
-                                Height = 24,
-                                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(safeUrl)),
-                            },
-                        };
-                        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(emoteButton, token);
-                        emoteButton.Click += (_, _) =>
-                        {
-                            InsertEmoteToken(token);
-                            flyout.Hide();
-                        };
-                        row.Children.Add(emoteButton);
-                    }
-
-                    wrap.Children.Add(row);
-                }
-
-                root.Children.Add(wrap);
-            }
+            categories = await BuildEmoteCategoriesAsync(vm).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "加载直播表情面板失败");
-            root.Children.Remove(loading);
-            root.Children.Add(new TextBlock { Text = "表情加载失败", Opacity = 0.6, FontSize = 12 });
+            emoteHost.Children.Clear();
+            emoteHost.Children.Add(new TextBlock { Text = "表情加载失败", Opacity = 0.6, FontSize = 12, Margin = new Thickness(8, 8, 0, 0) });
+            return;
         }
+
+        emoteHost.Children.Clear();
+
+        if (categories.Count == 0)
+        {
+            emoteHost.Children.Add(new TextBlock { Text = "没有可用表情（可能需要登录）", Opacity = 0.6, FontSize = 12, Margin = new Thickness(8, 8, 0, 0) });
+            return;
+        }
+
+        var pages = new List<FrameworkElement>();
+        foreach (var category in categories)
+        {
+            var page = BuildEmoteGrid(category, vm, flyout);
+            page.Visibility = Visibility.Collapsed;
+            pages.Add(page);
+            emoteHost.Children.Add(page);
+        }
+
+        void RenderEmotes(int index)
+        {
+            for (var i = 0; i < pages.Count; i++)
+            {
+                pages[i].Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            for (var i = 0; i < categoryPanel.Children.Count; i++)
+            {
+                if (categoryPanel.Children[i] is Button tab)
+                {
+                    tab.Background = i == index
+                        ? ResolveBrush("AccentFillColorSecondaryBrush")
+                        : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                }
+            }
+        }
+
+        for (var i = 0; i < categories.Count; i++)
+        {
+            var index = i;
+            var tab = BuildEmoteCategoryTab(categories[index]);
+            tab.Click += (_, _) => RenderEmotes(index);
+            categoryPanel.Children.Add(tab);
+        }
+
+        RenderEmotes(0);
     }
+
+    private async Task<List<EmoteCategory>> BuildEmoteCategoriesAsync(PlayerViewModel vm)
+    {
+        var categories = new List<EmoteCategory>();
+
+        var mine = LiveEmoteStore.Mine.ToList();
+        if (mine.Count > 0)
+        {
+            categories.Add(new EmoteCategory("我的表情", mine));
+        }
+
+        var recent = LiveEmoteStore.Recent.ToList();
+        if (recent.Count > 0)
+        {
+            categories.Add(new EmoteCategory("最近使用", recent));
+        }
+
+        // 直播间自己带的表情（emoticon_unique），点了直接发出去.
+        if (vm.LiveEmotes.Count > 0)
+        {
+            categories.Add(new EmoteCategory("直播间", vm.LiveEmotes.Select(StoredEmote.FromLive).ToList()));
+        }
+
+        var roomEmotes = await BiliCopilot.UI.Services.LiveEmoteService.GetRoomEmotesAsync(
+            vm.LiveRoomIdText,
+            vm.LiveCookieText).ConfigureAwait(true);
+        foreach (var package in roomEmotes)
+        {
+            var items = package.Emotes
+                .Select(p => StoredEmote.FromToken(p.Token, p.Url, p.Description))
+                .ToList();
+            if (items.Count > 0)
+            {
+                categories.Add(new EmoteCategory(package.Name, items));
+            }
+        }
+
+        var commentEmotes = BiliCopilot.UI.Services.BiliEmoteService.GetAll();
+        if (commentEmotes.Count > 0)
+        {
+            categories.Add(new EmoteCategory(
+                "常用表情",
+                commentEmotes.Select(p => StoredEmote.FromToken(p.Token, p.Url)).ToList()));
+        }
+
+        return categories;
+    }
+
+    private Button BuildEmoteCategoryTab(EmoteCategory category)
+    {
+        var first = category.Emotes.FirstOrDefault();
+        var url = NormalizeEmoteUrl(first?.Url);
+
+        FrameworkElement content;
+        if (url is not null)
+        {
+            content = new Image
+            {
+                Width = 28,
+                Height = 28,
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(url)),
+            };
+        }
+        else
+        {
+            content = new TextBlock
+            {
+                Text = category.Name.Length > 2 ? category.Name[..2] : category.Name,
+                FontSize = 10,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+            };
+        }
+
+        var tab = new Button
+        {
+            Width = 44,
+            Height = 44,
+            Padding = new Thickness(0),
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Content = content,
+        };
+
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(tab, category.Name);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tab, category.Name);
+        return tab;
+    }
+
+    private FrameworkElement BuildEmoteGrid(EmoteCategory category, PlayerViewModel vm, Flyout flyout)
+    {
+        // 每行固定 7 个，手动排：ItemsRepeater + UniformGridLayout 在 Flyout 里宽度约束不住，
+        // 列宽会被压成不均匀的窄条，表情图变形.
+        const int perRow = 7;
+
+        var wrap = new StackPanel { Spacing = 2 };
+        var items = category.Emotes;
+        for (var i = 0; i < items.Count; i += perRow)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+            foreach (var emote in items.Skip(i).Take(perRow))
+            {
+                row.Children.Add(BuildEmoteTile(emote, vm, flyout));
+            }
+
+            wrap.Children.Add(row);
+        }
+
+        return new ScrollViewer
+        {
+            Content = wrap,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
+    }
+    private Button BuildEmoteTile(StoredEmote emote, PlayerViewModel vm, Flyout flyout)
+    {
+        var url = NormalizeEmoteUrl(emote.Url);
+        FrameworkElement content;
+        if (url is not null)
+        {
+            content = new Image
+            {
+                Width = 28,
+                Height = 28,
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(url)),
+            };
+        }
+        else
+        {
+            content = new TextBlock
+            {
+                Text = emote.Text,
+                FontSize = 12,
+                TextAlignment = TextAlignment.Center,
+                TextWrapping = TextWrapping.Wrap,
+            };
+        }
+
+        var tile = new Button
+        {
+            Width = 44,
+            Height = 44,
+            Padding = new Thickness(0),
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Content = content,
+        };
+
+        var tooltip = emote.IsLocked ? $"{emote.Text}（未解锁）" : emote.Text;
+        Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(tile, tooltip);
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, emote.Text);
+
+        // 右键收藏/取消收藏，做成自己的表情.
+        var menu = new MenuFlyout();
+        var mineItem = new MenuFlyoutItem
+        {
+            Text = LiveEmoteStore.IsMine(emote.Key) ? "从我的表情移除" : "加入我的表情",
+        };
+        mineItem.Click += (_, _) =>
+        {
+            if (LiveEmoteStore.IsMine(emote.Key))
+            {
+                LiveEmoteStore.RemoveMine(emote.Key);
+            }
+            else
+            {
+                LiveEmoteStore.AddMine(emote);
+            }
+
+            flyout.Hide();
+        };
+        menu.Items.Add(mineItem);
+        tile.ContextFlyout = menu;
+
+        tile.Click += (_, _) =>
+        {
+            LiveEmoteStore.AddRecent(emote);
+            if (!string.IsNullOrEmpty(emote.Unique))
+            {
+                var live = vm.LiveEmotes.FirstOrDefault(p => string.Equals(p.Unique, emote.Unique, StringComparison.Ordinal))
+                    ?? new LiveEmoteItem
+                    {
+                        Unique = emote.Unique,
+                        Text = emote.Text,
+                        Url = emote.Url,
+                        IsLocked = emote.IsLocked,
+                    };
+
+                vm.SendLiveEmoteCommand.Execute(live);
+            }
+            else
+            {
+                InsertEmoteToken(emote.Text);
+            }
+
+            flyout.Hide();
+        };
+
+        return tile;
+    }
+
+    private sealed record EmoteCategory(string Name, List<StoredEmote> Emotes);
 
     private void InsertEmoteToken(string token)
     {
