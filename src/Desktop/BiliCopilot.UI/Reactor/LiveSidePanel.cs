@@ -174,30 +174,11 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             _ => SyncTabSelection(vm))
             .VAlign(VerticalAlignment.Center);
 
-        var refreshHost = new XamlHostElement(
-            () =>
-            {
-                var button = new Button
-                {
-                    Padding = new Thickness(8, 4, 8, 4),
-                    Content = new FluentIcons.WinUI.SymbolIcon
-                    {
-                        Symbol = FluentIcons.Common.Symbol.ArrowClockwise,
-                        FontSize = 12,
-                    },
-                };
-                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, "刷新");
-                button.Click += (_, _) => vm.RefreshLiveInfoCommand.Execute(default);
-                return button;
-            },
-            _ => { }).WithKey("live-refresh");
-
-        // 刷新按钮靠最右侧，选项卡留在左边.
+        // 刷新按钮已经挪到面板顶栏（和关闭按钮同一行），这里只留选项卡.
         return Grid(
-            new[] { GridSize.Star(), GridSize.Auto },
+            new[] { GridSize.Star() },
             new[] { GridSize.Auto },
-            selectorHost.Grid(row: 0, column: 0),
-            refreshHost.Grid(row: 0, column: 1))
+            selectorHost.Grid(row: 0, column: 0))
             .Padding(12, 0, 12, 8);
     }
     private SelectorBar CreateTabSelector(PlayerViewModel vm)

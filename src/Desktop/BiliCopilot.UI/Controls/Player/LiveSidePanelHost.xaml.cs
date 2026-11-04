@@ -145,4 +145,6 @@ public sealed partial class LiveSidePanelHost : UserControl
 
     private IntPtr GetPlayerWindowHandle()
         => ViewModel?.Window is null ? IntPtr.Zero : ViewModel.Window.Handle;
+    private void OnRefreshClick(object sender, RoutedEventArgs e)
+        => ViewModel?.RefreshLiveInfoCommand.Execute(default);
 }

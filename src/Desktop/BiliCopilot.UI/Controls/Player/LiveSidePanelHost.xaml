@@ -8,34 +8,66 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!--  外层不铺底色：按钮单独浮在视频上，只有面板本体带亚克力底  -->
+    <!--  外层不铺底色：只有面板本体和顶部按钮条的底色与面板一致  -->
     <Grid Background="Transparent">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!--  收起按钮：与底栏表情/礼物同尺寸（32x32），实色底 + 叉号，放在面板左上角  -->
-        <Button
-            x:Name="CollapseButton"
+        <!--  顶部按钮条：和面板同底色、同宽，收起按钮在左，刷新在右  -->
+        <Border
             Grid.Row="0"
-            Width="32"
-            Height="32"
-            Margin="8,8,0,6"
-            Padding="0"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Center"
-            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            Click="OnCollapseClick"
-            CornerRadius="8"
-            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-            ToolTipService.ToolTip="收起直播面板">
-            <ic:SymbolIcon FontSize="12" Symbol="Dismiss" />
-        </Button>
+            Width="360"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
+            <Grid
+                Height="44"
+                Padding="8,6,8,6"
+                ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-        <!--  面板本体，顶部因此多出一条边距  -->
+                <Button
+                    x:Name="CollapseButton"
+                    Grid.Column="0"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    Click="OnCollapseClick"
+                    CornerRadius="8"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                    ToolTipService.ToolTip="收起直播面板">
+                    <ic:SymbolIcon FontSize="12" Symbol="Dismiss" />
+                </Button>
+
+                <Button
+                    x:Name="RefreshButton"
+                    Grid.Column="1"
+                    Width="32"
+                    HorizontalAlignment="Left"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    Click="OnRefreshClick"
+                    CornerRadius="8"
+                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                    ToolTipService.ToolTip="刷新">
+                    <ic:SymbolIcon FontSize="12" Symbol="ArrowClockwise" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!--  面板本体  -->
         <Grid
             x:Name="PanelRoot"
             Grid.Row="1"
