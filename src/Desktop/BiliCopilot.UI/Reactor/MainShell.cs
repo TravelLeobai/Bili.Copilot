@@ -39,6 +39,8 @@ public sealed class MainShell : Component
     private readonly HeaderAccountControl _accountControl = new();
     private readonly Button _paneToggleButton = CreateFlatIconButton("\uE700", "切换导航栏");
     private readonly Button _compactSearchButton = CreateFlatIconButton("\uE721", "搜索");
+
+    private readonly Button _railSearchButton = CreateFlatIconButton("\uE721", "搜索");
     private readonly Button _backButton = CreateFlatIconButton("\uE72B", "返回");
     private readonly Button _favoriteButton = CreateFlatIconButton("\uE734", "我的收藏");
     private readonly Button _viewLaterButton = CreateFlatIconButton("\uE823", "稍后再看");
@@ -65,19 +67,25 @@ public sealed class MainShell : Component
         _contentHost.Children.Add(mainFrame);
         _contentHost.Children.Add(overlayFrame);
         _paneToggleButton.Click += (_, _) => _togglePaneAction?.Invoke();
-        _compactSearchButton.Click += (_, _) =>
-        {
-            _openPaneAction?.Invoke();
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(160).ConfigureAwait(false);
-                _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
-            });
-        };
+        _compactSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
+        _railSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _backButton.Click += (_, _) => _viewModel.Back();
         _favoriteButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(FavoritesPage), default);
         _viewLaterButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
         _historyButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(HistoryPage), default);
+    }
+
+    /// <summary>
+    /// 展开侧栏并把焦点送进搜索框（等侧栏动画走完再聚焦）.
+    /// </summary>
+    private void OpenPaneAndFocusSearch()
+    {
+        _openPaneAction?.Invoke();
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(200).ConfigureAwait(false);
+            _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
+        });
     }
 
     /// <summary>
@@ -101,12 +109,6 @@ public sealed class MainShell : Component
             .Where(item => item.IsVisible)
             .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
             .ToList();
-
-        // 侧栏收起时，搜索图标放到左侧窄 rail 的最上面（标题栏里不再放）.
-        if (!isPaneOpen)
-        {
-            menu.Insert(0, new NavigationViewItemData("搜索", "Find", SearchRailTag));
-        }
 
         var menuItems = menu.ToArray();
         var footer = viewModel.FooterItems
@@ -209,11 +211,22 @@ public sealed class MainShell : Component
             .Height(48)
             .Ref(titleBarRef);
 
+        // 折叠态：在左侧窄 rail 顶部叠一个真的搜索按钮（导航项点击在 rail 里不可靠）.
+        Element railSearch = isPaneOpen
+            ? (Element)TextBlock(string.Empty)
+            : new XamlHostElement(() => _railSearchButton, _ => { })
+                .Size(48, 36)
+                .HAlign(HorizontalAlignment.Left)
+                .VAlign(VerticalAlignment.Top)
+                .Margin(0, 6, 0, 0)
+                .Grid(row: 1);
+
         return Grid(
             columns: [GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Star()],
             titleBar.Grid(row: 0),
-            navigation);
+            navigation,
+            railSearch);
     }
 
     private static Button CreateFlatIconButton(string glyph, string automationName)
