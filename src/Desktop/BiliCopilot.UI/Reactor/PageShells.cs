@@ -182,6 +182,8 @@ public sealed class LivePartitionShell : Component
     private readonly LiveSubPartitionMainBody _partitionBody = new();
     private readonly FollowedLiveBar _followedBar = new();
     private Flyout? _filterFlyout;
+    private TextBlock? _filterLabel;
+    private Button? _filterButton;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LivePartitionShell"/> class.
@@ -200,10 +202,30 @@ public sealed class LivePartitionShell : Component
         var followVisible = !vm.IsFollowRoomsEmpty;
         var inPartition = vm.SelectedDetail is not null;
 
-        Element body = inPartition
-            ? ViewLaterShell.Host(_partitionBody, control => control.ViewModel = vm.SelectedDetail, vm).Grid(row: 3).Margin(16, 0, 16, 0)
-            : ViewLaterShell.Host(_recommendBody, control => control.ViewModel = vm, vm).Grid(row: 3).Margin(16, 0, 16, 0);
 
+        // 控件 ViewModel 在这里直接写：Host 的 apply 只在元素挂载时跑一次，
+        // 切换分区后元素被复用，靠 apply 永远拿不到新的 SelectedDetail.
+        _recommendBody.ViewModel = vm;
+        if (vm.SelectedDetail is { } detail)
+        {
+            _partitionBody.ViewModel = detail;
+        }
+
+        // 顶栏按钮文字和自动化名字都跟着当前分区走.
+        var filterLabel = GetFilterLabel(vm);
+        if (_filterLabel is not null && _filterLabel.Text != filterLabel)
+        {
+            _filterLabel.Text = filterLabel;
+        }
+
+        if (_filterButton is not null)
+        {
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(_filterButton, filterLabel);
+        }
+
+        Element body = inPartition
+            ? ViewLaterShell.Host(_partitionBody, _ => { }, vm).Grid(row: 3).Margin(16, 0, 16, 0).WithKey("live-partition")
+            : ViewLaterShell.Host(_recommendBody, _ => { }, vm).Grid(row: 3).Margin(16, 0, 16, 0).WithKey("live-recommend");
         return Grid(
             [GridSize.Star()],
             [GridSize.Px(56), GridSize.Px(followVisible ? 76 : 0), GridSize.Px(1), GridSize.Star()],
@@ -244,11 +266,19 @@ public sealed class LivePartitionShell : Component
             _ => { })
             .WithKey("live-refresh");
 
+    private static string GetFilterLabel(LivePartitionPageViewModel vm)
+    {
+        var section = vm.SelectedMainSection;
+        return section is null || section.Data.Id == "_" ? "筛选" : section.Title;
+    }
+
     private Element BuildFilterButton(LivePartitionPageViewModel vm)
         => new XamlHostElement(
             () =>
             {
-                var button = CreateToolbarButton("筛选", FluentIcons.Common.Symbol.Filter);
+                var button = CreateToolbarButton(GetFilterLabel(vm), FluentIcons.Common.Symbol.Filter);
+                _filterButton = button;
+                _filterLabel = (TextBlock)((StackPanel)button.Content).Children[1];
                 button.Click += (_, _) => ShowFilterFlyout(vm, button);
                 return button;
             },
@@ -322,15 +352,40 @@ public sealed class LivePartitionShell : Component
 
     private Button CreateSectionRow(LivePartitionPageViewModel vm, PartitionViewModel? section, string title)
     {
+        var isSelected = section is not null && section.Equals(vm.SelectedMainSection);
+
+        // 选中的分区前面打勾，没选中的留同宽空位，文字不会左右跳.
+        var check = new FluentIcons.WinUI.SymbolIcon
+        {
+            Symbol = FluentIcons.Common.Symbol.Checkmark,
+            FontSize = 12,
+            Width = 14,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed,
+        };
+
+        var label = new TextBlock
+        {
+            Text = title,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        panel.Children.Add(check);
+        panel.Children.Add(label);
+
         var button = new Button
         {
-            Content = title,
+            Content = panel,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0),
             Padding = new Thickness(12, 8, 12, 8),
         };
+
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, title);
 
         button.Click += (_, _) =>
         {
@@ -345,4 +400,3 @@ public sealed class LivePartitionShell : Component
         return button;
     }
 }
-
