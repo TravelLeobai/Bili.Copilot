@@ -117,7 +117,11 @@ public sealed partial class LiveSidePanelHost : UserControl
             return;
         }
 
-        var inset = _isCollapsed ? 0 : Services.MpvSurfaceService.LivePanelWidth;
+        // 用实际宽度算让位，按钮列宽度改了也不用同步改常量.
+        var measured = ActualWidth;
+        var inset = _isCollapsed
+            ? 0
+            : measured > 40 ? (int)Math.Ceiling(measured) : Services.MpvSurfaceService.LivePanelWidth;
         Services.MpvSurfaceService.ApplyRightInset(handle, inset);
     }
 
