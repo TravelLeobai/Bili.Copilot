@@ -1,7 +1,9 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using BiliCopilot.UI.Models.Constants;
 using Microsoft.Extensions.Logging;
+using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -109,11 +111,20 @@ public sealed partial class PlayerViewModel
     /// </summary>
     public bool IsVodProgressVisible => !IsLive;
 
+    /// <summary>
+    /// 点播时间轴（缓存条、进度条、章节）是否显示：直播时整块收掉.
+    /// </summary>
+    public bool IsVodTimelineVisible => !IsLive && !IsPreviewProgressChanging;
+
     partial void OnIsLiveChanged(bool value)
     {
         // 直播时把底部那条自动隐藏的细进度条也压掉.
         IsBottomProgressBarVisible = !value && !IsControlsVisible
             && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
         OnPropertyChanged(nameof(IsVodProgressVisible));
+        OnPropertyChanged(nameof(IsVodTimelineVisible));
     }
+
+    partial void OnIsPreviewProgressChangingChanged(bool value)
+        => OnPropertyChanged(nameof(IsVodTimelineVisible));
 }

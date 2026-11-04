@@ -512,6 +512,12 @@
                 <ColumnDefinition />
                 <ColumnDefinition Width="60" />
             </Grid.ColumnDefinitions>
+            <Grid Grid.ColumnSpan="3" Visibility="{x:Bind ViewModel.IsVodProgressVisible, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60" />
+                    <ColumnDefinition />
+                    <ColumnDefinition Width="60" />
+                </Grid.ColumnDefinitions>
             <Grid
                 x:Name="CommonPositionContainer"
                 HorizontalAlignment="Right"
@@ -584,6 +590,7 @@
                 Style="{StaticResource CaptionTextBlockStyle}"
                 Text="{x:Bind GetTimeText(ViewModel.Player.Duration), Mode=OneWay}" />
 
+            </Grid>
             <!--  直播进度：只表达离最新直播差多少，不给时间戳  -->
             <Grid
                 Grid.ColumnSpan="3"
