@@ -26,7 +26,12 @@ internal static class QualityUnlockService
     /// <summary>
     /// 默认上游主页（脚本的 @homepage，assets/home.txt 也挂在这里）.
     /// </summary>
-    public const string DefaultHomePage = "http://hd2a.page.gd";
+    public const string DefaultHomePage = "https://hd2a.page.gd";
+
+    /// <summary>
+    /// 默认用户脚本地址（上游提供的最小化脚本）.
+    /// </summary>
+    public const string DefaultScriptUrl = "https://hd2a.page.gd/assets/min.baidu.user.js";
 
     private static readonly HttpClient Client = new(new SocketsHttpHandler
     {
@@ -49,11 +54,7 @@ internal static class QualityUnlockService
     public static bool AutoMaxQuality
         => SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockAutoMax, true);
 
-    /// <summary>
-    /// 是否把登录态一起发给解锁服务器（优先关闭）.
-    /// </summary>
-    public static bool SendCookie
-        => SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockSendCookie, false);
+
 
     /// <summary>
     /// 当前使用的解析服务器.
@@ -75,7 +76,16 @@ internal static class QualityUnlockService
         get
         {
             var value = SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockHomePage, DefaultHomePage);
-            return string.IsNullOrWhiteSpace(value) ? DefaultHomePage : value.TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return DefaultHomePage;
+            }
+
+            // 上游已经走 https，旧配置里的 http 自动升级，避免被中间跳转拖慢.
+            value = value.TrimEnd('/');
+            return value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                ? "https://" + value[7..]
+                : value;
         }
     }
 
@@ -130,17 +140,14 @@ internal static class QualityUnlockService
         {
             try
             {
-                var scriptUrl = SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockScriptUrl, string.Empty);
-                if (string.IsNullOrWhiteSpace(scriptUrl))
+                var script = await TryFetchScriptAsync(DefaultScriptUrl).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(script))
                 {
-                    scriptUrl = $"{homePage}/assets/tampermonkey.user.js";
+                    script = await TryFetchScriptAsync($"{homePage}/assets/tampermonkey.user.js").ConfigureAwait(false);
                 }
 
-                using var request = CreateRequest(scriptUrl);
-                using var response = await Client.SendAsync(request).ConfigureAwait(false);
-                if (response.IsSuccessStatusCode)
+                if (!string.IsNullOrWhiteSpace(script))
                 {
-                    var script = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                     var match = Regex.Match(script, @"home\s*:\s*[""'](https?://[^""']+)[""']");
                     if (match.Success)
                     {
@@ -200,7 +207,8 @@ internal static class QualityUnlockService
         var playUrl = $"https://api.bilibili.com/x/player/wbi/playurl?bvid={bvid}&cid={cid}&qn={qn}"
             + "&type=0&otype=json&fourk=1&fnver=0&fnval=4048&platform=pc&high_quality=1";
 
-        var cookieForServer = SendCookie ? cookie : string.Empty;
+        // 登录态一律转发：解锁服务器要靠它拿到大会员画质.
+        var cookieForServer = cookie;
         var ui = $"{{\"ua\":\"{Escape(UserAgent)}\",\"mid\":\"{Escape(mid)}\",\"vip\":0,\"level\":2,\"money\":0,"
             + $"\"cookie\":\"{Escape(cookieForServer)}\",\"csrf\":\"{Escape(csrf)}\"}}";
         var body = $"{{\"ui\":{ui},\"url\":\"{Escape(playUrl)}\"}}";
@@ -292,6 +300,27 @@ internal static class QualityUnlockService
         }
 
         return (video, audio, quality);
+    }
+
+    /// <summary>
+    /// 取一个脚本地址的内容，失败返回空串.
+    /// </summary>
+    /// <param name="url">脚本地址.</param>
+    /// <returns>脚本文本.</returns>
+    private static async Task<string> TryFetchScriptAsync(string url)
+    {
+        try
+        {
+            using var request = CreateRequest(url);
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            return response.IsSuccessStatusCode
+                ? await response.Content.ReadAsStringAsync().ConfigureAwait(false)
+                : string.Empty;
+        }
+        catch (Exception)
+        {
+            return string.Empty;
+        }
     }
 
     private static HttpRequestMessage CreateRequest(string url)

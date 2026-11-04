@@ -37,17 +37,8 @@
                     IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
                     Text="{x:Bind ViewModel.QualityUnlockHomePage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
-            <base:SettingsCard Description="留空则尝试 上游主页/assets/tampermonkey.user.js" Header="用户脚本地址">
-                <TextBox
-                    MinWidth="260"
-                    IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
-                    Text="{x:Bind ViewModel.QualityUnlockScriptUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-            </base:SettingsCard>
-            <base:SettingsCard Description="脚本会把 cookie 一并交给服务器；默认关闭，服务器要求登录态时再打开" Header="向服务器发送登录态">
-                <ToggleSwitch
-                    IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
-                    IsOn="{x:Bind ViewModel.QualityUnlockSendCookie, Mode=TwoWay}" />
-            </base:SettingsCard>
+
+
             <base:SettingsCard Description="{x:Bind ViewModel.QualityUnlockStatusText, Mode=OneWay}" Header="同步状态">
                 <Button
                     VerticalAlignment="Center"

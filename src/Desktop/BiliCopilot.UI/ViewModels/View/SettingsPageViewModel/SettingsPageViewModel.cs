@@ -87,10 +87,8 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         DashScopeModel = SettingsToolkit.ReadLocalSetting(SettingNames.DashScopeModel, "paraformer-v2");
         QualityUnlockEnabled = Services.QualityUnlockService.IsEnabled;
         QualityUnlockAutoMax = Services.QualityUnlockService.AutoMaxQuality;
-        QualityUnlockSendCookie = Services.QualityUnlockService.SendCookie;
         QualityUnlockServer = Services.QualityUnlockService.Server;
         QualityUnlockHomePage = Services.QualityUnlockService.HomePage;
-        QualityUnlockScriptUrl = SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockScriptUrl, string.Empty);
         QualityUnlockStatusText = Services.QualityUnlockService.LastSync == DateTimeOffset.UnixEpoch
             ? "尚未同步"
             : $"上次同步：{Services.QualityUnlockService.LastSync:MM-dd HH:mm}";
@@ -867,17 +865,11 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     partial void OnQualityUnlockAutoMaxChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockAutoMax, value);
 
-    partial void OnQualityUnlockSendCookieChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockSendCookie, value);
-
     partial void OnQualityUnlockServerChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockServer, value ?? string.Empty);
 
     partial void OnQualityUnlockHomePageChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockHomePage, value ?? string.Empty);
-
-    partial void OnQualityUnlockScriptUrlChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockScriptUrl, value ?? string.Empty);
 
     [RelayCommand]
     private async Task SyncQualityUnlockAsync()
