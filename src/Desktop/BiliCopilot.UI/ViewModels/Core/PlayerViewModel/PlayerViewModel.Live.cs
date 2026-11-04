@@ -153,12 +153,35 @@ public sealed partial class PlayerViewModel
     private int _livePanelTab;
 
     /// <summary>
+    /// 主播头像地址（统一成绝对地址，取不到为空串）.
+    /// </summary>
+    public string LiveUserAvatarUrl
+    {
+        get
+        {
+            var url = _liveDetail?.AnchorAvatar;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                return string.Empty;
+            }
+
+            var value = url.Trim();
+            if (value.StartsWith("//", StringComparison.Ordinal))
+            {
+                value = "https:" + value;
+            }
+
+            return Uri.TryCreate(value, UriKind.Absolute, out _) ? value : string.Empty;
+        }
+    }
+
+    /// <summary>
     /// 主播头像.
     /// </summary>
     public Microsoft.UI.Xaml.Media.ImageSource? LiveUserAvatar
-        => string.IsNullOrEmpty(_liveDetail?.AnchorAvatar)
+        => string.IsNullOrEmpty(LiveUserAvatarUrl)
             ? null
-            : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(_liveDetail.AnchorAvatar));
+            : new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(LiveUserAvatarUrl));
 
     /// <summary>
     /// 关注按钮文本.

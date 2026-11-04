@@ -100,21 +100,9 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildHeader(PlayerViewModel vm)
     {
-        // 头像地址可能还没回来；空字符串传给 Reactor 的 Image 会构造 Uri 失败直接抛异常
-        // （播放界面右侧那个 NullReferenceException 红框就是这么来的），这里做占位.
-        var avatarUrl = vm.LiveUserAvatar?.ToString();
-        Element avatar = string.IsNullOrWhiteSpace(avatarUrl)
-            ? Border(
-                TextBlock(string.IsNullOrEmpty(vm.LiveUser?.Name) ? "直" : vm.LiveUser!.Name[..1])
-                    .FontSize(16)
-                    .HAlign(HorizontalAlignment.Center)
-                    .VAlign(VerticalAlignment.Center))
-                .Size(40, 40)
-                .CornerRadius(20)
-                .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
-            : Border(Image(avatarUrl!).Size(40, 40).AccessibilityHidden())
-                .Size(40, 40)
-                .CornerRadius(20);
+        // 头像地址可能没回来，也可能是 //i0.hdslb.com/... 这种非绝对地址，
+        // 直接塞给 Reactor 的 Image 会抛「不是有效的绝对 URI」，统一走兜底.
+        var avatar = AvatarOrFallback(vm.LiveUserAvatarUrl, vm.LiveUser?.Name, 40, 16);
 
         var nameBlock = VStack(
             2,
@@ -441,14 +429,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 .VAlign(VerticalAlignment.Center),
             badge);
 
-        Element avatar = string.IsNullOrWhiteSpace(item.Avatar)
-            ? Border(TextBlock(item.UserName[..1]).FontSize(11).HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
-                .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
-                .CornerRadius(12)
-                .Size(24, 24)
-            : Border(Image(item.Avatar).Size(24, 24).AccessibilityHidden())
-                .CornerRadius(12)
-                .Background(ResolveBrush("ControlFillColorSecondaryBrush"));
+        var avatar = AvatarOrFallback(item.Avatar, item.UserName, 24, 11);
 
         var content = Grid(
             new[] { GridSize.Auto, GridSize.Star() },
@@ -565,6 +546,59 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         flyout.ShowAt(anchor);
     }
 
+    /// <summary>
+    /// 把地址整理成可直接用的绝对地址；不可用的返回 null.
+    /// </summary>
+    /// <param name="url">原始地址.</param>
+    /// <returns>绝对 http(s) 地址或 null.</returns>
+    private static string? NormalizeImageUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var value = url.Trim();
+        if (value.StartsWith("//", StringComparison.Ordinal))
+        {
+            value = "https:" + value;
+        }
+
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            ? value
+            : null;
+    }
+
+    /// <summary>
+    /// 头像：地址可用就画图，否则用首字占位.
+    /// </summary>
+    /// <param name="url">头像地址.</param>
+    /// <param name="name">用户名.</param>
+    /// <param name="size">边长.</param>
+    /// <param name="fontSize">首字号.</param>
+    /// <returns>元素.</returns>
+    private static Element AvatarOrFallback(string? url, string? name, double size, double fontSize)
+    {
+        var normalized = NormalizeImageUrl(url);
+        if (normalized is not null)
+        {
+            return Border(Image(normalized).Size(size, size).AccessibilityHidden())
+                .Size(size, size)
+                .CornerRadius(size / 2)
+                .Background(ResolveBrush("ControlFillColorSecondaryBrush"));
+        }
+
+        var text = string.IsNullOrWhiteSpace(name) ? "?" : name[..1];
+        return Border(
+            TextBlock(text)
+                .FontSize(fontSize)
+                .HAlign(HorizontalAlignment.Center)
+                .VAlign(VerticalAlignment.Center))
+            .Size(size, size)
+            .CornerRadius(size / 2)
+            .Background(ResolveBrush("ControlFillColorSecondaryBrush"));
+    }
     private static Brush ResolveBrush(string name)
     {
         if (Application.Current.Resources.TryGetValue(name, out var value) && value is Brush brush)
