@@ -100,7 +100,9 @@ internal static class CdnStreamProxy
             Entries[key] = new StreamEntry(remoteUrl, userAgent);
         }
 
-        return BaseUrl + key;
+        var proxied = BaseUrl + key;
+        Serilog.Log.Debug("多线程代理地址：{Proxied}", proxied);
+        return proxied;
     }
 
     private static HttpClient CreateClient()
@@ -140,6 +142,7 @@ internal static class CdnStreamProxy
         try
         {
             var key = context.Request.Url?.AbsolutePath.Trim('/').Split('/').LastOrDefault() ?? string.Empty;
+        Serilog.Log.Information("多线程代理收到请求：{Method} {Path} Range={Range}", context.Request.HttpMethod, context.Request.Url?.PathAndQuery, context.Request.Headers["Range"]);
             if (!Entries.TryGetValue(key, out var entry))
             {
                 context.Response.StatusCode = 404;
