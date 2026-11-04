@@ -8,46 +8,54 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
+    <!--  外层不再铺底色：按钮单独浮在视频上，只有面板本体带亚克力底  -->
+    <Grid Background="Transparent">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <!--  收起按钮：放在面板左侧外面，不再占用面板内部的顶部空间  -->
+        <!--  收起按钮：悬在面板左侧的细窄条，无底色、悬停才显形  -->
         <Button
             x:Name="CollapseButton"
             Grid.Column="0"
-            Width="20"
-            Height="72"
-            Margin="0"
+            Width="14"
+            Height="56"
+            Margin="0,0,2,0"
             Padding="0"
             VerticalAlignment="Center"
+            Background="Transparent"
+            BorderThickness="0"
             Click="OnCollapseClick"
-            CornerRadius="6,0,0,6"
+            CornerRadius="7"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             ToolTipService.ToolTip="收起直播面板">
-            <ic:SymbolIcon FontSize="11" Symbol="ChevronRight" />
+            <ic:SymbolIcon FontSize="10" Symbol="ChevronRight" />
         </Button>
 
-        <!--  折叠后的窄条  -->
+        <!--  折叠后的展开按钮：同样独立，不跟着面板一起上底色  -->
         <Button
             x:Name="ExpandButton"
             Grid.Column="0"
-            Width="36"
-            Height="64"
+            Width="22"
+            Height="56"
             Padding="0"
             VerticalAlignment="Center"
+            Background="Transparent"
+            BorderThickness="0"
             Click="OnExpandClick"
+            CornerRadius="7"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             ToolTipService.ToolTip="展开直播面板"
             Visibility="Collapsed">
-            <ic:SymbolIcon FontSize="14" Symbol="ChevronLeft" />
+            <ic:SymbolIcon FontSize="12" Symbol="ChevronLeft" />
         </Button>
 
         <Grid
             x:Name="PanelRoot"
             Grid.Column="1"
-            Width="360">
+            Width="360"
+            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>

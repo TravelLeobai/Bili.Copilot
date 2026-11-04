@@ -418,4 +418,11 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     /// 落后直播时红点更亮，实时时淡一点.
     /// </summary>
     internal static double GetLiveDotOpacity(bool isBehind) => isBehind ? 1d : 0.45d;
+    /// <summary>
+    /// 直播时需要隐藏的控件（倍速对直播没意义）.
+    /// </summary>
+    /// <param name="isLive">是否直播.</param>
+    /// <returns>可见性.</returns>
+    public static Visibility GetLiveHidden(bool isLive)
+        => isLive ? Visibility.Collapsed : Visibility.Visible;
 }

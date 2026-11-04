@@ -257,7 +257,8 @@
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
                     Style="{StaticResource BasicPlayerIconButtonStyle}"
-                    ToolTipService.ToolTip="{x:Bind GetSpeedText(ViewModel.Player.PlaybackRate), Mode=OneWay}">
+                    ToolTipService.ToolTip="{x:Bind GetSpeedText(ViewModel.Player.PlaybackRate), Mode=OneWay}"
+                    Visibility="{x:Bind local:OverlayTransportControls.GetLiveHidden(ViewModel.IsLive), Mode=OneWay}">
                     <ic:SymbolIcon FontSize="14" Symbol="TopSpeed" />
                     <Button.Flyout>
                         <Flyout
