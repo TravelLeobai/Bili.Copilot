@@ -100,7 +100,21 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildHeader(PlayerViewModel vm)
     {
-        var avatar = Image(vm.LiveUserAvatar?.ToString() ?? string.Empty).Size(40, 40).AccessibilityHidden();
+        // 头像地址可能还没回来；空字符串传给 Reactor 的 Image 会构造 Uri 失败直接抛异常
+        // （播放界面右侧那个 NullReferenceException 红框就是这么来的），这里做占位.
+        var avatarUrl = vm.LiveUserAvatar?.ToString();
+        Element avatar = string.IsNullOrWhiteSpace(avatarUrl)
+            ? Border(
+                TextBlock(string.IsNullOrEmpty(vm.LiveUser?.Name) ? "直" : vm.LiveUser!.Name[..1])
+                    .FontSize(16)
+                    .HAlign(HorizontalAlignment.Center)
+                    .VAlign(VerticalAlignment.Center))
+                .Size(40, 40)
+                .CornerRadius(20)
+                .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
+            : Border(Image(avatarUrl!).Size(40, 40).AccessibilityHidden())
+                .Size(40, 40)
+                .CornerRadius(20);
 
         var nameBlock = VStack(
             2,

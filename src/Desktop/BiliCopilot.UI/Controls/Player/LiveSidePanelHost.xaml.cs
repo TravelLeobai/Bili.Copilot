@@ -93,5 +93,7 @@ public sealed partial class LiveSidePanelHost : UserControl
     {
         PanelRoot.Visibility = _isCollapsed ? Visibility.Collapsed : Visibility.Visible;
         ExpandButton.Visibility = _isCollapsed ? Visibility.Visible : Visibility.Collapsed;
+        // 收起后左侧只剩展开条，收起按钮要跟着藏起来.
+        CollapseButton.Visibility = _isCollapsed ? Visibility.Collapsed : Visibility.Visible;
     }
 }

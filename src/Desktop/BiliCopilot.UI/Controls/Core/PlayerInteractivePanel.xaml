@@ -43,17 +43,29 @@
                 x:Name="ReloadItem"
                 Click="OnReloadPlayerClick"
                 Style="{StaticResource ContextMenuFlyoutItemStyle}"
-                Text="重载" />
+                Text="重载">
+                <MenuFlyoutItem.Icon>
+                    <ic:SymbolIcon Symbol="ArrowSync" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
             <ToggleMenuFlyoutItem
                 x:Name="CdnToggleItem"
                 Click="OnCdnToggleClick"
                 Style="{StaticResource ContextMenuFlyoutItemStyle}"
-                Text="CDN 优选" />
+                Text="CDN 优选">
+                <ToggleMenuFlyoutItem.Icon>
+                    <ic:SymbolIcon Symbol="Globe" />
+                </ToggleMenuFlyoutItem.Icon>
+            </ToggleMenuFlyoutItem>
             <MenuFlyoutItem
                 x:Name="CdnSwitchItem"
                 Click="OnCdnSwitchClick"
                 Style="{StaticResource ContextMenuFlyoutItemStyle}"
-                Text="换一个 CDN 节点" />
+                Text="换一个 CDN 节点">
+                <MenuFlyoutItem.Icon>
+                    <ic:SymbolIcon Symbol="ArrowSwap" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
             <MenuFlyoutItem
                 x:Name="CdnHostItem"
                 IsEnabled="False"

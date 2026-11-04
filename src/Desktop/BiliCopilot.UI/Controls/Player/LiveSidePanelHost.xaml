@@ -12,7 +12,23 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
+
+        <!--  收起按钮：放在面板左侧外面，不再占用面板内部的顶部空间  -->
+        <Button
+            x:Name="CollapseButton"
+            Grid.Column="0"
+            Width="20"
+            Height="72"
+            Margin="0"
+            Padding="0"
+            VerticalAlignment="Center"
+            Click="OnCollapseClick"
+            CornerRadius="6,0,0,6"
+            ToolTipService.ToolTip="收起直播面板">
+            <ic:SymbolIcon FontSize="11" Symbol="ChevronRight" />
+        </Button>
 
         <!--  折叠后的窄条  -->
         <Button
@@ -33,21 +49,9 @@
             Grid.Column="1"
             Width="360">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <Grid Padding="12,8,8,0">
-                <Button
-                    Width="32"
-                    Height="28"
-                    Padding="0"
-                    HorizontalAlignment="Right"
-                    Click="OnCollapseClick"
-                    ToolTipService.ToolTip="收起直播面板">
-                    <ic:SymbolIcon FontSize="12" Symbol="ChevronRight" />
-                </Button>
-            </Grid>
-            <Grid x:Name="ReactorHost" Grid.Row="1" />
+            <Grid x:Name="ReactorHost" Grid.Row="0" />
         </Grid>
     </Grid>
 </UserControl>
