@@ -25,6 +25,11 @@ namespace BiliCopilot.UI.ViewModels.View;
 /// </summary>
 public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 {
+    /// <summary>
+    /// 「自动优选」这一项不对应具体主机，选中它等于开启自动优选.
+    /// </summary>
+    public const string AutoCdnServerOption = "自动优选（跟随测速）";
+
     [RelayCommand]
     private async Task InitializeAsync()
     {
@@ -102,10 +107,8 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         CdnRewriteAkamai = SettingsToolkit.ReadLocalSetting(SettingNames.CdnRewriteAkamai, false);
         CdnStallSwitch = SettingsToolkit.ReadLocalSetting(SettingNames.CdnStallSwitch, true);
         CdnReplaceModeCollection = Enum.GetValues<CdnReplaceMode>().ToList();
-        CdnServerCollection = new List<string> { PlayUrlOptimizer.DefaultCdnHost }.Concat(CdnPoolService.GetCandidates(40)).Distinct().ToList();
         CdnServerSelected = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, PlayUrlOptimizer.DefaultCdnHost);
-        CdnReplaceModeIndex = (int)CdnReplaceMode;
-        CdnServerIndex = Math.Max(0, CdnServerCollection.IndexOf(CdnServerSelected));
+        RebuildCdnServerList();
         PlayerDisplayModeCollection = Enum.GetValues<PlayerDisplayMode>().ToList();
         PreferCodecCollection = Enum.GetValues<PreferCodecType>().ToList();
         PreferQualityCollection = Enum.GetValues<PreferQualityType>().ToList();
@@ -564,7 +567,16 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         => SettingsToolkit.WriteLocalSetting(SettingNames.CdnStallSwitch, value);
 
     partial void OnCdnServerSelectedChanged(string value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.PlayerCdnServer, value);
+    {
+        if (string.IsNullOrWhiteSpace(value) || value == AutoCdnServerOption)
+        {
+            SettingsToolkit.WriteLocalSetting(SettingNames.CdnAutoSelect, true);
+            return;
+        }
+
+        SettingsToolkit.WriteLocalSetting(SettingNames.PlayerCdnServer, value);
+        SettingsToolkit.WriteLocalSetting(SettingNames.CdnAutoSelect, false);
+    }
 
     private static int ResolveSponsorServerIndex(string server)
         => server switch
@@ -930,4 +942,37 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         AiTestStatusText = (ok ? "模型正常：" : "模型有问题：") + message;
         AdSkipStatusText = AiTestStatusText;
     }
+    /// <summary>
+    /// 按当前节点池重建可选的 CDN 服务器列表.
+    /// 第一项是「自动优选」，其余来自内置节点 + 抓到的节点池.
+    /// </summary>
+    public void RebuildCdnServerList()
+    {
+        CdnServerCollection.Clear();
+        CdnServerCollection.Add(AutoCdnServerOption);
+
+        foreach (var host in CdnPoolService.GetCandidates(60))
+        {
+            if (!CdnServerCollection.Contains(host))
+            {
+                CdnServerCollection.Add(host);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(CdnServerSelected)
+            && !CdnServerCollection.Contains(CdnServerSelected))
+        {
+            // 已保存的节点可能已经不在池子里，仍要能选中.
+            CdnServerCollection.Add(CdnServerSelected);
+        }
+
+        var isAuto = SettingsToolkit.ReadLocalSetting(SettingNames.CdnAutoSelect, true);
+        var index = isAuto ? 0 : CdnServerCollection.IndexOf(CdnServerSelected);
+        CdnServerIndex = index < 0 ? 0 : index;
+        Serilog.Log.Information(
+            "CDN 可选节点已刷新：{Count} 个，当前选中 {Selected}",
+            CdnServerCollection.Count,
+            index >= 0 && index < CdnServerCollection.Count ? CdnServerCollection[index] : "(空)");
+    }
+
 }

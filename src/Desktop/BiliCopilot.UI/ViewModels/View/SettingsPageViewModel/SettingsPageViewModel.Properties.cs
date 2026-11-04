@@ -254,7 +254,7 @@ public sealed partial class SettingsPageViewModel
     /// <summary>
     /// 候选 CDN 服务器.
     /// </summary>
-    public List<string> CdnServerCollection { get; set; } = new();
+    public System.Collections.ObjectModel.ObservableCollection<string> CdnServerCollection { get; } = new();
 
     [ObservableProperty]
     private string _defaultDownloadPath;
