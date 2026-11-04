@@ -30,17 +30,21 @@ public sealed class MainShell : Component
     private readonly Grid _contentHost;
     private readonly AppSearchBox _searchBox = new()
     {
-        MinWidth = 320,
-        MaxWidth = 520,
-        HorizontalAlignment = HorizontalAlignment.Center,
+        MinWidth = 0,
+        MaxWidth = 420,
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+        VerticalAlignment = VerticalAlignment.Center,
     };
 
     private readonly HeaderAccountControl _accountControl = new();
     private readonly Button _paneToggleButton = CreateFlatIconButton("\uE700", "切换导航栏");
+    private readonly Button _compactSearchButton = CreateFlatIconButton("\uE721", "搜索");
+    private readonly Button _backButton = CreateFlatIconButton("\uE72B", "返回");
     private readonly Button _favoriteButton = CreateFlatIconButton("\uE734", "我的收藏");
     private readonly Button _viewLaterButton = CreateFlatIconButton("\uE823", "稍后再看");
     private readonly Button _historyButton = CreateFlatIconButton("\uE81C", "历史记录");
     private Action? _togglePaneAction;
+    private Action? _openPaneAction;
     private ElementRef<FrameworkElement>? _titleBarRef;
 
     /// <summary>
@@ -59,6 +63,16 @@ public sealed class MainShell : Component
         _contentHost.Children.Add(mainFrame);
         _contentHost.Children.Add(overlayFrame);
         _paneToggleButton.Click += (_, _) => _togglePaneAction?.Invoke();
+        _compactSearchButton.Click += (_, _) =>
+        {
+            _openPaneAction?.Invoke();
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(160).ConfigureAwait(false);
+                _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
+            });
+        };
+        _backButton.Click += (_, _) => _viewModel.Back();
         _favoriteButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(FavoritesPage), default);
         _viewLaterButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
         _historyButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(HistoryPage), default);
@@ -74,6 +88,7 @@ public sealed class MainShell : Component
     {
         var (isPaneOpen, setIsPaneOpen) = UseState(true);
         _togglePaneAction = () => setIsPaneOpen(!isPaneOpen);
+        _openPaneAction = () => setIsPaneOpen(true);
         var titleBarRef = this.UseElementRef<FrameworkElement>();
         _titleBarRef = titleBarRef;
         var viewModel = UseObservableTree(_viewModel);
@@ -110,20 +125,27 @@ public sealed class MainShell : Component
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Center);
 
+        // 侧栏顶部：展开时是完整搜索框，收起时只剩一个搜索图标.
+        Element paneHeader = isPaneOpen
+            ? new XamlHostElement(() => _searchBox, _ => { })
+                .HAlign(HorizontalAlignment.Stretch)
+                .VAlign(VerticalAlignment.Center)
+                .Margin(12, 6, 8, 8)
+            : (Element)TextBlock(string.Empty);
+
         var navigation = (NavigationView(menu) with
         {
             Content = new XamlHostElement(() => _contentHost, _ => { }),
             FooterMenuItems = footer,
             IsBackEnabled = viewModel.IsOverlayOpen,
-            IsBackButtonVisible = viewModel.IsOverlayOpen
-                ? NavigationViewBackButtonVisible.Visible
-                : NavigationViewBackButtonVisible.Collapsed,
             OnBackRequested = () => viewModel.Back(),
             OnItemInvoked = tag => NavigateByTag(tag),
             OnSettingsSelected = () => NavigateToSettings(),
             IsPaneOpen = isPaneOpen,
             IsPaneToggleButtonVisible = false,
+            IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
             PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+            PaneHeader = paneHeader,
         })
             .PaneFooter(accountPanel)
             .Background("Transparent")
@@ -131,13 +153,27 @@ public sealed class MainShell : Component
 
         var titleContent = HStack(
             4,
+            viewModel.IsOverlayOpen
+                ? new XamlHostElement(() => _backButton, _ => { })
+                    .Size(40, 40)
+                    .HAlign(HorizontalAlignment.Left)
+                    .VAlign(VerticalAlignment.Center)
+                : (Element)TextBlock(string.Empty),
             new XamlHostElement(() => _paneToggleButton, _ => { })
                 .Size(40, 40)
                 .Margin(3.5, 0, 0, 0)
                 .HAlign(HorizontalAlignment.Left)
                 .VAlign(VerticalAlignment.Center),
+            // 侧栏收起时，搜索缩成标题栏里的一个图标.
+            isPaneOpen
+                ? (Element)TextBlock(string.Empty)
+                : new XamlHostElement(() => _compactSearchButton, _ => { })
+                    .Size(40, 40)
+                    .HAlign(HorizontalAlignment.Left)
+                    .VAlign(VerticalAlignment.Center),
             TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
             .VAlign(VerticalAlignment.Center)
+            .HAlign(HorizontalAlignment.Left)
             .Grid(row: 0, column: 0);
 
         var navButtons = viewModel.IsTopNavBarShown
@@ -146,27 +182,25 @@ public sealed class MainShell : Component
                 new XamlHostElement(() => _favoriteButton, _ => { }).Size(40, 40),
                 new XamlHostElement(() => _viewLaterButton, _ => { }).Size(40, 40),
                 new XamlHostElement(() => _historyButton, _ => { }).Size(40, 40))
-                .Margin(124, 0, 0, 0)
+                .Margin(8, 0, 0, 0)
                 .HAlign(HorizontalAlignment.Left)
                 .VAlign(VerticalAlignment.Center)
             : (Element)TextBlock(string.Empty);
 
-        var searchHost = new XamlHostElement(() => _searchBox, _ => { })
-            .MaxWidth(520)
-            .MinWidth(320)
-            .HAlign(HorizontalAlignment.Center)
-            .VAlign(VerticalAlignment.Center);
-
         var titleBar = Grid(
-            columns: [GridSize.Star()],
+            columns: [GridSize.Auto, GridSize.Star()],
             rows: [GridSize.Star()],
-            titleContent,
-            navButtons,
-            searchHost,
+            HStack(
+                4,
+                titleContent,
+                navButtons)
+                .VAlign(VerticalAlignment.Center)
+                .Grid(row: 0, column: 0),
             HStack(0, TextBlock(string.Empty))
                 .Padding(0, 0, 12, 0)
                 .HAlign(HorizontalAlignment.Right)
-                .VAlign(VerticalAlignment.Center))
+                .VAlign(VerticalAlignment.Center)
+                .Grid(row: 0, column: 1))
             .Height(48)
             .Ref(titleBarRef);
 
