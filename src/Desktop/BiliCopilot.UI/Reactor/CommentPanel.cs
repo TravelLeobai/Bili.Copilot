@@ -8,6 +8,7 @@ using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.Services;
 using BiliCopilot.UI.ViewModels.Items;
+using BiliCopilot.UI.Extensions;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
@@ -258,9 +259,12 @@ public sealed class CommentPanel : Component
 
     private static Element CreateCard(CommentItemViewModel comment, ICommand? showMore, bool isMoreEnabled, string key, Action refresh)
     {
+        // 40 口径头像按 80 像素解码，同一个地址走缓存不重复解码.
+        var avatarUrl = comment.Avatar?.ToString();
         var avatar = Button(
             Border(
-                Image(comment.Avatar?.ToString() ?? string.Empty)
+                Image(avatarUrl ?? string.Empty)
+                    .Set(image => image.Source = SmallImageCache.Get(avatarUrl, 40) ?? image.Source)
                     .Size(40, 40)
                     .AccessibilityHidden())
                 .CornerRadius(20),
@@ -279,7 +283,6 @@ public sealed class CommentPanel : Component
                 .Margin(0, 12, 0, 0)
                 .WithBorder(ThemeBrush("AccentFillColorDefaultBrush"), 1)
             : (Element)TextBlock(string.Empty);
-
         var nameRow = Grid(
             columns: new[] { GridSize.Star(), GridSize.Auto },
             rows: new[] { GridSize.Auto },

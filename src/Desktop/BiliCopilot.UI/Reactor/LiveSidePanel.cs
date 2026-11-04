@@ -5,6 +5,7 @@ using System.ComponentModel;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.Services.Live;
 using BiliCopilot.UI.ViewModels.Items;
+using BiliCopilot.UI.Extensions;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;

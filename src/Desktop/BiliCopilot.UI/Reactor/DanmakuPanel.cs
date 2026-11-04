@@ -3,6 +3,7 @@
 using System.Collections.Specialized;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
+using BiliCopilot.UI.Extensions;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
@@ -88,6 +89,7 @@ public sealed class DanmakuPanel : Component
                 .AccessibilityHidden()
             : Border(
                 Image(item.Avatar.ToString())
+                    .Set(image => image.Source = SmallImageCache.Get(item.Avatar.ToString(), 36) ?? image.Source)
                     .Size(36, 36)
                     .AccessibilityHidden())
                 .CornerRadius(18);
