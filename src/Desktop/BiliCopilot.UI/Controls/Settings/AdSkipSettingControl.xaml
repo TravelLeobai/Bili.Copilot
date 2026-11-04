@@ -14,6 +14,12 @@
         Header="空降助手">
         <base:SettingsExpander.Items>
 
+            <base:SettingsCard Description="自动跳过赞助、片头、片尾等片段（数据来自 SponsorBlock，原「跳过赞助片段」已并入这里）" Header="自动跳过">
+                <ToggleSwitch
+                    IsOn="{x:Bind ViewModel.IsSponsorBlockEnabled, Mode=TwoWay}"
+                    OffContent="关"
+                    OnContent="开" />
+            </base:SettingsCard>
             <base:SettingsCard Description="SponsorBlock 数据源，可换 B 站专用镜像或自建实例" Header="片段数据服务器">
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <ComboBox MinWidth="200" SelectedIndex="{x:Bind ViewModel.SponsorServerIndex, Mode=TwoWay}">

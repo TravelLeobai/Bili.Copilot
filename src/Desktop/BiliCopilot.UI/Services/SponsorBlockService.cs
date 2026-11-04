@@ -1,5 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using BiliCopilot.UI.Models.Constants;
@@ -41,6 +42,7 @@ public sealed class SponsorSegment
 public static class SponsorBlockService
 {
     private const string OfficialServer = "https://sponsor.ajay.app";
+    private const string MirrorServer = "https://bsbsb.top";
     private static readonly HttpClient Client = CreateClient();
 
     /// <summary>
@@ -71,10 +73,34 @@ public static class SponsorBlockService
         }
 
         var categories = BuildCategories();
-        var server = CurrentServer;
-        var url = $"{server}/api/skipSegments?videoID={WebUtility.UrlEncode(videoId)}&categories={WebUtility.UrlEncode(categories)}";
+        // 先问配置的服务器，失败（TLS 握手、连接被掐）就换另一个已知实例再问一次.
+        var candidates = new List<string> { CurrentServer };
+        foreach (var fallback in new[] { OfficialServer, MirrorServer })
+        {
+            if (!candidates.Contains(fallback, StringComparer.OrdinalIgnoreCase))
+            {
+                candidates.Add(fallback);
+            }
+        }
+
+        foreach (var server in candidates)
+        {
+            var url = $"{server.TrimEnd('/')}/api/skipSegments?videoID={WebUtility.UrlEncode(videoId)}&categories={WebUtility.UrlEncode(categories)}";
+            var result = await TryQueryAsync(url, server);
+            if (result is not null)
+            {
+                return result;
+            }
+        }
+
+        return Array.Empty<SponsorSegment>();
+    }
+
+    private static async Task<IReadOnlyList<SponsorSegment>?> TryQueryAsync(string url, string server)
+    {
         try
         {
+            Debug.WriteLine($"[SponsorBlock] 查询 {server}");
             using var response = await Client.GetAsync(url);
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
@@ -116,7 +142,8 @@ public static class SponsorBlockService
         }
         catch (Exception)
         {
-            return Array.Empty<SponsorSegment>();
+            // 这一台不通（常见是镜像要求 UA、官方域名 TLS 被掐），交给下一台.
+            return null;
         }
     }
 
@@ -148,7 +175,11 @@ public static class SponsorBlockService
     private static HttpClient CreateClient()
     {
         var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All };
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+        var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+        // bsbsb.top 这类镜像会直接掐掉没有 UA 的连接.
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BiliCopilot/2.0");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
+        return client;
     }
 
     private sealed class SegmentResponse

@@ -127,12 +127,12 @@ public sealed class FavoritesShell : Component
     {
         _viewModel = viewModel;
         _splitter = new Richasy.WinUIKernel.Share.Base.ColumnSplitter();
-        _splitter.SetBinding(
-            Richasy.WinUIKernel.Share.Base.ColumnSplitter.ColumnWidthProperty,
-            new Binding { Path = new PropertyPath(nameof(viewModel.NavColumnWidth)), Mode = BindingMode.TwoWay, Source = viewModel });
-        _splitter.SetBinding(
-            Richasy.WinUIKernel.Share.Base.ColumnSplitter.IsHideProperty,
-            new Binding { Path = new PropertyPath(nameof(viewModel.IsNavColumnManualHide)), Mode = BindingMode.TwoWay, Source = viewModel });
+        // 传统 Binding 需要源实现 ICustomProperty，普通 ObservableObject 会抛 NotSupportedException，改成手动同步.
+        _splitter.ColumnWidth = viewModel.NavColumnWidth;
+        _splitter.IsHide = viewModel.IsNavColumnManualHide;
+        // ColumnSplitter 没有宽度变更事件，拖完用指针释放把结果写回 VM.
+        _splitter.PointerReleased += (s, _) =>
+            viewModel.NavColumnWidth = ((Richasy.WinUIKernel.Share.Base.ColumnSplitter)s).ColumnWidth;
     }
 
     /// <inheritdoc/>
@@ -191,20 +191,16 @@ public sealed class LivePartitionShell : Component
         _viewModel = viewModel;
 
         _mainSplitter = new Richasy.WinUIKernel.Share.Base.ColumnSplitter();
-        _mainSplitter.SetBinding(
-            Richasy.WinUIKernel.Share.Base.ColumnSplitter.ColumnWidthProperty,
-            new Binding { Path = new PropertyPath(nameof(viewModel.NavColumnWidth)), Mode = BindingMode.TwoWay, Source = viewModel });
-        _mainSplitter.SetBinding(
-            Richasy.WinUIKernel.Share.Base.ColumnSplitter.IsHideProperty,
-            new Binding { Path = new PropertyPath(nameof(viewModel.IsNavColumnManualHide)), Mode = BindingMode.TwoWay, Source = viewModel });
+        _mainSplitter.ColumnWidth = viewModel.NavColumnWidth;
+        _mainSplitter.IsHide = viewModel.IsNavColumnManualHide;
+        _mainSplitter.PointerReleased += (s, _) =>
+            viewModel.NavColumnWidth = ((Richasy.WinUIKernel.Share.Base.ColumnSplitter)s).ColumnWidth;
 
         _subSplitter = new Richasy.WinUIKernel.Share.Base.ColumnSplitter();
-        _subSplitter.SetBinding(
-            Richasy.WinUIKernel.Share.Base.ColumnSplitter.ColumnWidthProperty,
-            new Binding { Path = new PropertyPath(nameof(viewModel.SubNavColumnWidth)), Mode = BindingMode.TwoWay, Source = viewModel });
-        _subSplitter.SetBinding(
-            Richasy.WinUIKernel.Share.Base.ColumnSplitter.IsHideProperty,
-            new Binding { Path = new PropertyPath(nameof(viewModel.IsNavColumnManualHide)), Mode = BindingMode.TwoWay, Source = viewModel });
+        _subSplitter.ColumnWidth = viewModel.SubNavColumnWidth;
+        _subSplitter.IsHide = viewModel.IsNavColumnManualHide;
+        _subSplitter.PointerReleased += (s, _) =>
+            viewModel.SubNavColumnWidth = ((Richasy.WinUIKernel.Share.Base.ColumnSplitter)s).ColumnWidth;
     }
 
     /// <inheritdoc/>

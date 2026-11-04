@@ -425,15 +425,28 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             var segments = new List<SponsorSegment>();
             var sponsorSegments = await SponsorBlockService.GetSegmentsAsync(videoId);
             segments.AddRange(sponsorSegments);
+            logger.LogInformation("片段来源 sponsorblock：{Count} 段（服务器 {Server}）", sponsorSegments.Count, SponsorBlockService.CurrentServer);
 
             if (AdCloudService.IsEnabled)
             {
-                segments.AddRange(await AdCloudService.GetSegmentsAsync(videoId, logger));
+                var cloudSegments = await AdCloudService.GetSegmentsAsync(videoId, logger);
+                segments.AddRange(cloudSegments);
+                logger.LogInformation("片段来源 云端广告库：{Count} 段", cloudSegments.Count);
+            }
+            else
+            {
+                logger.LogInformation("云端广告库未启用，跳过该来源");
             }
 
             if (AiAdAnalyzer.IsEnabled)
             {
-                segments.AddRange(await AnalyzeAdsWithAiAsync(videoId, snapshot));
+                var aiSegments = await AnalyzeAdsWithAiAsync(videoId, snapshot);
+                segments.AddRange(aiSegments);
+                logger.LogInformation("片段来源 AI 识别：{Count} 段（音频分析 {Audio}）", aiSegments.Count, AiAdAnalyzer.IsAudioEnabled ? "开" : "关");
+            }
+            else
+            {
+                logger.LogInformation("AI 识别未启用，跳过该来源");
             }
 
             _sponsorSegments = MergeSegments(segments);

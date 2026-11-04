@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <local:SettingsPageControlBase
     x:Class="BiliCopilot.UI.Controls.Settings.ThemeSettingControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -41,13 +41,5 @@
                 OffContent="关"
                 OnContent="开" />
         </base:SettingsExpander>
-        <base:SettingsExpander Description="自动跳过视频中的赞助、片头、片尾等片段（数据来自 SponsorBlock）" Header="跳过赞助片段">
-            <base:SettingsExpander.HeaderIcon>
-                <ic:SymbolIcon Symbol="FastForward" />
-            </base:SettingsExpander.HeaderIcon>
-            <ToggleSwitch
-                IsOn="{x:Bind ViewModel.IsSponsorBlockEnabled, Mode=TwoWay}"
-                OffContent="关"
-                OnContent="开" />
-        </base:SettingsExpander>    </StackPanel>
+    </StackPanel>
 </local:SettingsPageControlBase>
