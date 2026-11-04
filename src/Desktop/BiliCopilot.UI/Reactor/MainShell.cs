@@ -158,12 +158,13 @@ public sealed class MainShell : Component
             OnBackRequested = () => viewModel.Back(),
             OnItemInvoked = tag => NavigateByTag(tag),
             OnSettingsSelected = () => NavigateToSettings(),
-            IsPaneOpen = isPaneOpen,
             IsPaneToggleButtonVisible = false,
             IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
             PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
             PaneHeader = paneHeader,
         })
+            // 受控折叠：值给当前状态，回调把 NavigationView 自己触发的变化写回状态.
+            .IsPaneOpen(isPaneOpen, value => setIsPaneOpen(value))
             .PaneFooter(accountPanel)
             .Background("Transparent")
             .Grid(row: 1);
