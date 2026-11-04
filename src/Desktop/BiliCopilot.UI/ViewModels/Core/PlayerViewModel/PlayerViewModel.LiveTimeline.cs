@@ -173,7 +173,7 @@ public sealed partial class PlayerViewModel
     /// <summary>
     /// 悬浮的「回到最新」：控制栏自动隐藏时也能点，直播并落后时才出现.
     /// </summary>
-    public bool IsCatchUpButtonVisible => IsLive && IsLiveBehind && !IsControlsVisible;
+    public bool IsCatchUpButtonVisible => IsLive && IsLiveBehind;
 
     partial void OnIsLiveBehindChanged(bool value)
         => OnPropertyChanged(nameof(IsCatchUpButtonVisible));

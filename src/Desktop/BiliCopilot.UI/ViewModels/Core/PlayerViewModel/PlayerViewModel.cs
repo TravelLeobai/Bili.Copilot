@@ -617,6 +617,13 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
+        // 直播没有「广告片段」这回事，跳过提示只对点播生效.
+        if (IsLive)
+        {
+            HideSkipPrompt();
+            return;
+        }
+
         // 整段当广告的自检模式：只看播放位置，不看片段表.
         if (IsWholeVideoAdTestEnabled())
         {

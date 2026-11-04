@@ -55,6 +55,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     protected override void OnControlLoaded()
     {
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ApplyLiveHeaderAlignment();
         ViewModel.WarningOccurred += OnWarningOccurred;
         ViewModel.RequestShowNextTip += OnRequestShowNextTip;
         ViewModel.RequestHideNextTip += OnRequestHideNextTip;
@@ -124,9 +125,35 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
     }
 
+    /// <summary>
+    /// 直播时把标题栏右侧那组按钮往右顶到画面右缘：标题栏 Footer 有效区会被系统
+    /// 最小化/最大化/关闭按钮占掉约 140px，用负右边距抵消；点播保持原样.
+    /// </summary>
+    private void OnOverlayLoaded(object sender, RoutedEventArgs e)
+    {
+        // 模板应用完才有 FooterContainer，这里再对齐一次.
+        ApplyLiveHeaderAlignment();
+    }
+
+    private void ApplyLiveHeaderAlignment()
+    {
+        if (FooterContainer is null)
+        {
+            return;
+        }
+
+        FooterContainer.Margin = ViewModel.IsLive
+            ? new Thickness(0, 0, -140, 0)
+            : new Thickness(0);
+    }
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ViewModel.IsControlsVisible))
+        if (e.PropertyName == nameof(ViewModel.IsLive))
+        {
+            ApplyLiveHeaderAlignment();
+        }
+        else if (e.PropertyName == nameof(ViewModel.IsControlsVisible))
         {
             if (!ViewModel.IsControlsVisible && !_controlTimer.IsRunning)
             {

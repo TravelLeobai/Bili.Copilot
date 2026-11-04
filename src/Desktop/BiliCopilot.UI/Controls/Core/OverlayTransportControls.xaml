@@ -632,14 +632,7 @@
                     Style="{StaticResource PlayerSliderStyle}"
                     ValueChanged="OnLiveProgressValueChanged"
                     Value="{x:Bind ViewModel.LiveEdgeRatio, Mode=OneWay}" />
-                <Button
-                    Grid.Column="2"
-                    Padding="10,4"
-                    VerticalAlignment="Center"
-                    Command="{x:Bind ViewModel.CatchUpToLiveCommand, Mode=OneWay}"
-                    Content="回到最新"
-                    Style="{StaticResource AccentButtonStyle}"
-                    Visibility="{x:Bind ViewModel.IsLiveBehind, Mode=OneWay}" />
+                <!--  「回到最新」只保留覆盖层里的悬浮按钮，这里不再重复一个  -->
             </Grid>
         </Grid>
 
