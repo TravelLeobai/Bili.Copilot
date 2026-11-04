@@ -97,7 +97,8 @@ internal sealed partial class LiveMediaSourceResolver(IPlayerService playerServi
             urls.Where(p => p != url).ToList(),
             InternalHttpExtensions.LiveUserAgent,
             InternalHttpExtensions.LiveReferer,
-            logger);
+            logger,
+            accelerate: false);
 
         _cachedUrl = optimizedUrl;
         return optimizedUrl;

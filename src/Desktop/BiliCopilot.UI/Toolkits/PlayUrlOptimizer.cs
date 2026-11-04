@@ -40,7 +40,8 @@ internal static class PlayUrlOptimizer
         IEnumerable<string>? backupUrls,
         string userAgent,
         string referer,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        bool accelerate = true)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
         {
@@ -53,8 +54,8 @@ internal static class PlayUrlOptimizer
             allUrls.AddRange(backupUrls.Where(p => !string.IsNullOrWhiteSpace(p)));
         }
 
-        // CDN 加速：先按用户设置做主机替换，再按候选池实测排名挑节点.
-        if (CdnAccelerator.IsEnabled)
+        // 直播地址不参与替换：直播走自己的 CDN，换成点播节点会直接没画面.
+        if (accelerate && CdnAccelerator.IsEnabled)
         {
             try
             {

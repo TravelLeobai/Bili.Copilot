@@ -104,4 +104,16 @@ public sealed partial class PlayerViewModel
         await ApplySeekAsync(target);
         UpdateLiveLatency();
     }
+    /// <summary>
+    /// 点播进度条是否显示：直播时不显示，避免和直播延迟条叠成两条.
+    /// </summary>
+    public bool IsVodProgressVisible => !IsLive;
+
+    partial void OnIsLiveChanged(bool value)
+    {
+        // 直播时把底部那条自动隐藏的细进度条也压掉.
+        IsBottomProgressBarVisible = !value && !IsControlsVisible
+            && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
+        OnPropertyChanged(nameof(IsVodProgressVisible));
+    }
 }

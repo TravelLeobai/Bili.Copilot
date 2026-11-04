@@ -108,10 +108,10 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             2,
             TextBlock(vm.LiveUser?.Name ?? "未开播").FontSize(14).FontWeight(FontWeights.SemiBold),
             HStack(
-                8,
-                TextBlock(vm.LiveOnlineText).FontSize(11).Opacity(0.7),
-                TextBlock(vm.LiveFansText).FontSize(11).Opacity(0.7),
-                TextBlock(vm.LiveUptimeText).FontSize(11).Opacity(0.7)));
+                10,
+                TextBlock($"在线 {vm.LiveOnlineText}").FontSize(11).Opacity(0.7),
+                TextBlock($"粉丝 {vm.LiveFansText}").FontSize(11).Opacity(0.7),
+                TextBlock($"已播 {vm.LiveUptimeText}").FontSize(11).Opacity(0.7)));
 
         var followHost = new XamlHostElement(
             () =>
@@ -186,10 +186,14 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             },
             _ => { }).WithKey("live-refresh");
 
-        return HStack(8, selectorHost, refreshHost)
+        // 刷新按钮靠最右侧，选项卡留在左边.
+        return Grid(
+            new[] { GridSize.Star(), GridSize.Auto },
+            new[] { GridSize.Auto },
+            selectorHost.Grid(row: 0, column: 0),
+            refreshHost.Grid(row: 0, column: 1))
             .Padding(12, 0, 12, 8);
     }
-
     private SelectorBar CreateTabSelector(PlayerViewModel vm)
     {
         if (_tabBar is not null)
@@ -317,6 +321,8 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildFooter(PlayerViewModel vm)
     {
+        // 底栏两个图标按钮统一 32x32；输入框占满剩余宽度.
+        const double ButtonSize = 32;
         return HStack(
             8,
             new XamlHostElement(
@@ -325,7 +331,9 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                     var button = new ToggleButton
                     {
                         Content = "弹",
-                        Padding = new Thickness(8, 4, 8, 4),
+                        Width = ButtonSize,
+                        Height = ButtonSize,
+                        Padding = new Thickness(0),
                         IsChecked = vm.IsLiveDanmakuVisible,
                     };
                     button.Click += (_, _) => vm.SwitchLiveDanmakuCommand.Execute(default);
@@ -337,7 +345,9 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 {
                     var button = new Button
                     {
-                        Padding = new Thickness(8, 4, 8, 4),
+                        Width = ButtonSize,
+                        Height = ButtonSize,
+                        Padding = new Thickness(0),
                         Content = new FluentIcons.WinUI.SymbolIcon
                         {
                             Symbol = FluentIcons.Common.Symbol.Gift,
@@ -356,6 +366,9 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                     {
                         PlaceholderText = "发个弹幕…",
                         Text = vm.LiveDanmakuInput ?? string.Empty,
+                        MinWidth = 0,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        VerticalAlignment = VerticalAlignment.Center,
                     };
                     box.TextChanged += (s, _) => vm.LiveDanmakuInput = ((TextBox)s).Text;
                     return box;
@@ -367,11 +380,13 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                     {
                         box.Text = vm.LiveDanmakuInput ?? string.Empty;
                     }
-                }).WithKey("live-input"),
+                })
+                .HAlign(HorizontalAlignment.Stretch)
+                .WithKey("live-input"),
             new XamlHostElement(
                 () =>
                 {
-                    var button = new Button { Content = "发送", Padding = new Thickness(10, 4, 10, 4) };
+                    var button = new Button { Content = "发送", Padding = new Thickness(12, 4, 12, 4), Height = ButtonSize };
                     button.Click += (_, _) => vm.SendLiveDanmakuCommand.Execute(default);
                     return button;
                 },

@@ -117,6 +117,23 @@ public static class LiveMessageParser
             item.UserName = info[2][1].GetString() ?? string.Empty;
         }
 
+        // info[0][15] 是用户信息对象，弹幕列表的头像就靠它（uinfo.base.face，老协议在 uinfo.face）.
+        if (info[0].ValueKind == JsonValueKind.Array
+            && info[0].GetArrayLength() > 15
+            && info[0][15].ValueKind == JsonValueKind.Object
+            && info[0][15].TryGetProperty("user", out var danmakuUser))
+        {
+            if (danmakuUser.TryGetProperty("base", out var danmakuBase))
+            {
+                item.Avatar = ReadString(danmakuBase, "face");
+            }
+
+            if (string.IsNullOrEmpty(item.Avatar))
+            {
+                item.Avatar = ReadString(danmakuUser, "face");
+            }
+        }
+
         // info[3] = 粉丝勋章 [等级, 名称, 主播名, roomid, 颜色...]
         if (info.GetArrayLength() > 3 && info[3].ValueKind == JsonValueKind.Array && info[3].GetArrayLength() > 1)
         {
