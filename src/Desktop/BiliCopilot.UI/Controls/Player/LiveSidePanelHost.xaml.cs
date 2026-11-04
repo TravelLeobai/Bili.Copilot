@@ -64,7 +64,7 @@ public sealed partial class LiveSidePanelHost : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         SizeChanged -= OnHostSizeChanged;
-        Services.MpvSurfaceService.ApplyRightInset(GetPlayerWindowHandle(), 0);
+        Services.MpvSurfaceService.ApplyRightInset(GetPlayerWindowHandle(), 0, XamlRoot?.RasterizationScale ?? 1d);
         _reactorHost?.Dispose();
         _reactorHost = null;
         _mountedViewModel = null;
@@ -120,9 +120,9 @@ public sealed partial class LiveSidePanelHost : UserControl
         // 用实际宽度算让位，按钮列宽度改了也不用同步改常量.
         var measured = ActualWidth;
         var inset = _isCollapsed
-            ? 0
-            : measured > 40 ? (int)Math.Ceiling(measured) : Services.MpvSurfaceService.LivePanelWidth;
-        Services.MpvSurfaceService.ApplyRightInset(handle, inset);
+            ? 0d
+            : measured > 40 ? Math.Ceiling(measured) : (double)Services.MpvSurfaceService.LivePanelWidth;
+        Services.MpvSurfaceService.ApplyRightInset(handle, inset, XamlRoot?.RasterizationScale ?? 1d);
 
         // 让覆盖层（进度条、按钮、右上角控件）也跟着缩，避免被面板压住.
         if (ViewModel is not null)

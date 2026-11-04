@@ -191,6 +191,15 @@ public sealed partial class PlayerViewModel
                 }
 
                 var useCacheOnDisk = SettingsToolkit.ReadLocalSetting(SettingNames.CacheOnDisk, false);
+
+                // 直播不写磁盘缓存：mpv 对直播流建文件缓存会失败（日志里 Failed to create file cache），
+                // 失败后偶尔连视频轨都起不来.
+                if (IsLive && useCacheOnDisk)
+                {
+                    useCacheOnDisk = false;
+                    logger.LogInformation("直播已禁用磁盘缓存");
+                }
+
                 await Client.SetCacheOnDiskAsync(useCacheOnDisk);
                 if (useCacheOnDisk)
                 {
@@ -224,7 +233,8 @@ public sealed partial class PlayerViewModel
                 await Client.SetAudioExclusiveAsync(audioExclusive);
             }
 
-            var logLevel = SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
+            // 直播临时开 Info，方便看视频轨为什么起不来.
+            var logLevel = IsLive ? MpvLogLevel.Info : SettingsToolkit.ReadLocalSetting(SettingNames.MpvLogLevel, MpvLogLevel.Warn);
             await Client.SetLogLevelAsync(logLevel);
             await Client.UseIdleAsync(true);
             await Client.UseKeepOpenAsync(true);

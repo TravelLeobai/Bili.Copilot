@@ -24,8 +24,9 @@ internal static class MpvSurfaceService
     /// 按右侧让出的宽度重新摆放 mpv 画面.
     /// </summary>
     /// <param name="playerWindow">播放器窗口句柄.</param>
-    /// <param name="rightInset">右侧需要让出的像素，0 表示铺满.</param>
-    public static void ApplyRightInset(IntPtr playerWindow, int rightInset)
+    /// <param name="rightInsetDips">右侧需要让出的 DIP，0 表示铺满.</param>
+    /// <param name="rasterizationScale">DPI 缩放（1.0 = 100%）.</param>
+    public static void ApplyRightInset(IntPtr playerWindow, double rightInsetDips, double rasterizationScale = 1d)
     {
         if (playerWindow == IntPtr.Zero)
         {
@@ -38,7 +39,10 @@ internal static class MpvSurfaceService
             return;
         }
 
-        var width = Math.Max(1, rect.Right - rect.Left - Math.Max(0, rightInset));
+        // 子窗口尺寸是物理像素，XAML 里算出来的是 DIP，这里换算一次，避免 125% 缩放下差一条.
+        var scale = rasterizationScale <= 0 ? 1d : rasterizationScale;
+        var insetPx = (int)Math.Round(Math.Max(0, rightInsetDips) * scale);
+        var width = Math.Max(1, rect.Right - rect.Left - insetPx);
         var height = Math.Max(1, rect.Bottom - rect.Top);
         _ = SetWindowPos(mpv, IntPtr.Zero, 0, 0, width, height, SwpNoZOrder | SwpNoActivate | SwpNoMove);
     }

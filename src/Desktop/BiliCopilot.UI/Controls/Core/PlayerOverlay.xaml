@@ -417,7 +417,10 @@
                         <ImageIcon Source="ms-appx:///Assets/logo.png" />
                     </base:AppTitleBar.IconElement>
                     <base:AppTitleBar.Footer>
-                        <StackPanel x:Name="FooterContainer" Orientation="Horizontal">
+                        <StackPanel
+                            x:Name="FooterContainer"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
                             <TextBlock
                                 VerticalAlignment="Center"
                                 FontSize="12"
