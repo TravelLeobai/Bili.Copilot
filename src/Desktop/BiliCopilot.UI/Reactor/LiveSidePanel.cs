@@ -465,30 +465,8 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             : "TextFillColorPrimaryBrush";
 
         Element badge = item.HasMedal
-            ? Border(
-                item.MedalLevel > 0
-                    ? HStack(
-                        3,
-                        TextBlock(item.MedalName)
-                            .FontSize(9)
-                            .Opacity(0.75)
-                            .FontFamily(MedalFontFamily),
-                        TextBlock(item.MedalLevel.ToString())
-                            .FontSize(9)
-                            .SemiBold()
-                            .Opacity(0.92)
-                            .FontFamily(MedalFontFamily))
-                    : TextBlock(item.MedalName)
-                        .FontSize(9)
-                        .Opacity(0.75)
-                        .FontFamily(MedalFontFamily))
-                .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
-                .CornerRadius(3)
-                .Padding(4, 0, 4, 0)
-                .Margin(6, 0, 0, 0)
-                .VAlign(VerticalAlignment.Center)
+            ? BuildMedalBadge(item)
             : (Element)TextBlock(string.Empty);
-
         var header = HStack(
             0,
             TextBlock(item.UserName)
@@ -536,6 +514,59 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             .Padding(8, 5, 8, 5)
             .Margin(0, 0, 0, 4)
             .WithKey("live-msg-" + item.GetHashCode());
+    }
+
+    /// <summary>
+    /// 粉丝团勋章：名称用官方等级段配色，等级数字同色相但更亮、更淡.
+    /// </summary>
+    private static Element BuildMedalBadge(LiveInteractionViewModel item)
+    {
+        var (nameColor, levelColor) = ResolveMedalColors(item.MedalLevel);
+
+        Element content = item.MedalLevel > 0
+            ? HStack(
+                3,
+                TextBlock(item.MedalName)
+                    .FontSize(9)
+                    .Foreground(new SolidColorBrush(nameColor))
+                    .FontFamily(MedalFontFamily),
+                TextBlock(item.MedalLevel.ToString())
+                    .FontSize(9)
+                    .SemiBold()
+                    .Foreground(new SolidColorBrush(levelColor))
+                    .FontFamily(MedalFontFamily))
+            : TextBlock(item.MedalName)
+                .FontSize(9)
+                .Foreground(new SolidColorBrush(nameColor))
+                .FontFamily(MedalFontFamily);
+
+        return Border(content)
+            .Background(ResolveBrush("ControlFillColorSecondaryBrush"))
+            .CornerRadius(3)
+            .Padding(4, 0, 4, 0)
+            .Margin(6, 0, 0, 0)
+            .VAlign(VerticalAlignment.Center);
+    }
+
+    /// <summary>
+    /// 官方粉丝团等级配色（名称色）与等级数字色（亮一档、饱和降一档）.
+    /// </summary>
+    private static (Windows.UI.Color Name, Windows.UI.Color Level) ResolveMedalColors(int level)
+    {
+        var nameColor = level switch
+        {
+            <= 0 => Windows.UI.Color.FromArgb(255, 0x6E, 0x6E, 0x6E),
+            <= 4 => Windows.UI.Color.FromArgb(255, 0x8A, 0x8A, 0x8A),
+            <= 8 => Windows.UI.Color.FromArgb(255, 0x35, 0x8D, 0xD4),
+            <= 12 => Windows.UI.Color.FromArgb(255, 0x8A, 0x5A, 0xC8),
+            <= 16 => Windows.UI.Color.FromArgb(255, 0xD0, 0x7A, 0x2C),
+            <= 20 => Windows.UI.Color.FromArgb(255, 0xCC, 0x4A, 0x46),
+            <= 24 => Windows.UI.Color.FromArgb(255, 0xA0, 0x28, 0x24),
+            _ => Windows.UI.Color.FromArgb(255, 0xB8, 0x91, 0x2A),
+        };
+
+        var levelColor = ColorToolkit.WithLightnessAndSaturation(nameColor, 0.20, 0.72);
+        return (nameColor, levelColor);
     }
 
     private static Element BuildRankRow(LiveRankItemViewModel rank)
