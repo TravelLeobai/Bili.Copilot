@@ -321,11 +321,27 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
     }
 
     /// <summary>
-    /// 一条互动消息，按评论卡片的样子排版：头像 + 名字/勋章 + 正文.
-    /// 高度压得比评论卡片紧一点，同屏能多塞几条.
+    /// 一条互动消息.
+    /// 进场/系统提示压缩成一行小字，其余按评论卡片的样子排版：头像 + 名字/勋章 + 正文.
     /// </summary>
     private static Element BuildInteractionRow(LiveInteractionViewModel item)
     {
+        if (item.Kind is LiveInteractionKind.Enter or LiveInteractionKind.System)
+        {
+            var line = item.Kind == LiveInteractionKind.System
+                ? item.Text
+                : !string.IsNullOrWhiteSpace(item.Text) && item.Text.Contains("进入")
+                    ? item.Text
+                    : $"{item.UserName} 进入直播间";
+
+            return TextBlock(line)
+                .FontSize(11)
+                .Opacity(0.5)
+                .TextWrapping(TextWrapping.Wrap)
+                .Margin(2, 1, 2, 3)
+                .WithKey("live-line-" + item.GetHashCode());
+        }
+
         var isGift = item.Kind == LiveInteractionKind.Gift;
         var body = isGift
             ? $"送出 {item.GiftName} ×{item.GiftCount}（{item.GiftPrice} 金瓜子）"
