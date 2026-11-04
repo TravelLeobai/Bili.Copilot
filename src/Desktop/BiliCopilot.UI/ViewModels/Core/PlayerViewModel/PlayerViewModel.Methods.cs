@@ -328,6 +328,13 @@ public sealed partial class PlayerViewModel
             return;
         }
 
+        // 直播不恢复着色器/超分：Anime4K、NNEDI3、VSR 压在直播流上会让视频轨起不来（只剩声音、画面一片白）.
+        if (IsLive)
+        {
+            logger.LogInformation("直播不恢复播放增强（着色器/超分只对点播生效）");
+            return;
+        }
+
         var remember = SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true);
         if (!remember)
         {

@@ -48,15 +48,15 @@
                     <ic:SymbolIcon Symbol="ArrowSync" />
                 </MenuFlyoutItem.Icon>
             </MenuFlyoutItem>
-            <ToggleMenuFlyoutItem
+            <MenuFlyoutItem
                 x:Name="CdnToggleItem"
                 Click="OnCdnToggleClick"
                 Style="{StaticResource ContextMenuFlyoutItemStyle}"
-                Text="CDN 优选">
-                <ToggleMenuFlyoutItem.Icon>
+                Text="CDN 优选（已开启）">
+                <MenuFlyoutItem.Icon>
                     <ic:SymbolIcon Symbol="Globe" />
-                </ToggleMenuFlyoutItem.Icon>
-            </ToggleMenuFlyoutItem>
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
             <MenuFlyoutItem
                 x:Name="CdnSwitchItem"
                 Click="OnCdnSwitchClick"

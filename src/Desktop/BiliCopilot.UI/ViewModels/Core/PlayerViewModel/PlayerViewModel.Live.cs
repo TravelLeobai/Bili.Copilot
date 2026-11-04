@@ -599,4 +599,30 @@ public sealed partial class PlayerViewModel
             LiveGiftBag.Clear();
         }
     }
+    /// <summary>
+    /// 直播开播前清掉着色器与超分：这些滤镜压在直播流上会让视频轨起不来，只剩声音.
+    /// </summary>
+    /// <returns>任务.</returns>
+    private async Task ClearEnhancementsForLiveAsync()
+    {
+        if (Client is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Client.SetShadersAsync(Array.Empty<string>());
+            Anime4KMode = Models.Constants.Anime4KMode.None;
+            ArtCNNMode = Models.Constants.ArtCNNMode.None;
+            Nnedi3Mode = Models.Constants.Nnedi3Mode.None;
+            RavuMode = Models.Constants.RavuMode.None;
+            VsrScale = Models.Constants.VsrScale.None;
+            logger.LogInformation("直播已清空着色器与超分，避免视频轨被滤镜挡掉");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "清空直播着色器失败");
+        }
+    }
 }

@@ -420,9 +420,10 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
     private void OnFlyoutOpened(object sender, object e)
     {
         ViewModel.IsPopupVisible = true;
-        CdnToggleItem.IsChecked = Services.CdnAccelerator.IsEnabled;
+        var enabled = Services.CdnAccelerator.IsEnabled;
         var activeHost = Services.CdnAccelerator.ActiveHostDisplay;
-        CdnHostItem.Text = Services.CdnAccelerator.IsEnabled
+        CdnToggleItem.Text = enabled ? "CDN 优选（已开启）" : "CDN 优选（已关闭）";
+        CdnHostItem.Text = enabled
             ? $"当前节点：{(string.IsNullOrWhiteSpace(activeHost) ? "默认" : activeHost)}"
             : "CDN 替换已关闭";
         foreach (var item in Anime4KItem.Items.OfType<RadioMenuFlyoutItem>())
@@ -548,7 +549,11 @@ public sealed partial class PlayerInteractivePanel : PlayerControlBase
     }
 
     private void OnCdnToggleClick(object sender, RoutedEventArgs e)
-        => Services.CdnAccelerator.SetEnabled(!Services.CdnAccelerator.IsEnabled);
+    {
+        Services.CdnAccelerator.SetEnabled(!Services.CdnAccelerator.IsEnabled);
+        var enabled = Services.CdnAccelerator.IsEnabled;
+        CdnToggleItem.Text = enabled ? "CDN 优选（已开启）" : "CDN 优选（已关闭）";
+    }
 
     private async void OnCdnSwitchClick(object sender, RoutedEventArgs e)
     {
