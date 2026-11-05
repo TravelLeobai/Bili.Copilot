@@ -122,6 +122,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         IsAnimeNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(AnimePage).Name}Visible", true);
         IsCinemaNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(CinemaPage).Name}Visible", true);
         IsArticleNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(ArticlePartitionPage).Name}Visible", true);
+        IsTopNavShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
         StepBackwardSecond = SettingsToolkit.ReadLocalSetting(SettingNames.StepBackwardSecond, 10d);
         StepForwardSecond = SettingsToolkit.ReadLocalSetting(SettingNames.StepForwardSecond, 30d);
         PreferAudioChannelLayout = SettingsToolkit.ReadLocalSetting(SettingNames.PreferAudioChannelLayout, Richasy.MpvKernel.Core.Enums.AudioChannelLayoutType.Auto);
@@ -428,6 +429,13 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnLogLevelChanged(MpvLogLevel value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.MpvLogLevel, value);
+
+    partial void OnIsTopNavShownChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.IsTopNavBarShown, value);
+        // 立刻同步给导航壳，不用重启.
+        this.Get<NavigationViewModel>().IsTopNavBarShown = value;
+    }
 
     partial void OnHideMainWindowOnPlayChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideMainWindowOnPlay, value);

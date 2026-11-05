@@ -39,7 +39,6 @@ public sealed class MainShell : Component
     };
 
     private readonly HeaderAccountControl _accountControl = new();
-    private readonly Button _paneToggleButton = CreateFlatIconButton("\uE700", "切换导航栏");
     private readonly Button _compactSearchButton = CreateFlatIconButton("\uE721", "搜索");
 
     private readonly Button _railSearchButton = CreateFlatIconButton("\uE721", "搜索");
@@ -73,7 +72,6 @@ public sealed class MainShell : Component
         _contentHost = new Grid();
         _contentHost.Children.Add(mainFrame);
         _contentHost.Children.Add(overlayFrame);
-        _paneToggleButton.Click += (_, _) => _togglePaneAction?.Invoke();
         _compactSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _railSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _backButton.Click += (_, _) => _viewModel.Back();
@@ -130,35 +128,44 @@ public sealed class MainShell : Component
             .Select(item => BuildSideNavItem(item, isPaneOpen))
             .ToArray();
 
-        var sideFooterItems = new List<Element>
+        // footer：收藏 / 稍后再看 / 历史记录 三项受「顶部导航栏可见性」开关控制，
+        // 后面跟着消息、设置，最后是账号头像.
+        var sideFooterItems = new List<Element>();
+        if (viewModel.IsTopNavBarShown)
         {
-            BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, "__favorites__", viewModel.IsFavoritesPage, isPaneOpen),
-            BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, "__view_later__", viewModel.IsViewLaterPage, isPaneOpen),
-            BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, "__history__", viewModel.IsHistoryPage, isPaneOpen),
-        };
+            sideFooterItems.Add(BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, "__favorites__", viewModel.IsFavoritesPage, isPaneOpen));
+            sideFooterItems.Add(BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, "__view_later__", viewModel.IsViewLaterPage, isPaneOpen));
+            sideFooterItems.Add(BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, "__history__", viewModel.IsHistoryPage, isPaneOpen));
+        }
 
         sideFooterItems.AddRange(viewModel.FooterItems
             .Where(item => item.IsVisible)
             .Select(item => BuildSideNavItem(item, isPaneOpen)));
 
+        // 头像只留图，不要昵称；跟其它图标一样居中.
         Element accountRow = HStack(
-            9.7,
-            new XamlHostElement(() => _accountControl, _ => { }),
-            isPaneOpen
-                ? TextBlock(account.MyProfile?.User?.Name ?? string.Empty)
-                    .FontSize(14)
-                    .VAlign(VerticalAlignment.Center)
-                : (Element)TextBlock(string.Empty))
-            .Padding(4.7, 0, 12, 0)
-            .Height(36);
+            0,
+            new XamlHostElement(() => _accountControl, control =>
+            {
+                // HeaderAccountControl 自带宽度，压到 32 并居中，和上面的图标同一列.
+                control.MinWidth = 0;
+                control.Width = 32;
+                control.Height = 32;
+                control.HorizontalAlignment = HorizontalAlignment.Center;
+                control.VerticalAlignment = VerticalAlignment.Center;
+            })
+                .Size(32, 32)
+                .HAlign(HorizontalAlignment.Center)
+                .VAlign(VerticalAlignment.Center))
+            .HAlign(HorizontalAlignment.Center)
+            .VAlign(VerticalAlignment.Center)
+            .Margin(0, 6, 0, 6);
 
         Element accountPanel = Button(accountRow, () => _accountControl.ShowAccountFlyout())
             .AutomationName(account.MyProfile?.User?.Name ?? "我的")
             .SubtleButton()
             .Padding(0)
-            .Height(36)
-            .Margin(4, 0, 4, 0)
-            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+            .HorizontalContentAlignment(HorizontalAlignment.Center)
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Center);
 
@@ -172,7 +179,8 @@ public sealed class MainShell : Component
 
         // 侧栏项改成内核 AppNavigationViewItem：模板里自带 Regular/Filled 两个
         // SymbolIcon 和 200ms 透明度隐式动画，选中/悬停/按下都由模板的 VisualState 管.
-        Element sideNav = VStack(2, [.. sideMenuItems, .. sideFooterItems]).Margin(4, 8, 4, 0);
+        Element sideNav = VStack(2, sideMenuItems).Margin(2, 8, 8, 0);
+        Element sideFooter = VStack(2, sideFooterItems.ToArray()).Margin(2, 0, 8, 0);
 
         var navigation = (NavigationView([]) with
         {
@@ -193,10 +201,16 @@ public sealed class MainShell : Component
             PaneHeader = paneHeader,
             PaneCustomContent = sideNav,
         })
-            .PaneFooter(accountPanel)
+            .PaneFooter(VStack(2, [sideFooter, accountPanel]))
             .Background("Transparent")
-            // Set 是 Reactor 唯一能碰到 XAML NavigationView 的入口，折叠按钮靠它.
-            .Set(nv => _navView = nv)
+            // NavigationView 自带的汉堡按钮在 with 里设了不生效（同 IsPaneOpen），
+            // 用 Set 拿到控件后直接关掉.
+            .Set(nv =>
+            {
+                _navView = nv;
+                nv.IsPaneToggleButtonVisible = false;
+                nv.IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
+            })
             .Grid(row: 1);
 
 
@@ -208,11 +222,6 @@ public sealed class MainShell : Component
                     .HAlign(HorizontalAlignment.Left)
                     .VAlign(VerticalAlignment.Center)
                 : (Element)TextBlock(string.Empty),
-            new XamlHostElement(() => _paneToggleButton, _ => { })
-                .Size(40, 40)
-                .Margin(3.5, 0, 0, 0)
-                .HAlign(HorizontalAlignment.Left)
-                .VAlign(VerticalAlignment.Center),
             // 搜索图标只在侧栏窄 rail 上（折叠态），标题栏这里留空.
             (Element)TextBlock(string.Empty),
             TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))

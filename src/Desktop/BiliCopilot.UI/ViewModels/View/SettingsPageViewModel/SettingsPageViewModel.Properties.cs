@@ -326,6 +326,9 @@ public sealed partial class SettingsPageViewModel
     private bool _isArticleNavVisible;
 
     [ObservableProperty]
+    private bool _isTopNavShown;
+
+    [ObservableProperty]
     public partial ScreenshotAction ScreenshotAction { get; set; }
 
     [ObservableProperty]

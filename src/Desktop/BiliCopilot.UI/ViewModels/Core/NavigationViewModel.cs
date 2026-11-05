@@ -40,6 +40,9 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     [ObservableProperty]
     private int _navItemsVersion;
 
+    [ObservableProperty]
+    private bool _isTopNavBarShown;
+
     /// <summary>
     /// 当前页面全名（含 overlay 页），供壳层同步导航项的选中态.
     /// </summary>
@@ -230,6 +233,9 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         _navFrame = navFrame;
         _overFrame = overFrame;
         _navigationView = view;
+
+        // 「顶部导航栏可见性」：控制侧栏底部那三个入口（收藏 / 稍后再看 / 历史记录）.
+        IsTopNavBarShown = SettingsToolkit.ReadLocalSetting(SettingNames.IsTopNavBarShown, true);
 
         MenuItems = [.. GetMenuItems()];
 
