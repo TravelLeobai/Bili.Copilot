@@ -180,12 +180,22 @@ public sealed class MainShell : Component
             .VAlign(VerticalAlignment.Stretch)
             .Background("Transparent");
 
+        // 侧栏和内容之间一条竖线，参照 NavigationView 里 pane 与 content 的分界.
+        Element sidebarDivider = Border(TextBlock(string.Empty))
+            .Width(1)
+            .HAlign(HorizontalAlignment.Left)
+            .VAlign(VerticalAlignment.Stretch)
+            .Background("DividerStrokeColorDefaultBrush");
+
         return Grid(
-            columns: [GridSize.Auto, GridSize.Star()],
+            columns: [GridSize.Auto, GridSize.Px(1), GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Star()],
-            BuildTopBar(viewModel).Grid(row: 0, columnSpan: 2),
+            BuildTopBar(viewModel).Grid(row: 0, columnSpan: 3),
             sidebar.Grid(row: 1, column: 0),
-            new XamlHostElement(() => _contentHost, _ => { }).Grid(row: 1, column: 1));
+            sidebarDivider.Grid(row: 1, column: 1),
+            new XamlHostElement(() => _contentHost, _ => { })
+                .Grid(row: 1, column: 2)
+                .Padding(12, 0, 0, 0));
     }
 
     private Element BuildTopBar(NavigationViewModel viewModel)
