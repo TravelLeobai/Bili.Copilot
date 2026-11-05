@@ -171,46 +171,6 @@ public sealed class VideoPartitionShell : PartitionShellBase
 }
 
 /// <summary>
-/// 文章分区页外壳.
-/// </summary>
-public sealed class ArticlePartitionShell : PartitionShellBase
-{
-    private readonly ArticlePartitionPageViewModel _vm;
-    private readonly TextBlock _sideHeader = new() { Text = "文章" };
-    private readonly ArticlePartitionSideBody _sideBody = new();
-    private readonly ArticlePartitionMainHeader _mainHeader = new();
-    private readonly ArticlePartitionMainBody _mainBody = new();
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ArticlePartitionShell"/> class.
-    /// </summary>
-    /// <param name="viewModel">页面视图模型.</param>
-    public ArticlePartitionShell(ArticlePartitionPageViewModel viewModel)
-        : base(viewModel)
-    {
-        _vm = viewModel;
-        _sideHeader.FontSize = 18;
-        _sideHeader.FontWeight = FontWeights.SemiBold;
-        _sideHeader.VerticalAlignment = VerticalAlignment.Center;
-        SyncPartition();
-    }
-
-    /// <inheritdoc/>
-    public override Element Render()
-    {
-        UseObservableTree(_vm);
-        SyncPartition();
-        return BuildLayout(_sideHeader, _sideBody, _mainHeader, _mainBody);
-    }
-
-    private void SyncPartition()
-    {
-        _mainHeader.ViewModel = _vm.SelectedPartition;
-        _mainBody.ViewModel = _vm.SelectedPartition;
-    }
-}
-
-/// <summary>
 /// 影视页外壳.
 /// </summary>
 public sealed class CinemaShell : PartitionShellBase
