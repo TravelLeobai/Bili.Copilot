@@ -153,6 +153,10 @@ public sealed class MainShell : Component
                 control.Height = 32;
                 control.HorizontalAlignment = HorizontalAlignment.Center;
                 control.VerticalAlignment = VerticalAlignment.Center;
+
+                // HeaderAccountControl 内部自带昵称 TextBlock，外面盖不住，
+                // 递归把它里面的文字全藏掉，只留头像.
+                HideDescendantTexts(control);
             })
                 .Size(32, 32)
                 .HAlign(HorizontalAlignment.Center)
@@ -210,6 +214,13 @@ public sealed class MainShell : Component
                 _navView = nv;
                 nv.IsPaneToggleButtonVisible = false;
                 nv.IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
+
+                // 自绘的折叠按钮已经删了，但 NavigationView 模板里还有一个内置的
+                // TogglePaneButton，IsPaneToggleButtonVisible 关不掉它，直接找出来藏了.
+                if (nv.FindName("TogglePaneButton") is FrameworkElement toggleButton)
+                {
+                    toggleButton.Visibility = Visibility.Collapsed;
+                }
             })
             .Grid(row: 1);
 
@@ -344,6 +355,23 @@ public sealed class MainShell : Component
             Tag = tag,
         };
 
+
+    private static void HideDescendantTexts(DependencyObject root)
+    {
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is TextBlock textBlock)
+            {
+                textBlock.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                HideDescendantTexts(child);
+            }
+        }
+    }
     private static void ApplySideNavItem(
         AppNavigationViewItem control,
         string content,
