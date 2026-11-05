@@ -40,6 +40,11 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     [ObservableProperty]
     private int _navItemsVersion;
 
+    /// <summary>
+    /// 当前页面全名（含 overlay 页），供壳层同步导航项的选中态.
+    /// </summary>
+    public string? CurrentPageKey { get; private set; }
+
     [ObservableProperty]
     private bool _isFavoritesPage;
 
@@ -94,6 +99,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
             entry.IsSelected = string.Equals(entry.PageKey, pageType.FullName, StringComparison.Ordinal);
         }
 
+        CurrentPageKey = pageType.FullName;
         NavItemsVersion++;
     }
 
@@ -168,6 +174,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
     {
         var item = MenuItems.Find(p => p.PageKey == pageType.FullName);
         item?.IsVisible = isVisible;
+        CurrentPageKey = pageType.FullName;
         NavItemsVersion++;
     }
 
