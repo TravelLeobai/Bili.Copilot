@@ -57,6 +57,12 @@ public sealed class VideoCardBody : Component
         return count >= 10000 ? $"{count / 10000:F1}万" : count.ToString("F0");
     }
 
+    /// <summary>
+    /// 播放量文本：接口没给数据时是 -1，这种情况不显示，别把 -1 直接摆出来.
+    /// </summary>
+    private static string PlayCountText(double? value)
+        => value is > 0 ? $"▶ {FormatCount(value)}" : string.Empty;
+
     private Element Cover(double radiusTopLeft, double radiusBottomRight = 0)
     {
         var radius = radiusBottomRight > 0
@@ -105,7 +111,7 @@ public sealed class VideoCardBody : Component
                     .FontSize(12)
                     .Foreground(Brush("TextFillColorTertiaryBrush"))
                     .MaxLines(1),
-                TextBlock($"▶ {FormatCount(_viewModel.PlayCount)}")
+                TextBlock(PlayCountText(_viewModel.PlayCount))
                     .FontSize(12)
                     .Foreground(Brush("TextFillColorTertiaryBrush"))))
             .Padding(16, 12, 16, 12)
@@ -144,7 +150,7 @@ public sealed class VideoCardBody : Component
                 .MaxLines(2),
             HStack(
                 12,
-                TextBlock($"▶ {FormatCount(_viewModel.PlayCount)}")
+                TextBlock(PlayCountText(_viewModel.PlayCount))
                     .FontSize(11)
                     .Foreground(Brush("TextFillColorTertiaryBrush")),
                 TextBlock(_viewModel.Author ?? string.Empty)
@@ -152,7 +158,7 @@ public sealed class VideoCardBody : Component
                     .Foreground(Brush("TextFillColorTertiaryBrush"))
                     .MaxLines(1)))
             .Grid(column: 1)
-            .Padding(0, 8, 12, 8)
+            .Padding(16, 8, 12, 8)
             .VAlign(VerticalAlignment.Top);
 
         return Grid(
