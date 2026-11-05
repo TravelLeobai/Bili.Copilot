@@ -150,13 +150,14 @@ public sealed class MainShell : Component
                     .VAlign(VerticalAlignment.Center)
                 : (Element)TextBlock(string.Empty))
             .Padding(4, 0, 8, 0)
-            .Height(44);
+            .Height(40)
+            .Margin(0, 2, 0, 2);
 
         Element accountButton = Button(accountRow, () => _accountControl.ShowAccountFlyout())
             .AutomationName(account.MyProfile?.User?.Name ?? "我的")
             .SubtleButton()
             .Padding(0)
-            .Height(44)
+            .Height(40)
             .HAlign(HorizontalAlignment.Stretch)
             .HorizontalContentAlignment(HorizontalAlignment.Stretch);
 
@@ -180,22 +181,17 @@ public sealed class MainShell : Component
             .VAlign(VerticalAlignment.Stretch)
             .Background("Transparent");
 
-        // 侧栏和内容之间一条竖线，参照 NavigationView 里 pane 与 content 的分界.
-        Element sidebarDivider = Border(TextBlock(string.Empty))
-            .Width(1)
-            .HAlign(HorizontalAlignment.Left)
-            .VAlign(VerticalAlignment.Stretch)
-            .Background("DividerStrokeColorDefaultBrush");
-
         return Grid(
-            columns: [GridSize.Auto, GridSize.Px(1), GridSize.Star()],
+            columns: [GridSize.Auto, GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Star()],
-            BuildTopBar(viewModel).Grid(row: 0, columnSpan: 3),
+            BuildTopBar(viewModel).Grid(row: 0, columnSpan: 2),
             sidebar.Grid(row: 1, column: 0),
-            sidebarDivider.Grid(row: 1, column: 1),
-            new XamlHostElement(() => _contentHost, _ => { })
-                .Grid(row: 1, column: 2)
-                .Padding(12, 0, 0, 0));
+            // 内容区做成一块圆角卡片，和侧栏之间靠留白分开（参照 NavigationView 时代的观感）.
+            Border(new XamlHostElement(() => _contentHost, _ => { }))
+                .Background(LookupBrush("SolidBackgroundFillColorBaseBrush") ?? new SolidColorBrush(Microsoft.UI.Colors.White))
+                .CornerRadius(8)
+                .Margin(4, 0, 8, 8)
+                .Grid(row: 1, column: 1));
     }
 
     private Element BuildTopBar(NavigationViewModel viewModel)

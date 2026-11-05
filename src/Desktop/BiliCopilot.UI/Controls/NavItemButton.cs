@@ -84,7 +84,7 @@ public sealed class NavItemButton
         {
             Content = _backplate,
             Padding = new Thickness(0),
-            Margin = new Thickness(4, 1, 4, 1),
+            Margin = new Thickness(4, 2, 4, 2),
             MinHeight = 40,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
