@@ -121,7 +121,7 @@ public sealed class MainShell : Component
         };
 
         sideFooterItems.AddRange(viewModel.FooterItems
-            .Where(item => item.IsVisible && !item.PageKey.Contains("SettingsPage"))
+            .Where(item => item.IsVisible)
             .Select(item => BuildSideNavItem(item, isPaneOpen)));
 
         Element sideNav = VStack(2, sideMenuItems).Margin(0, 4, 0, 0);
@@ -168,6 +168,7 @@ public sealed class MainShell : Component
             OnSettingsSelected = () => NavigateToSettings(),
             IsPaneToggleButtonVisible = false,
             IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+            IsSettingsVisible = false,
             PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
             PaneHeader = paneHeader,
             PaneCustomContent = sideNav,
@@ -342,6 +343,13 @@ public sealed class MainShell : Component
             case HistoryTag:
                 _viewModel.NavigateToOver(typeof(HistoryPage), default);
                 return;
+        }
+
+        // NavigationView 内置设置项被隐藏了，但它自己还是会派发这个 tag，兜住.
+        if (tag.Contains("settings", StringComparison.OrdinalIgnoreCase))
+        {
+            NavigateToSettings();
+            return;
         }
 
         if (tag == SearchRailTag)
