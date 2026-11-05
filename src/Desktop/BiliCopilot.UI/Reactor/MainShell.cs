@@ -100,7 +100,8 @@ public sealed class MainShell : Component
     /// <inheritdoc/>
     public override Element Render()
     {
-        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+        // 汉堡按钮按你要求删掉了，侧栏就固定窄栏（84），不再有展开态.
+        var (isPaneOpen, setIsPaneOpen) = UseState(false);
         // 自绘宽度：展开 240、窄栏 84.
         // 自绘宽度：展开 240、窄栏 84.
         _togglePaneAction = () => setIsPaneOpen(!isPaneOpen);
@@ -139,7 +140,16 @@ public sealed class MainShell : Component
                 control.Height = 32;
                 control.HorizontalAlignment = HorizontalAlignment.Center;
                 control.VerticalAlignment = VerticalAlignment.Center;
-                control.Loaded += (_, _) => HideDescendantTexts(control);
+                control.Loaded += (_, _) =>
+                {
+                    HideDescendantTexts(control);
+
+                    // 光藏文字还不够，控件内层布局仍会把它算进宽度，再裁一刀保险.
+                    control.Clip = new Microsoft.UI.Xaml.Media.RectangleGeometry
+                    {
+                        Rect = new Windows.Foundation.Rect(0, 0, 32, 32),
+                    };
+                };
             })
             .Size(32, 32)
             .HAlign(HorizontalAlignment.Center)
@@ -203,16 +213,16 @@ public sealed class MainShell : Component
             .Height(48)
             .Ref(titleBarRef);
 
-        var sideWidth = isPaneOpen ? 240 : 84;
+var sideWidth = isPaneOpen ? 200 : 72;
 
         Element sideMenuColumn = VStack(2, sideMenuItems)
             .Grid(row: 0)
             .VAlign(VerticalAlignment.Top)
-            .Margin(2, 8, 12, 0);
+            .Margin(2, 8, 6, 0);
 
         Element sideFooterColumn = VStack(2, [.. sideFooterItems, accountPanel])
             .Grid(row: 2)
-            .Margin(2, 0, 12, 8);
+            .Margin(2, 0, 6, 8);
 
         Element sidebar = Grid(
             columns: [GridSize.Star()],
@@ -223,13 +233,25 @@ public sealed class MainShell : Component
             .HAlign(HorizontalAlignment.Left)
             .VAlign(VerticalAlignment.Stretch);
 
+        // 内容区一层亚克力：AcrylicBackgroundFillColorDefaultBrush 是 WinUI 的
+        // 主题资源，系统亮色/暗色切换时它会自己换，不用我们判断.
+        Element contentCard = Border(new XamlHostElement(() => _contentHost, _ => { }))
+            .Background(LookupBrush("AcrylicBackgroundFillColorDefaultBrush"))
+            .CornerRadius(12)
+            .Margin(6, 0, 8, 8)
+            .Grid(row: 1, column: 1);
+
         return Grid(
             columns: [GridSize.Px(sideWidth), GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Star()],
             titleBar.Grid(row: 0, columnSpan: 2),
             sidebar.Grid(row: 1, column: 0),
-            new XamlHostElement(() => _contentHost, _ => { }).Grid(row: 1, column: 1));
+            contentCard);
     }
+
+    // 主题资源取刷子：AcrylicBackgroundFillColorDefaultBrush 会跟着亮/暗自动换.
+    private static Brush? LookupBrush(string key)
+        => Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush ? brush : null;
 
     private static Button CreateFlatIconButton(string glyph, string automationName)
     {
@@ -369,4 +391,5 @@ public sealed class MainShell : Component
         item?.NavigateCommand.Execute(default);
     }
 }
+
 

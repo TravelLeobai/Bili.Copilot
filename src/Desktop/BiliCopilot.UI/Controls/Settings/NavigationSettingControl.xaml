@@ -16,6 +16,12 @@
             <ic:SymbolIcon Symbol="Navigation" />
         </base:SettingsExpander.HeaderIcon>
         <base:SettingsExpander.Items>
+            <base:SettingsCard Description="{ext:Locale Name=TopNavVisibilityDescription}" Header="{ext:Locale Name=TopNavVisibility}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="LayoutColumnTwo" />
+                </base:SettingsCard.HeaderIcon>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.IsTopNavShown, Mode=TwoWay}" />
+            </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=Popular}">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="Rocket" />
