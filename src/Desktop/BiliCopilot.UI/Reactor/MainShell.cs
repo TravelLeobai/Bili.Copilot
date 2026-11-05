@@ -51,7 +51,7 @@ public sealed class MainShell : Component
     private const string ViewLaterTag = "__view_later__";
     private const string HistoryTag = "__history__";
 
-    private readonly Dictionary<string, AppNavigationViewItem> _sideNavControls = new();
+    private readonly Dictionary<string, NavItemButton> _sideNavControls = new();
 
     private Action? _togglePaneAction;
     private Action? _openPaneAction;
@@ -232,10 +232,6 @@ public sealed class MainShell : Component
     }
 
     /// <summary>
-    /// 自绘导航项：复用内核 AppNavigationViewItem + MainNavigationViewItemStyle，
-    /// 模板里是 Regular/Filled 两个 SymbolIcon，靠隐式动画交叉淡入.
-    /// </summary>
-    /// <summary>
     /// 固定项的导航（收藏/稍后再看/历史记录），选中态由页面状态决定.
     /// </summary>
     private Element BuildStaticNavItem(
@@ -247,27 +243,21 @@ public sealed class MainShell : Component
     {
         if (!_sideNavControls.TryGetValue(tag, out var control))
         {
-            control = new AppNavigationViewItem
-            {
-                Style = (Style)Application.Current.Resources["MainNavigationViewItemStyle"],
-                SelectsOnInvoked = false,
-                Tag = tag,
-            };
-
-            control.Tapped += (_, _) => NavigateByTag(tag);
+            control = new NavItemButton();
+            control.Root.Click += (_, _) => NavigateByTag(tag);
             _sideNavControls[tag] = control;
         }
 
-        var navigateItem = control;
+        var navItem = control;
         return new XamlHostElement(
-            () => navigateItem,
+            () => navItem.Root,
             _ =>
             {
-                navigateItem.Content = isPaneOpen ? title : string.Empty;
-                navigateItem.Symbol = symbol;
-                navigateItem.IsSelected = isSelected;
-                navigateItem.Visibility = Visibility.Visible;
-                navigateItem.Width = isPaneOpen ? double.NaN : 44;
+                navItem.Label = isPaneOpen ? title : string.Empty;
+                navItem.Symbol = symbol;
+                navItem.IsItemSelected = isSelected;
+                navItem.Root.Visibility = Visibility.Visible;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(navItem.Root, title);
             })
             .WithKey("sidenav-" + tag);
     }
@@ -276,28 +266,21 @@ public sealed class MainShell : Component
     {
         if (!_sideNavControls.TryGetValue(item.PageKey, out var control))
         {
-            control = new AppNavigationViewItem
-            {
-                Style = (Style)Application.Current.Resources["MainNavigationViewItemStyle"],
-                SelectsOnInvoked = false,
-                Tag = item.PageKey,
-            };
-
-            control.Tapped += (_, _) => NavigateByTag(item.PageKey);
+            control = new NavItemButton();
+            control.Root.Click += (_, _) => NavigateByTag(item.PageKey);
             _sideNavControls[item.PageKey] = control;
         }
 
-        var navigateItem = control;
+        var navItem = control;
         return new XamlHostElement(
-            () => navigateItem,
+            () => navItem.Root,
             _ =>
             {
-                navigateItem.Content = isPaneOpen ? item.Title : string.Empty;
-                navigateItem.Symbol = item.Symbol;
-                navigateItem.ShowUnread = item.ShowUnread;
-                navigateItem.IsSelected = item.IsSelected;
-                navigateItem.Visibility = item.IsVisible ? Visibility.Visible : Visibility.Collapsed;
-                navigateItem.Width = isPaneOpen ? double.NaN : 44;
+                navItem.Label = isPaneOpen ? item.Title : string.Empty;
+                navItem.Symbol = item.Symbol;
+                navItem.IsItemSelected = item.IsSelected;
+                navItem.Root.Visibility = item.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(navItem.Root, item.Title);
             })
             .WithKey("sidenav-" + item.PageKey);
     }
