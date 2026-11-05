@@ -186,7 +186,10 @@ public sealed class MainShell : Component
             IsPaneToggleButtonVisible = false,
             IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
             IsSettingsVisible = false,
-            PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+            // 原版是窄栏：图标在上、文字在下。LeftCompact 才会走模板的竖向排版.
+            PaneDisplayMode = NavigationViewPaneDisplayMode.LeftCompact,
+            OpenPaneLength = 240,
+            CompactPaneLength = 72,
             PaneHeader = paneHeader,
             PaneCustomContent = sideNav,
         })
