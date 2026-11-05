@@ -21,6 +21,11 @@ public sealed partial class ComprehensiveMomentSectionDetailControl : Comprehens
         if (ViewModel is not null)
         {
             ViewModel.Initialized += OnInitialized;
+
+            // Unload 时为了释放引用把 ItemsSource 置空了，而 x:Bind 只在
+            // ViewModel 或者集合属性变化时才会重新求值 —— 切回来同一个 ViewModel
+            // 不会触发，所以这里必须手动恢复，否则顶部 UP 主栏是空的.
+            UperView.ItemsSource = ViewModel.Upers;
         }
 
         UperView.SelectionChanged += OnUperSelectionChanged;

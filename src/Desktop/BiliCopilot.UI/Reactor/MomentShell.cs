@@ -26,6 +26,7 @@ public sealed class MomentShell : Component
     /// <summary>
     /// Initializes a new instance of the <see cref="MomentShell"/> class.
     /// </summary>
+    /// <param name="viewModel">页面视图模型.</param>
     public MomentShell(MomentPageViewModel viewModel) => _viewModel = viewModel;
 
     /// <inheritdoc/>
@@ -46,10 +47,11 @@ public sealed class MomentShell : Component
         _commentPanel.ViewModel = vm.CommentModule;
         _commentPanel.IsPanelOpened = vm.IsCommentsOpened;
 
-        var content = new XamlHostElement(
-            () => isVideo ? _videoControl : _comprehensiveControl,
-            _ => { })
-        { TypeKey = isVideo ? "moment-video" : "moment-comprehensive" };
+        // 两个分区的控件都常驻，切 tab 只切控件的 Visibility.
+        // 之前是在同一个位置换 TypeKey，Reactor 会重建宿主元素，挂在上面的控件实例
+        // 跟着被丢掉，切回综合时整片内容（包括顶部 UP 主栏）都是空白.
+        _videoControl.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
+        _comprehensiveControl.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
 
         var children = new List<Element>
         {
@@ -57,7 +59,12 @@ public sealed class MomentShell : Component
                 .Grid(row: 0)
                 .HAlign(HorizontalAlignment.Stretch)
                 .VAlign(VerticalAlignment.Center),
-            content.Grid(row: 1),
+            new XamlHostElement(() => _videoControl, _ => { })
+                .Grid(row: 1)
+                .WithKey("moment-video"),
+            new XamlHostElement(() => _comprehensiveControl, _ => { })
+                .Grid(row: 1)
+                .WithKey("moment-comprehensive"),
         };
 
         if (vm.IsCommentsOpened)
