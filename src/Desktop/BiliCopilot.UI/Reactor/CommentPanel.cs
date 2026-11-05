@@ -36,8 +36,6 @@ public sealed class CommentPanel : Component
     private readonly CommentMainViewModel _viewModel;
     private int _version;
 
-    private int _renderCount;
-    private int _totalCount;
     /// <summary>
     /// Initializes a new instance of the <see cref="CommentPanel"/> class.
     /// </summary>
@@ -195,14 +193,10 @@ public sealed class CommentPanel : Component
             listItems.Add((comment.Data, comment.ShowMoreCommand));
         }
 
-        _renderCount = 0;
-        _totalCount = listItems.Count;
-
         var list = VirtualList(
             listItems.Count,
             index =>
             {
-                _renderCount++;
                 var item = listItems[index];
                 return CreateCard(item.Data, item.ShowMore, true, "c-" + item.Data.Data.Id, Refresh).Margin(12, 4, 12, 4);
             },
@@ -211,15 +205,9 @@ public sealed class CommentPanel : Component
             spacing: 0,
             onVisibleRangeChanged: (first, last) =>
             {
-                Serilog.Log.Information(
-                    "评论虚拟化：可见 {First}-{Last}，已渲染 {Rendered} 项，总数 {Total}",
-                    first,
-                    last,
-                    _renderCount,
-                    _totalCount);
-
-                // 快到底部时取下一页
-                if (last >= listItems.Count - 3)
+                // 快到底部时取下一页。IsLoading 守卫是必须的：
+                // 数据回来之前每次布局都会再触发一遍，会连续发请求、把 UI 线程刷满.
+                if (!viewModel.IsLoading && last >= listItems.Count - 3)
                 {
                     viewModel.LoadItemsCommand.Execute(default);
                 }

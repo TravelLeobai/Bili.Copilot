@@ -96,6 +96,13 @@ public sealed class MainShell : Component
     /// </summary>
     public FrameworkElement? TitleBarElement => _titleBarRef?.Current;
 
+    /// <summary>
+    /// 标题栏上需要能点到的按钮。窗口要拿它去申请非客户区的穿透区域，
+    /// 否则 SetTitleBar 会把整条标题栏当拖拽区，按钮收不到指针事件.
+    /// </summary>
+    public IReadOnlyList<Button> TitleBarButtons =>
+        new Button[] { _backButton, _paneToggleButton, _compactSearchButton, _railSearchButton };
+
     /// <inheritdoc/>
     public override Element Render()
     {
@@ -178,7 +185,24 @@ public sealed class MainShell : Component
             .Background("Transparent")
             .Grid(row: 1);
 
+        // 标题文字部分才是拖拽区；按钮单独放在左边一列，不进 SetTitleBar 的范围，
+        // 否则整条标题栏都是非客户区，按钮连 hover 都收不到.
         var titleContent = HStack(
+            4,
+            TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
+            .VAlign(VerticalAlignment.Center)
+            .HAlign(HorizontalAlignment.Left)
+            .Padding(12, 0, 0, 0)
+            .Grid(row: 0, column: 1);
+
+        var titleBar = Grid(
+            columns: [GridSize.Star()],
+            rows: [GridSize.Star()],
+            titleContent)
+            .Height(48)
+            .Ref(titleBarRef);
+
+        Element titleButtons = HStack(
             4,
             viewModel.IsOverlayOpen
                 ? new XamlHostElement(() => _backButton, _ => { })
@@ -190,29 +214,11 @@ public sealed class MainShell : Component
                 .Size(40, 40)
                 .Margin(3.5, 0, 0, 0)
                 .HAlign(HorizontalAlignment.Left)
-                .VAlign(VerticalAlignment.Center),
-            // 搜索图标只在侧栏窄 rail 上（折叠态），标题栏这里留空.
-            (Element)TextBlock(string.Empty),
-            TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
+                .VAlign(VerticalAlignment.Center))
             .VAlign(VerticalAlignment.Center)
             .HAlign(HorizontalAlignment.Left)
+            .Margin(6, 0, 0, 0)
             .Grid(row: 0, column: 0);
-
-        var titleBar = Grid(
-            columns: [GridSize.Auto, GridSize.Star()],
-            rows: [GridSize.Star()],
-            HStack(
-                4,
-                titleContent)
-                .VAlign(VerticalAlignment.Center)
-                .Grid(row: 0, column: 0),
-            HStack(0, TextBlock(string.Empty))
-                .Padding(0, 0, 12, 0)
-                .HAlign(HorizontalAlignment.Right)
-                .VAlign(VerticalAlignment.Center)
-                .Grid(row: 0, column: 1))
-            .Height(48)
-            .Ref(titleBarRef);
 
         // 折叠态：在左侧窄 rail 顶部叠一个真的搜索按钮（导航项点击在 rail 里不可靠）.
         Element railSearch = isPaneOpen
@@ -222,13 +228,14 @@ public sealed class MainShell : Component
                 .HAlign(HorizontalAlignment.Left)
                 .VAlign(VerticalAlignment.Top)
                 .Margin(0, 6, 0, 0)
-                .Grid(row: 1);
+                .Grid(row: 1, column: 1);
 
         return Grid(
-            columns: [GridSize.Star()],
+            columns: [GridSize.Px(96), GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Star()],
-            titleBar.Grid(row: 0),
-            navigation,
+            titleButtons,
+            titleBar.Grid(row: 0, column: 1),
+            navigation.Grid(row: 1, columnSpan: 2),
             railSearch);
     }
 

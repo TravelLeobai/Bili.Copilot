@@ -1,8 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
-using System.Numerics;
 using CommunityToolkit.WinUI.Animations;
-using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -21,7 +19,6 @@ public sealed class NavItemButton
     private readonly FluentIcons.WinUI.SymbolIcon _filledIcon;
     private readonly TextBlock _label;
     private readonly Border _backplate;
-    private readonly Border _pill;
 
     private FluentIcons.Common.Symbol _symbol;
     private bool _isItemSelected;
@@ -69,26 +66,11 @@ public sealed class NavItemButton
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
 
-        // 选中时左侧这根胶囊，参照 WinUI 设置页的选中指示器，带一点弹性.
-        _pill = new Border
-        {
-            Width = 4,
-            Height = 24,
-            CornerRadius = new CornerRadius(2),
-            Background = ResolveBrush("AccentFillColorDefaultBrush"),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Visibility = Visibility.Collapsed,
-        };
-
         var root = new Grid { ColumnSpacing = 4, HorizontalAlignment = HorizontalAlignment.Stretch };
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        root.Children.Add(_pill);
-        Grid.SetColumn(iconHost, 1);
         root.Children.Add(iconHost);
-        Grid.SetColumn(_label, 2);
+        Grid.SetColumn(_label, 1);
         root.Children.Add(_label);
 
         _backplate = new Border
@@ -152,11 +134,6 @@ public sealed class NavItemButton
 
             _isItemSelected = value;
             ApplyVisualState();
-
-            if (value)
-            {
-                PlayPillAnimation();
-            }
         }
     }
 
@@ -173,25 +150,6 @@ public sealed class NavItemButton
         }
     }
 
-    private void PlayPillAnimation()
-    {
-        try
-        {
-            var visual = ElementCompositionPreview.GetElementVisual(_pill);
-            visual.CenterPoint = new Vector3((float)_pill.Width / 2f, (float)_pill.Height / 2f, 0f);
-            var spring = visual.Compositor.CreateSpringVector3Animation();
-            spring.InitialValue = new Vector3(1f, 0.3f, 1f);
-            spring.FinalValue = Vector3.One;
-            spring.DampingRatio = 0.55f;
-            spring.Period = TimeSpan.FromMilliseconds(90);
-            visual.StartAnimation("Scale", spring);
-        }
-        catch
-        {
-            // 动画失败不影响选中态.
-        }
-    }
-
     private void ApplyVisualState()
     {
         var hovered = _button.IsPointerOver;
@@ -205,7 +163,6 @@ public sealed class NavItemButton
         _regularIcon.Foreground = iconColor;
         _filledIcon.Foreground = iconColor;
         _label.Foreground = _isItemSelected ? accent : normal;
-        _pill.Visibility = _isItemSelected ? Visibility.Visible : Visibility.Collapsed;
 
         _backplate.Background = _isItemSelected
             ? ResolveBrush("ControlFillColorSecondaryBrush")
