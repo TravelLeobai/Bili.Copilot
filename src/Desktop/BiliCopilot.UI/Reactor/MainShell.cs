@@ -124,14 +124,18 @@ public sealed class MainShell : Component
             .Where(item => item.IsVisible)
             .Select(item => BuildSideNavItem(item, isPaneOpen)));
 
+        // 两个分支必须用不同 key：都是 XamlHostElement，不换 key 会被按类型复用，
+        // 折叠后显示的仍是搜索框（只是被压窄），点下去弹的是搜索建议而不是展开侧栏.
         Element searchRow = isPaneOpen
             ? new XamlHostElement(() => _searchBox, _ => { })
                 .HAlign(HorizontalAlignment.Stretch)
-                .Margin(4, 6, 4, 8)
+                .Margin(4, 8, 4, 8)
+                .WithKey("sidebar-search-box")
             : new XamlHostElement(() => _compactSearchButton, _ => { })
                 .Size(40, 40)
-                .Margin(4, 6, 4, 8)
-                .HAlign(HorizontalAlignment.Center);
+                .Margin(4, 8, 4, 8)
+                .HAlign(HorizontalAlignment.Center)
+                .WithKey("sidebar-search-icon");
 
         // 账号行：头像 40 + 间距 4，和导航项的文字起点（4 + 40 + 4 = 48）对齐.
         Element accountRow = HStack(
@@ -156,18 +160,24 @@ public sealed class MainShell : Component
             .HAlign(HorizontalAlignment.Stretch)
             .HorizontalContentAlignment(HorizontalAlignment.Stretch);
 
-        Element sidebar = VStack(
-            2,
-            searchRow,
-            VStack(2, menuItems),
-            TextBlock(string.Empty).Height(8),
-            VStack(2, footerItems.ToArray()),
-            (Element)TextBlock(string.Empty).Height(8),
-            accountButton)
+        // 侧栏三段式：搜索占顶、菜单居中滚动、收藏及以下整组贴底.
+        Element sidebarBottom = Grid(
+            columns: [GridSize.Star()],
+            rows: [GridSize.Auto, GridSize.Auto],
+            VStack(2, footerItems.ToArray()).Grid(row: 0),
+            accountButton.Grid(row: 1))
+            .VAlign(VerticalAlignment.Bottom);
+
+        Element sidebar = Grid(
+            columns: [GridSize.Star()],
+            rows: [GridSize.Auto, GridSize.Star(), GridSize.Auto],
+            searchRow.Grid(row: 0),
+            VStack(2, menuItems).Grid(row: 1).VAlign(VerticalAlignment.Top),
+            sidebarBottom.Grid(row: 2))
             .Width(sideWidth)
             .Padding(0, 0, 0, 8)
             .HAlign(HorizontalAlignment.Left)
-            .VAlign(VerticalAlignment.Top)
+            .VAlign(VerticalAlignment.Stretch)
             .Background("Transparent");
 
         return Grid(
@@ -198,8 +208,8 @@ public sealed class MainShell : Component
                 .FontSize(14)
                 .VAlign(VerticalAlignment.Center)
                 .Margin(4, 0, 0, 0))
-            .Height(48)
-            .Padding(8, 0, 0, 0)
+            // Padding 4 + 按钮一半 20 = 24，和侧栏导航图标的中心对齐.
+            .Padding(4, 0, 0, 0)
             .HAlign(HorizontalAlignment.Left)
             .VAlign(VerticalAlignment.Center);
 
