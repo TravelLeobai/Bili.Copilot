@@ -177,12 +177,32 @@ public sealed class MainShell : Component
             .PaneFooter(accountPanel)
             .Background("Transparent")
             // Set 是 Reactor 唯一能碰到 XAML NavigationView 的入口：
-            // 存下控件给折叠按钮用，同时把当前页面的导航项设成选中 ——
-            // 选中后图标和文字会走系统强调色，跟 f7a634e 那套着色是同一个效果.
+            // 存下控件给折叠按钮用、换图标、同步选中态都在这里做.
             .Set(nv =>
             {
                 _navView = nv;
                 var selectedKey = viewModel.CurrentPageKey;
+
+                // 图标换成 f7a634e 那套 FluentIcons：选中 Filled，未选中 Regular.
+                foreach (var candidate in nv.MenuItems.Concat(nv.FooterMenuItems).OfType<NavigationViewItem>())
+                {
+                    var tag = candidate.Tag as string;
+                    var entry = viewModel.MenuItems.Concat(viewModel.FooterItems)
+                        .FirstOrDefault(item => item.PageKey == tag);
+                    if (entry is null)
+                    {
+                        continue;
+                    }
+
+                    candidate.Icon = new FluentIcons.WinUI.SymbolIcon
+                    {
+                        Symbol = entry.Symbol,
+                        IconVariant = tag == selectedKey
+                            ? FluentIcons.Common.IconVariant.Filled
+                            : FluentIcons.Common.IconVariant.Regular,
+                        FontSize = 16,
+                    };
+                }
 
                 if (selectedKey is null)
                 {
@@ -191,23 +211,25 @@ public sealed class MainShell : Component
 
                 foreach (var candidate in nv.MenuItems.Concat(nv.FooterMenuItems).OfType<NavigationViewItem>())
                 {
-                    if (candidate.Tag as string == selectedKey)
+                    if (candidate.Tag as string != selectedKey)
                     {
-                        nv.SelectedItem = candidate;
-
-                        // 选中项显式染成强调色，跟 f7a634e 那套「选中变红」的观感对齐.
-                        if (Application.Current.Resources.TryGetValue("AccentTextFillColorPrimaryBrush", out var accentBrush)
-                            && accentBrush is Brush accent)
-                        {
-                            candidate.Foreground = accent;
-                            if (candidate.Icon is Microsoft.UI.Xaml.Controls.IconElement iconElement)
-                            {
-                                iconElement.Foreground = accent;
-                            }
-                        }
-
-                        break;
+                        continue;
                     }
+
+                    nv.SelectedItem = candidate;
+
+                    // 选中项显式染成强调色，跟 f7a634e 那套「选中变红」的观感对齐.
+                    if (Application.Current.Resources.TryGetValue("AccentTextFillColorPrimaryBrush", out var accentBrush)
+                        && accentBrush is Brush accent)
+                    {
+                        candidate.Foreground = accent;
+                        if (candidate.Icon is Microsoft.UI.Xaml.Controls.IconElement iconElement)
+                        {
+                            iconElement.Foreground = accent;
+                        }
+                    }
+
+                    break;
                 }
             })
             .Grid(row: 1);
