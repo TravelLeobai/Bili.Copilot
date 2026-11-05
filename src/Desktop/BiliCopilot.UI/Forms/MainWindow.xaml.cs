@@ -97,6 +97,43 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         }
     }
 
+    /// <summary>
+    /// 把标题栏上的按钮申报成非客户区的穿透区域。
+    /// SetTitleBar 之后整条标题栏都算拖拽区，按钮拿不到指针事件（连 hover 都没有），
+    /// 这里把按钮的矩形显式排除掉.
+    /// </summary>
+    private void UpdateTitleBarPassthrough(FrameworkElement titleBar)
+    {
+        try
+        {
+            var source = InputNonClientPointerSource.GetForWindowId(AppWindow.Id);
+            var scale = HwndExtensions.GetDpiForWindow(this.GetWindowHandle()) / 96d;
+            var rects = new List<RectInt32>();
+
+            foreach (var button in _shell.TitleBarButtons)
+            {
+                if (button.Visibility != Visibility.Visible || button.ActualWidth <= 0 || button.ActualHeight <= 0)
+                {
+                    continue;
+                }
+
+                var bounds = button.TransformToVisual(titleBar).TransformBounds(
+                    new Windows.Foundation.Rect(0, 0, button.ActualWidth, button.ActualHeight));
+                rects.Add(new RectInt32(
+                    (int)Math.Round(bounds.X * scale),
+                    (int)Math.Round(bounds.Y * scale),
+                    (int)Math.Round(bounds.Width * scale),
+                    (int)Math.Round(bounds.Height * scale)));
+            }
+
+            source.SetRegionRects(NonClientRegionKind.Passthrough, rects.ToArray());
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "设置标题栏按钮穿透区域失败");
+        }
+    }
+
     private static PointInt32 GetSavedWindowPosition()
     {
         var left = SettingsToolkit.ReadLocalSetting(SettingNames.MainWindowPositionLeft, 0);
