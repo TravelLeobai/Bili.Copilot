@@ -106,10 +106,11 @@ public sealed class MainShell : Component
     /// <inheritdoc/>
     public override Element Render()
     {
-        // 试过三条路都不生效：with 里设 IsPaneOpen、扩展方法 .IsPaneOpen(bool, cb)、
-        // UseElementRef 拿控件直接改 IsPaneOpen（Current 一直是 null）。
-        // Reactor 的 NavigationViewElement 不把这些属性落到 XAML 控件上，
-        // 所以按钮只能切换自己的状态 —— 这也是这版折叠一直没反应的原因.
+        // 2026-11-05 调查结论：折叠按钮点了没反应，跟底部 footer 无关 ——
+        // 把 PaneFooter 整个去掉、footer 项塞进 PaneCustomContent 重测，pane 宽度依旧不动。
+        // IsPaneOpen / OpenPaneLength 无论是 with 属性、扩展方法 .IsPaneOpen(bool, cb)，
+        // 还是 UseElementRef 拿控件直接改（Current 一直是 null），都落不到 XAML 控件上。
+        // 这版按钮只能切自己的 Reactor 状态，pane 本身不会动.
         var (isPaneOpen, setIsPaneOpen) = UseState(true);
         _togglePaneAction = () => setIsPaneOpen(!isPaneOpen);
         _openPaneAction = () => setIsPaneOpen(true);
