@@ -6,7 +6,6 @@ using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.View;
-using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -23,13 +22,27 @@ namespace BiliCopilot.UI.Reactor;
 
 /// <summary>
 /// 使用 Microsoft.UI.Reactor 声明式外壳重写的主界面.
-/// 负责标题栏、搜索栏、顶部导航、侧边导航与内容宿主.
+/// 侧栏宽度由自己控制（展开 240 / 折叠 52），不再依赖 NavigationView 的折叠状态，
+/// 那条路在自定义标题栏下一直不稳.
 /// </summary>
 public sealed class MainShell : Component
 {
+    private const double ExpandedWidth = 240;
+
+    private const double CollapsedWidth = 52;
+
+    private const string FavoritesTag = "__favorites__";
+
+    private const string ViewLaterTag = "__view_later__";
+
+    private const string HistoryTag = "__history__";
+
     private readonly NavigationViewModel _viewModel;
+
     private readonly AccountViewModel _accountViewModel;
+
     private readonly Grid _contentHost;
+
     private readonly AppSearchBox _searchBox = new()
     {
         MinWidth = 0,
@@ -39,23 +52,16 @@ public sealed class MainShell : Component
     };
 
     private readonly HeaderAccountControl _accountControl = new();
-    private readonly Button _paneToggleButton = CreateFlatIconButton("\uE700", "切换导航栏");
-    private readonly Button _compactSearchButton = CreateFlatIconButton("\uE721", "搜索");
 
-    private readonly Button _railSearchButton = CreateFlatIconButton("\uE721", "搜索");
     private readonly Button _backButton = CreateFlatIconButton("\uE72B", "返回");
-    private const string SearchRailTag = "__rail_search__";
 
-    // 收藏 / 稍后再看 / 历史记录放在侧栏底部，用和普通导航项一样的条目.
-    private const string FavoritesTag = "__favorites__";
-    private const string ViewLaterTag = "__view_later__";
-    private const string HistoryTag = "__history__";
+    private readonly Button _compactSearchButton = CreateFlatIconButton("\uE721", "搜索");
 
     private readonly Dictionary<string, NavItemButton> _sideNavControls = new();
 
     private Action? _togglePaneAction;
+
     private Action? _openPaneAction;
-    private ElementRef<FrameworkElement>? _titleBarRef;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainShell"/> class.
@@ -72,10 +78,8 @@ public sealed class MainShell : Component
         _contentHost = new Grid();
         _contentHost.Children.Add(mainFrame);
         _contentHost.Children.Add(overlayFrame);
-        _paneToggleButton.Click += (_, _) => _togglePaneAction?.Invoke();
-        _compactSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
-        _railSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _backButton.Click += (_, _) => _viewModel.Back();
+        _compactSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
     }
 
     /// <summary>
@@ -91,153 +95,113 @@ public sealed class MainShell : Component
         });
     }
 
-    /// <summary>
-    /// 标题栏元素，供窗口设置拖拽区域.
-    /// </summary>
-    public FrameworkElement? TitleBarElement => _titleBarRef?.Current;
-
-    /// <summary>
-    /// 标题栏上需要能点到的按钮。窗口要拿它去申请非客户区的穿透区域，
-    /// 否则 SetTitleBar 会把整条标题栏当拖拽区，按钮收不到指针事件.
-    /// </summary>
-    public IReadOnlyList<Button> TitleBarButtons =>
-        new Button[] { _backButton, _paneToggleButton, _compactSearchButton, _railSearchButton };
-
     /// <inheritdoc/>
     public override Element Render()
     {
         var (isPaneOpen, setIsPaneOpen) = UseState(true);
         _togglePaneAction = () => setIsPaneOpen(!isPaneOpen);
         _openPaneAction = () => setIsPaneOpen(true);
-        var titleBarRef = this.UseElementRef<FrameworkElement>();
-        _titleBarRef = titleBarRef;
+
         var viewModel = UseObservableTree(_viewModel);
         var account = UseObservableTree(_accountViewModel);
         _ = viewModel.NavItemsVersion;
 
-        var sideMenuItems = viewModel.MenuItems
+        var sideWidth = isPaneOpen ? ExpandedWidth : CollapsedWidth;
+
+        var menuItems = viewModel.MenuItems
             .Where(item => item.IsVisible)
             .Select(item => BuildSideNavItem(item, isPaneOpen))
             .ToArray();
 
-        var sideFooterItems = new List<Element>
+        var footerItems = new List<Element>
         {
             BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, FavoritesTag, viewModel.IsFavoritesPage, isPaneOpen),
             BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, ViewLaterTag, viewModel.IsViewLaterPage, isPaneOpen),
             BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, HistoryTag, viewModel.IsHistoryPage, isPaneOpen),
         };
 
-        sideFooterItems.AddRange(viewModel.FooterItems
+        footerItems.AddRange(viewModel.FooterItems
             .Where(item => item.IsVisible)
             .Select(item => BuildSideNavItem(item, isPaneOpen)));
 
-        Element sideNav = VStack(2, sideMenuItems).Margin(0, 4, 0, 0);
+        Element searchRow = isPaneOpen
+            ? new XamlHostElement(() => _searchBox, _ => { })
+                .HAlign(HorizontalAlignment.Stretch)
+                .Margin(4, 6, 4, 8)
+            : new XamlHostElement(() => _compactSearchButton, _ => { })
+                .Size(40, 40)
+                .Margin(4, 6, 4, 8)
+                .HAlign(HorizontalAlignment.Center);
 
+        // 账号行：头像 40 + 间距 4，和导航项的文字起点（4 + 40 + 4 = 48）对齐.
         Element accountRow = HStack(
-            9.7,
-            new XamlHostElement(() => _accountControl, _ => { }),
+            4,
+            new XamlHostElement(() => _accountControl, _ => { })
+                .Size(40, 40)
+                .VAlign(VerticalAlignment.Center),
             isPaneOpen
                 ? TextBlock(account.MyProfile?.User?.Name ?? string.Empty)
                     .FontSize(14)
+                    .MaxLines(1)
                     .VAlign(VerticalAlignment.Center)
                 : (Element)TextBlock(string.Empty))
-            .Padding(4.7, 0, 12, 0)
-            .Height(36);
+            .Padding(4, 0, 8, 0)
+            .Height(44);
 
-        Element accountPanel = Button(accountRow, () => _accountControl.ShowAccountFlyout())
+        Element accountButton = Button(accountRow, () => _accountControl.ShowAccountFlyout())
             .AutomationName(account.MyProfile?.User?.Name ?? "我的")
             .SubtleButton()
             .Padding(0)
-            .Height(36)
-            .Margin(4, 0, 4, 0)
-            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+            .Height(44)
             .HAlign(HorizontalAlignment.Stretch)
-            .VAlign(VerticalAlignment.Center);
+            .HorizontalContentAlignment(HorizontalAlignment.Stretch);
 
-        Element paneFooter = VStack(2, [.. sideFooterItems, accountPanel]);
-
-        // 侧栏顶部：展开时是完整搜索框，收起时只剩一个搜索图标.
-        Element paneHeader = isPaneOpen
-            ? new XamlHostElement(() => _searchBox, _ => { })
-                .HAlign(HorizontalAlignment.Stretch)
-                .VAlign(VerticalAlignment.Center)
-                .Margin(12, 6, 8, 8)
-            : (Element)TextBlock(string.Empty);
-
-        // 导航项改成自绘（AppNavigationViewItem + 内核模板），才能拿到双图标交叉淡入.
-        var navigation = (NavigationView([]) with
-        {
-            Content = new XamlHostElement(() => _contentHost, _ => { }),
-            FooterMenuItems = [],
-            IsBackEnabled = viewModel.IsOverlayOpen,
-            OnBackRequested = () => viewModel.Back(),
-            OnItemInvoked = tag => NavigateByTag(tag),
-            OnSettingsSelected = () => NavigateToSettings(),
-            IsPaneToggleButtonVisible = false,
-            IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
-            IsSettingsVisible = false,
-            PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
-            PaneHeader = paneHeader,
-            PaneCustomContent = sideNav,
-        })
-            // 受控折叠：值给当前状态，回调把 NavigationView 自己触发的变化写回状态.
-            .PaneFooter(paneFooter)
-            .Background("Transparent")
-            .Grid(row: 1);
-
-        // 标题文字部分才是拖拽区；按钮单独放在左边一列，不进 SetTitleBar 的范围，
-        // 否则整条标题栏都是非客户区，按钮连 hover 都收不到.
-        var titleContent = HStack(
-            4,
-            TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
-            .VAlign(VerticalAlignment.Center)
+        Element sidebar = VStack(
+            2,
+            searchRow,
+            VStack(2, menuItems),
+            TextBlock(string.Empty).Height(8),
+            VStack(2, footerItems.ToArray()),
+            (Element)TextBlock(string.Empty).Height(8),
+            accountButton)
+            .Width(sideWidth)
+            .Padding(0, 0, 0, 8)
             .HAlign(HorizontalAlignment.Left)
-            .Padding(12, 0, 0, 0)
-            .Grid(row: 0, column: 1);
+            .VAlign(VerticalAlignment.Top)
+            .Background("Transparent");
 
-        var titleBar = Grid(
-            columns: [GridSize.Star()],
-            rows: [GridSize.Star()],
-            titleContent)
-            .Height(48)
-            .Ref(titleBarRef);
+        return Grid(
+            columns: [GridSize.Auto, GridSize.Star()],
+            rows: [GridSize.Auto, GridSize.Star()],
+            BuildTopBar(viewModel).Grid(row: 0, columnSpan: 2),
+            sidebar.Grid(row: 1, column: 0),
+            new XamlHostElement(() => _contentHost, _ => { }).Grid(row: 1, column: 1));
+    }
 
-        Element titleButtons = HStack(
+    private Element BuildTopBar(NavigationViewModel viewModel)
+        => HStack(
             4,
             viewModel.IsOverlayOpen
                 ? new XamlHostElement(() => _backButton, _ => { })
                     .Size(40, 40)
-                    .HAlign(HorizontalAlignment.Left)
                     .VAlign(VerticalAlignment.Center)
                 : (Element)TextBlock(string.Empty),
-            new XamlHostElement(() => _paneToggleButton, _ => { })
+            Button(
+                TextBlock("\uE700").FontFamily("Segoe Fluent Icons").FontSize(14),
+                () => _togglePaneAction?.Invoke())
                 .Size(40, 40)
-                .Margin(3.5, 0, 0, 0)
-                .HAlign(HorizontalAlignment.Left)
-                .VAlign(VerticalAlignment.Center))
-            .VAlign(VerticalAlignment.Center)
+                .SubtleButton()
+                .AutomationName("切换导航栏")
+                .VAlign(VerticalAlignment.Center),
+            TextBlock("哔哩助理")
+                .SemiBold()
+                .FontSize(14)
+                .VAlign(VerticalAlignment.Center)
+                .Margin(4, 0, 0, 0))
+            .Height(48)
+            .Padding(8, 0, 0, 0)
             .HAlign(HorizontalAlignment.Left)
-            .Margin(6, 0, 0, 0)
-            .Grid(row: 0, column: 0);
-
-        // 折叠态：在左侧窄 rail 顶部叠一个真的搜索按钮（导航项点击在 rail 里不可靠）.
-        Element railSearch = isPaneOpen
-            ? (Element)TextBlock(string.Empty)
-            : new XamlHostElement(() => _railSearchButton, _ => { })
-                .Size(48, 36)
-                .HAlign(HorizontalAlignment.Left)
-                .VAlign(VerticalAlignment.Top)
-                .Margin(0, 6, 0, 0)
-                .Grid(row: 1, column: 1);
-
-        return Grid(
-            columns: [GridSize.Px(96), GridSize.Star()],
-            rows: [GridSize.Auto, GridSize.Star()],
-            titleButtons,
-            titleBar.Grid(row: 0, column: 1),
-            navigation.Grid(row: 1, columnSpan: 2),
-            railSearch);
-    }
+            .VAlign(VerticalAlignment.Center);
 
     /// <summary>
     /// 固定项的导航（收藏/稍后再看/历史记录），选中态由页面状态决定.
@@ -310,24 +274,16 @@ public sealed class MainShell : Component
         };
 
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, automationName);
+
+        // 悬停反馈：之前按下去没反应时分不清是没点到还是逻辑没跑，这里给个明显的底色变化.
+        var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        button.PointerEntered += (_, _) => button.Background = LookupBrush("SubtleFillColorSecondaryBrush") ?? transparent;
+        button.PointerExited += (_, _) => button.Background = transparent;
         return button;
     }
 
-    private static string? GetSymbolName(string pageKey) => pageKey switch
-    {
-        _ when pageKey.Contains("PopularPage") => "Home",
-        _ when pageKey.Contains("MomentPage") => "Message",
-        _ when pageKey.Contains("VideoPartitionPage") => "Video",
-        _ when pageKey.Contains("LivePartitionPage") => "Camera",
-        _ when pageKey.Contains("AnimePage") => "Play",
-        _ when pageKey.Contains("CinemaPage") => "Pictures",
-        _ when pageKey.Contains("ArticlePartitionPage") => "Page",
-        _ when pageKey.Contains("MessagePage") => "Message",
-        _ when pageKey.Contains("SettingsPage") => "Setting",
-        _ when pageKey.Contains("DownloadPage") => "Download",
-        _ when pageKey.Contains("LivePlayerPage") => "Camera",
-        _ => "Document",
-    };
+    private static Brush? LookupBrush(string key)
+        => Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush ? brush : null;
 
     private void NavigateToSettings()
     {
@@ -352,22 +308,9 @@ public sealed class MainShell : Component
                 return;
         }
 
-        // NavigationView 内置设置项被隐藏了，但它自己还是会派发这个 tag，兜住.
         if (tag.Contains("settings", StringComparison.OrdinalIgnoreCase))
         {
             NavigateToSettings();
-            return;
-        }
-
-        if (tag == SearchRailTag)
-        {
-            // 点窄 rail 上的搜索图标：先展开侧栏，再把焦点送进搜索框.
-            _openPaneAction?.Invoke();
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(200).ConfigureAwait(false);
-                _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
-            });
             return;
         }
 
