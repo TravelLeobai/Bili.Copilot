@@ -6,6 +6,8 @@ using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.View;
+using Richasy.WinUIKernel.Share.Base;
+using Richasy.WinUIKernel.Share.ViewModels;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hooks;
@@ -50,6 +52,9 @@ public sealed class MainShell : Component
     private Action? _togglePaneAction;
 
     private NavigationView? _navView;
+
+    // 侧栏项缓存：Reactor 每次 Render 都拿同一个控件实例，避免重建把动画打断.
+    private readonly Dictionary<string, AppNavigationViewItem> _sideNavControls = new();
     private Action? _openPaneAction;
     private ElementRef<FrameworkElement>? _titleBarRef;
 
@@ -120,16 +125,21 @@ public sealed class MainShell : Component
         var account = UseObservableTree(_accountViewModel);
         _ = viewModel.NavItemsVersion;
 
-        var menu = viewModel.MenuItems
+        var sideMenuItems = viewModel.MenuItems
             .Where(item => item.IsVisible)
-            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
-            .ToList();
-
-        var menuItems = menu.ToArray();
-        var footer = viewModel.FooterItems
-            .Where(item => item.IsVisible && !item.PageKey.Contains("SettingsPage"))
-            .Select(item => new NavigationViewItemData(item.Title, GetSymbolName(item.PageKey), item.PageKey))
+            .Select(item => BuildSideNavItem(item, isPaneOpen))
             .ToArray();
+
+        var sideFooterItems = new List<Element>
+        {
+            BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, "__favorites__", viewModel.IsFavoritesPage, isPaneOpen),
+            BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, "__view_later__", viewModel.IsViewLaterPage, isPaneOpen),
+            BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, "__history__", viewModel.IsHistoryPage, isPaneOpen),
+        };
+
+        sideFooterItems.AddRange(viewModel.FooterItems
+            .Where(item => item.IsVisible)
+            .Select(item => BuildSideNavItem(item, isPaneOpen)));
 
         Element accountRow = HStack(
             9.7,
@@ -160,10 +170,14 @@ public sealed class MainShell : Component
                 .Margin(12, 6, 8, 8)
             : (Element)TextBlock(string.Empty);
 
-        var navigation = (NavigationView(menuItems) with
+        // 侧栏项改成内核 AppNavigationViewItem：模板里自带 Regular/Filled 两个
+        // SymbolIcon 和 200ms 透明度隐式动画，选中/悬停/按下都由模板的 VisualState 管.
+        Element sideNav = VStack(2, [.. sideMenuItems, .. sideFooterItems]).Margin(4, 8, 4, 0);
+
+        var navigation = (NavigationView([]) with
         {
             Content = new XamlHostElement(() => _contentHost, _ => { }),
-            FooterMenuItems = footer,
+            FooterMenuItems = [],
             IsBackEnabled = viewModel.IsOverlayOpen,
             OnBackRequested = () => viewModel.Back(),
             OnItemInvoked = tag => NavigateByTag(tag),
@@ -171,68 +185,17 @@ public sealed class MainShell : Component
             IsPaneOpen = isPaneOpen,
             IsPaneToggleButtonVisible = false,
             IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+            IsSettingsVisible = false,
             PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
             PaneHeader = paneHeader,
+            PaneCustomContent = sideNav,
         })
             .PaneFooter(accountPanel)
             .Background("Transparent")
-            // Set 是 Reactor 唯一能碰到 XAML NavigationView 的入口：
-            // 存下控件给折叠按钮用、换图标、同步选中态都在这里做.
-            .Set(nv =>
-            {
-                _navView = nv;
-                var selectedKey = viewModel.CurrentPageKey;
-
-                // 图标换成 f7a634e 那套 FluentIcons：选中 Filled，未选中 Regular.
-                foreach (var candidate in nv.MenuItems.Concat(nv.FooterMenuItems).OfType<NavigationViewItem>())
-                {
-                    var tag = candidate.Tag as string;
-                    var entry = viewModel.MenuItems.Concat(viewModel.FooterItems)
-                        .FirstOrDefault(item => item.PageKey == tag);
-                    if (entry is null)
-                    {
-                        continue;
-                    }
-
-                    candidate.Icon = new FluentIcons.WinUI.SymbolIcon
-                    {
-                        Symbol = entry.Symbol,
-                        IconVariant = tag == selectedKey
-                            ? FluentIcons.Common.IconVariant.Filled
-                            : FluentIcons.Common.IconVariant.Regular,
-                        FontSize = 16,
-                    };
-                }
-
-                if (selectedKey is null)
-                {
-                    return;
-                }
-
-                foreach (var candidate in nv.MenuItems.Concat(nv.FooterMenuItems).OfType<NavigationViewItem>())
-                {
-                    if (candidate.Tag as string != selectedKey)
-                    {
-                        continue;
-                    }
-
-                    nv.SelectedItem = candidate;
-
-                    // 选中项显式染成强调色，跟 f7a634e 那套「选中变红」的观感对齐.
-                    if (Application.Current.Resources.TryGetValue("AccentTextFillColorPrimaryBrush", out var accentBrush)
-                        && accentBrush is Brush accent)
-                    {
-                        candidate.Foreground = accent;
-                        if (candidate.Icon is Microsoft.UI.Xaml.Controls.IconElement iconElement)
-                        {
-                            iconElement.Foreground = accent;
-                        }
-                    }
-
-                    break;
-                }
-            })
+            // Set 是 Reactor 唯一能碰到 XAML NavigationView 的入口，折叠按钮靠它.
+            .Set(nv => _navView = nv)
             .Grid(row: 1);
+
 
         var titleContent = HStack(
             4,
@@ -327,6 +290,64 @@ public sealed class MainShell : Component
         _ when pageKey.Contains("LivePlayerPage") => "Camera",
         _ => "Document",
     };
+
+    private Element BuildSideNavItem(AppNavigationItemViewModel item, bool isPaneOpen)
+    {
+        if (!_sideNavControls.TryGetValue(item.PageKey, out var control))
+        {
+            control = CreateSideNavItem(item.PageKey);
+            control.Tapped += (_, _) => NavigateByTag(item.PageKey);
+            _sideNavControls[item.PageKey] = control;
+        }
+
+        ApplySideNavItem(control, isPaneOpen ? item.Title : string.Empty, item.Symbol, item.IsSelected, item.ShowUnread);
+        return new XamlHostElement(() => control, _ => { }).WithKey("sidenav-" + item.PageKey);
+    }
+
+    private Element BuildStaticNavItem(
+        string title,
+        FluentIcons.Common.Symbol symbol,
+        string tag,
+        bool isSelected,
+        bool isPaneOpen)
+    {
+        if (!_sideNavControls.TryGetValue(tag, out var control))
+        {
+            control = CreateSideNavItem(tag);
+            control.Tapped += (_, _) => NavigateByTag(tag);
+            _sideNavControls[tag] = control;
+        }
+
+        ApplySideNavItem(control, isPaneOpen ? title : string.Empty, symbol, isSelected, false);
+        return new XamlHostElement(() => control, _ => { }).WithKey("sidenav-" + tag);
+    }
+
+    private static AppNavigationViewItem CreateSideNavItem(string tag)
+        => new()
+        {
+            // 内核模板：两个 SymbolIcon（Regular Opacity=1 / Filled Opacity=0），
+            // 都挂 MainNavIconImplicitOffsetAnimation（Offset 0.4s + Opacity 0.2s）.
+            Style = (Style)Application.Current.Resources["MainNavigationViewItemStyle"],
+            SelectsOnInvoked = false,
+            Tag = tag,
+        };
+
+    private static void ApplySideNavItem(
+        AppNavigationViewItem control,
+        string content,
+        FluentIcons.Common.Symbol symbol,
+        bool isSelected,
+        bool showUnread)
+    {
+        control.Content = content;
+        control.Symbol = symbol;
+        control.ShowUnread = showUnread;
+
+        // IsSelected 变化会切模板的 Selected 视觉状态：DeselectedIcon.Opacity 1 -> 0、
+        // SelectedIcon.Opacity 0 -> 1，两个都带 OpacityAnimation 0.2s，就是交叉淡入.
+        // 程序化切页（不是点导航项）也走这里，所以同样会触发动画.
+        control.IsSelected = isSelected;
+    }
 
     private void NavigateToSettings()
     {
