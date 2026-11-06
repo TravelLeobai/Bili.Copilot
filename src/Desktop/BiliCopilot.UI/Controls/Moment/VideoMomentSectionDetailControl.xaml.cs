@@ -24,6 +24,7 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
     private double _preferredLeftPaneRatio;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _savePaneWidthTimer;
     private bool _isPaneResizing;
+    private bool _attached;
     private bool _paneResizeFrameQueued;
     private double? _pendingLeftWidth;
 
@@ -61,29 +62,49 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
 
     private void SelectCurrentUper()
     {
-        if (ViewModel is null || ViewModel.Upers.Count == 0)
+        if (!_isActive)
         {
             return;
         }
 
-        var index = 0;
-        if (ViewModel.SelectedAuthor is not null)
+        // 不能在 Upers 的 CollectionChanged 回调里同步调 Select：
+        // 那时 ItemsView 内部还没消化这次 Add，索引会越界（-1 转成 uint 直接抛
+        // "indices larger than Int32.MaxValue"）。排到下一轮调度再选.
+        DispatcherQueue.TryEnqueue(() =>
         {
-            var match = ViewModel.Upers.FirstOrDefault(p => string.Equals(p.Name, ViewModel.SelectedAuthor, StringComparison.Ordinal));
-            if (match is not null)
+            if (!_isActive || ViewModel is null)
             {
-                index = ViewModel.Upers.IndexOf(match);
+                return;
             }
-        }
 
-        UperView.Select(index);
+            var upers = ViewModel.Upers;
+            if (upers.Count == 0)
+            {
+                return;
+            }
+
+            var index = 0;
+            if (ViewModel.SelectedAuthor is not null)
+            {
+                var match = upers.FirstOrDefault(p => string.Equals(p.Name, ViewModel.SelectedAuthor, StringComparison.Ordinal));
+                if (match is not null)
+                {
+                    index = upers.IndexOf(match);
+                }
+            }
+
+            if (index < 0 || index >= upers.Count)
+            {
+                index = 0;
+            }
+
+            UperView.Select(index);
+        });
     }
 
     /// <inheritdoc/>
     protected override void OnControlLoaded()
     {
-        ViewModel.ListUpdated += OnListUpdatedAsync;
-        MomentWatchHistoryToolkit.WatchedChanged += OnWatchedChanged;
         _isActive = true;
         _paneWidthCallback = ColumnResizer.RegisterPropertyChangedCallback(
             ColumnSplitter.ColumnWidthProperty, OnPaneWidthChanged);
@@ -92,32 +113,83 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         _savePaneWidthTimer.IsRepeating = false;
         _savePaneWidthTimer.Tick += OnSavePaneWidthTick;
         ApplyPaneWidths();
-        ViewModel.SynchronizeWatchedItems();
-        ViewModel.Upers.CollectionChanged += OnUpersChanged;
-        UperView.SelectionChanged += OnUperSelectionChanged;
-        SelectCurrentUper();
-        if (!ViewModel.IsLoading && (ViewModel.Items.Count > 0 || ViewModel.WatchedItems.Count > 0))
+
+        // 动态页的两个分区控件是常驻的（切 tab 只切 Visibility），
+        // 切到「视频」之前这里的 ViewModel 还是 null。以前直接解引用，
+        // 第一次加载就抛空引用，把后面给顶部 UP 主头像条挂 SelectionChanged
+        // 的代码全挡住了 —— 于是点头像根本没反应。
+        if (ViewModel is not null)
         {
-            ViewModel.ResetHistoryCursor();
-            ViewModel.SynchronizeHistoryCommand.Execute(default);
+            Attach();
         }
+
         QueueAnchorUpdate();
+    }
+
+    /// <inheritdoc/>
+    protected override void OnViewModelChanged(VideoMomentSectionDetailViewModel? oldValue, VideoMomentSectionDetailViewModel? newValue)
+    {
+        if (!_isActive)
+        {
+            return;
+        }
+
+        Detach();
+        if (newValue is not null)
+        {
+            Attach();
+        }
+    }
+
+    private void Attach()
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null || _attached)
+        {
+            return;
+        }
+
+        _attached = true;
+        viewModel.ListUpdated += OnListUpdatedAsync;
+        viewModel.Upers.CollectionChanged += OnUpersChanged;
+        MomentWatchHistoryToolkit.WatchedChanged += OnWatchedChanged;
+        UperView.SelectionChanged += OnUperSelectionChanged;
+        viewModel.SynchronizeWatchedItems();
+        SelectCurrentUper();
+        if (!viewModel.IsLoading && (viewModel.Items.Count > 0 || viewModel.WatchedItems.Count > 0))
+        {
+            viewModel.ResetHistoryCursor();
+            viewModel.SynchronizeHistoryCommand.Execute(default);
+        }
+    }
+
+    private void Detach()
+    {
+        var viewModel = ViewModel;
+        if (!_attached || viewModel is null)
+        {
+            _attached = false;
+            return;
+        }
+
+        viewModel.ListUpdated -= OnListUpdatedAsync;
+        viewModel.Upers.CollectionChanged -= OnUpersChanged;
+        MomentWatchHistoryToolkit.WatchedChanged -= OnWatchedChanged;
+        UperView.SelectionChanged -= OnUperSelectionChanged;
+        _attached = false;
     }
 
     /// <inheritdoc/>
     protected override void OnControlUnloaded()
     {
+        Detach();
         FlushPendingPaneWidth();
         _pendingLeftWidth = null;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPaneResizeFrame;
         _paneResizeFrameQueued = false;
         _isPaneResizing = false;
         View.IsLoadMorePaused = false;
-        ViewModel.SetTimelineUpdatesSuspended(false);
-        ViewModel.ListUpdated -= OnListUpdatedAsync;
-        ViewModel.Upers.CollectionChanged -= OnUpersChanged;
-        UperView.SelectionChanged -= OnUperSelectionChanged;
-        MomentWatchHistoryToolkit.WatchedChanged -= OnWatchedChanged;
+        ViewModel?.SetTimelineUpdatesSuspended(false);
         _isActive = false;
         ColumnResizer.UnregisterPropertyChangedCallback(ColumnSplitter.ColumnWidthProperty, _paneWidthCallback);
         if (_savePaneWidthTimer is not null)
@@ -492,3 +564,4 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
 public abstract class VideoMomentSectionDetailControlBase : LayoutUserControlBase<VideoMomentSectionDetailViewModel>
 {
 }
+

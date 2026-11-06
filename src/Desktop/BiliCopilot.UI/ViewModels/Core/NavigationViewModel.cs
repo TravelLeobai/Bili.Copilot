@@ -208,7 +208,18 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
                 cancelPage.CancelLoading();
             }
 
-            // 有上级页就先回退，栈空了（或者本来就是直接 NavigateToOver 进来的）就直接关 overlay.
+            // 收藏 / 稍后再看 / 历史记录 是抽屉入口页：从侧栏点进来时就该算一层，
+            // 返回一次直接退出浮层。以前这里是"有栈就回退一页"，先看收藏再看历史，
+            // 栈里就攒了两页 —— 点返回只是换回上一个列表，看着像返回键没反应。
+            if (_overFrame.GetCurrentContent() is FavoritesPage or ViewLaterPage or HistoryPage)
+            {
+                _overFrame.ClearBackStack();
+                CloseOverlay();
+                CheckSubPageStatus();
+                return;
+            }
+
+            // 其它浮层页（用户主页之类）才按层级回退.
             var stackBefore = _overFrame.GetBackStack().Count;
             if (stackBefore > 0)
             {
@@ -220,12 +231,17 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
                 }
             }
 
-            IsOverlayOpen = false;
-            _navFrame?.Focus(FocusState.Programmatic);
-            _overFrame.SetOpen(false);
+            CloseOverlay();
         }
 
         CheckSubPageStatus();
+    }
+
+    private void CloseOverlay()
+    {
+        IsOverlayOpen = false;
+        _navFrame?.Focus(FocusState.Programmatic);
+        _overFrame?.SetOpen(false);
     }
 
     /// <summary>
