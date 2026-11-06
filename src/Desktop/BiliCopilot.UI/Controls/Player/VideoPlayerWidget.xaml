@@ -5,10 +5,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:controls="using:BiliCopilot.UI.Controls"
+    xmlns:converters="using:BiliCopilot.UI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
+
+    <local:VideoPlayerControlBase.Resources>
+        <converters:TruncateTextConverter x:Key="TitleTruncateConverter" MaxLength="12" />
+    </local:VideoPlayerControlBase.Resources>
 
     <Grid
         Background="{ThemeResource SmokeFillColorDefaultBrush}"
@@ -22,7 +27,7 @@
         <Button
             x:Name="WidgetButton"
             MinWidth="200"
-            Padding="12,8"
+            Padding="12,10"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch"
             HorizontalContentAlignment="Stretch"
@@ -32,38 +37,72 @@
             BorderThickness="0"
             Command="{x:Bind ViewModel.OpenPanelCommand, Mode=OneWay}">
             <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition />
-                </Grid.ColumnDefinitions>
-                <controls:BasicCoverImage
-                    Width="100"
-                    Height="68"
-                    Margin="0,0,12,0"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Stretch"
-                    CornerRadius="{StaticResource ControlCornerRadius}"
-                    DecodeWidth="320"
-                    Source="{x:Bind ViewModel.Cover, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.Cover, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
-                <Grid Grid.Column="1" VerticalAlignment="Center">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition />
-                    </Grid.RowDefinitions>
-                    <base:TrimTextBlock
-                        FontWeight="SemiBold"
-                        MaxLines="1"
-                        Text="{x:Bind ViewModel.Title, Mode=OneWay}" />
-                    <base:TrimTextBlock
-                        Grid.Row="1"
-                        Margin="0,8,0,0"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!--  第一行小字：UP 头像、名称、播放量、点赞量、收藏量  -->
+                <StackPanel
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    VerticalAlignment="Center">
+                    <controls:BasicCoverImage
+                        Width="18"
+                        Height="18"
+                        VerticalAlignment="Center"
+                        CornerRadius="9"
+                        DecodeWidth="64"
+                        Source="{x:Bind ViewModel.UpAvatar, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.UpAvatar, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        MaxLines="2"
-                        Text="{x:Bind ViewModel.Subtitle, Mode=OneWay}"
-                        Visibility="{x:Bind ViewModel.Subtitle, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
-                </Grid>
+                        MaxLines="1"
+                        Text="{x:Bind ViewModel.UpName, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="·" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="{x:Bind ViewModel.PlayCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="·" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="{x:Bind ViewModel.LikeCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="·" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        Text="{x:Bind ViewModel.FavoriteCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                </StackPanel>
+
+                <!--  第二行：粗体标题，12 字以内，超出补省略号  -->
+                <TextBlock
+                    Grid.Row="1"
+                    Margin="0,6,0,0"
+                    FontSize="18"
+                    FontWeight="Bold"
+                    MaxLines="1"
+                    Text="{x:Bind ViewModel.Title, Mode=OneWay, Converter={StaticResource TitleTruncateConverter}, ConverterParameter=12}"
+                    TextTrimming="CharacterEllipsis" />
             </Grid>
         </Button>
     </Grid>

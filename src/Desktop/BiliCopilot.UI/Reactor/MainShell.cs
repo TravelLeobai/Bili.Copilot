@@ -210,13 +210,14 @@ public sealed class MainShell : Component
             {
                 _navView = nv;
                 nv.IsPaneToggleButtonVisible = false;
-                nv.Loaded += (_, _) =>
+                // Reactor 分析器不给在组件里命令式绑事件，排一次队列等模板展开再找.
+                nv.DispatcherQueue.TryEnqueue(() =>
                 {
                     if (nv.FindName("TogglePaneButton") is FrameworkElement toggleButton)
                     {
                         toggleButton.Visibility = Visibility.Collapsed;
                     }
-                };
+                });
             })
             .Grid(row: 1);
 
@@ -411,5 +412,6 @@ public sealed class MainShell : Component
         item?.NavigateCommand.Execute(default);
     }
 }
+
 
 
