@@ -214,31 +214,49 @@ public static class BackgroundLibrary
         File.Delete(zipPath);
 
         string? video = null;
-        string? image = null;
         string? cover = null;
+
+        // 背景图有三种命名，不能靠遍历顺序碰运气，先各自收着最后按优先级挑.
+        string? imageSquared = null;   // 旧格式 head_myself_squared_bg.*
+        string? imageMyself = null;    // 新格式 head_myself_bg.*
+        string? imageFallback = null;  // 兜底 head_bg.*
+        var imageSquaredIsJpg = false;
 
         foreach (var file in Directory.EnumerateFiles(extractDir, "*", SearchOption.AllDirectories))
         {
-            var fileName = Path.GetFileName(file);
-            if (fileName.StartsWith("head_myself_mp4_bg", StringComparison.OrdinalIgnoreCase) && video is null)
+            var fileName = Path.GetFileName(file).ToLowerInvariant();
+            if (fileName.StartsWith("head_myself_mp4_bg") && video is null)
             {
+                // 动态背景，新旧格式都叫这个名字.
                 video = file;
             }
-            else if (fileName.StartsWith("head_myself_squared_bg", StringComparison.OrdinalIgnoreCase)
-                && (image is null || fileName.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)))
+            else if (fileName.StartsWith("head_myself_squared_bg"))
             {
-                // 优先 jpg，体积比 png 小一截.
-                image = file;
+                // 旧格式：head_myself_squared_bg.jpg / .png，优先 jpg（体积小）.
+                if (imageSquared is null || (fileName.EndsWith(".jpg") && !imageSquaredIsJpg))
+                {
+                    imageSquared = file;
+                    imageSquaredIsJpg = fileName.EndsWith(".jpg");
+                }
             }
-            else if ((fileName.StartsWith("image_cover", StringComparison.OrdinalIgnoreCase)
-                    || fileName.StartsWith("image_preview", StringComparison.OrdinalIgnoreCase))
-                && cover is null)
+            else if (fileName.StartsWith("head_myself_bg") && imageMyself is null)
+            {
+                // 新格式：没有 squared，直接叫 head_myself_bg.jpg / .png.
+                imageMyself = file;
+            }
+            else if (fileName.StartsWith("head_bg") && imageFallback is null)
+            {
+                // 再退一步，用全局头图兜底（优先级最低）.
+                imageFallback = file;
+            }
+            else if ((fileName.StartsWith("image_cover") || fileName.StartsWith("image_preview")) && cover is null)
             {
                 // 装扮包自带的封面，拿来做列表预览.
                 cover = file;
             }
         }
 
+        var image = imageSquared ?? imageMyself ?? imageFallback;
         if (video is null && image is null)
         {
             Directory.Delete(dir, recursive: true);
@@ -366,5 +384,7 @@ public static class BackgroundLibrary
         return end < 0 ? null : json.Substring(start + 1, end - start - 1);
     }
 }
+
+
 
 
