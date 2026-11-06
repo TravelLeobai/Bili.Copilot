@@ -8,9 +8,24 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!--  搜索首页：直接复用侧栏之前那个 AppSearchBox，样式和行为都是现成的.
-          背景先留透明，自定义部分等后续指示.  -->
+    <!--  搜索首页：背景来自 B 站装扮包，前景只有一个复用来的 AppSearchBox.  -->
     <Grid x:Name="RootGrid" Background="Transparent">
+
+        <!--  静态背景，视频没就位时先用它  -->
+        <Image
+            x:Name="StaticBackground"
+            Stretch="UniformToFill" />
+
+        <!--  动态背景：装扮包里的 head_myself_mp4_bg.mp4  -->
+        <MediaPlayerElement
+            x:Name="VideoBackground"
+            AreTransportControlsEnabled="False"
+            Opacity="0"
+            Stretch="UniformToFill" />
+
+        <!--  压一层半透明，保证搜索框和文字可读  -->
+        <Border x:Name="Scrim" Background="#40000000" />
+
         <components:AppSearchBox
             Width="560"
             Margin="0,72,0,0"

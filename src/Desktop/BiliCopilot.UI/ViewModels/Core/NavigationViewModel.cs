@@ -250,6 +250,8 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         var lastSelectedPage = SettingsToolkit.ReadLocalSetting(SettingNames.LastSelectedFeaturePage, typeof(PopularPage).FullName);
         var list = new List<AppNavigationItemViewModel>
         {
+            // 搜索放第一位：侧栏项多起来之后它会掉到窗口外.
+            GetItem<SearchHomePage>(StringNames.Search, FluentIcons.Common.Symbol.Search),
             GetItem<PopularPage>(StringNames.PopularSlim, FluentIcons.Common.Symbol.Rocket),
             GetItem<MomentPage>(StringNames.DynamicFeed, FluentIcons.Common.Symbol.DesignIdeas),
             GetItem<VideoPartitionPage>(StringNames.Video, FluentIcons.Common.Symbol.VideoClip),
@@ -257,7 +259,6 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
             GetItem<AnimePage>(StringNames.Anime, FluentIcons.Common.Symbol.Dust),
             GetItem<CinemaPage>(StringNames.Cinema, FluentIcons.Common.Symbol.FilmstripPlay),
             GetItem<ArticlePartitionPage>(StringNames.Article, FluentIcons.Common.Symbol.DocumentBulletList),
-            GetItem<SearchHomePage>(StringNames.Search, FluentIcons.Common.Symbol.Search),
         };
 
         foreach (var item in list)
@@ -317,4 +318,5 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         NavItemsVersion++;
     }
 }
+
 
