@@ -18,18 +18,24 @@
         IsEnabled="{x:Bind ViewModel.IsMpvCustomOptionVisible, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
         IsExpanded="{x:Bind ViewModel.IsMpvExtraSettingExpanded, Mode=TwoWay}">
         <base:SettingsExpander.HeaderIcon>
-            <ImageIcon Source="ms-appx:///Assets/mpv.png" />
+            <ic:SymbolIcon Symbol="VideoClip" />
         </base:SettingsExpander.HeaderIcon>
         <base:SettingsExpander.Items>
             <base:SettingsCard
                 Description="关闭后每次启动播放器都从「不启用着色器 / 不启用超分」开始，并清空已保存的选择"
                 Header="记住着色器与超分设置">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Save" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.RememberPlaybackEnhancements, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard
                 x:Name="D3D11Adapter"
                 Description="--d3d11-adapter"
                 Header="{ext:Locale Name=D3D11Adapter}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Tv" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.GpuDevices}"
@@ -39,6 +45,9 @@
                 x:Name="VulkanDevice"
                 Description="--vulkan-device"
                 Header="{ext:Locale Name=VulkanDevice}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Tv" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.GpuDevices}"
@@ -48,12 +57,18 @@
                 x:Name="AudioExclusive"
                 Description="--audio-exclusive"
                 Header="{ext:Locale Name=AudioExclusive}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Speaker2" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AudioExclusiveEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard
                 x:Name="AudioChannel"
                 Description="--audio-channels"
                 Header="{ext:Locale Name=AudioChannelLayout}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Speaker2" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     x:Name="AudioChannelLayoutComboBox"
                     MinWidth="120"
@@ -68,6 +83,9 @@
                 x:Name="Profile"
                 Description="--profile"
                 Header="{ext:Locale Name=BuiltInProfileSwitch}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ArrowSwap" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     x:Name="ProfileComboBox"
                     MinWidth="120"
@@ -80,6 +98,9 @@
                 x:Name="Seek"
                 Description="--hr-seek"
                 Header="{ext:Locale Name=HrSeekSetting}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="FastForward" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     x:Name="HrSeekComboBox"
                     MinWidth="120"
@@ -94,6 +115,9 @@
                 x:Name="CacheSize"
                 Description="--demuxer-max-bytes"
                 Header="{ext:Locale Name=MaxCacheSize}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Collections" />
+                </base:SettingsCard.HeaderIcon>
                 <NumberBox
                     x:Name="CacheSizeBox"
                     MinWidth="120"
@@ -106,6 +130,9 @@
                 x:Name="BackCacheSize"
                 Description="--demuxer-max-back-bytes"
                 Header="{ext:Locale Name=MaxBackCacheSize}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Collections" />
+                </base:SettingsCard.HeaderIcon>
                 <NumberBox
                     x:Name="BackCacheSizeBox"
                     MinWidth="120"
@@ -118,6 +145,9 @@
                 x:Name="CacheSec"
                 Description="--demuxer-readahead-secs"
                 Header="{ext:Locale Name=MaxCacheSeconds}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="CalendarClock" />
+                </base:SettingsCard.HeaderIcon>
                 <NumberBox
                     x:Name="CacheSecondsBox"
                     MinWidth="120"
@@ -130,6 +160,9 @@
                 x:Name="CacheOnDisk"
                 Description="--cache-on-disk"
                 Header="{ext:Locale Name=CacheOnDisk}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Save" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.CacheOnDisk, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard
@@ -137,6 +170,9 @@
                 Description="{x:Bind ViewModel.CacheDirDescription, Mode=OneWay}"
                 Header="{ext:Locale Name=CacheDirectory}"
                 IsEnabled="{x:Bind ViewModel.CacheOnDisk, Mode=OneWay}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="FolderOpen" />
+                </base:SettingsCard.HeaderIcon>
                 <Grid>
                     <Button
                         MinWidth="120"
@@ -167,6 +203,9 @@
                 x:Name="MaxVolume"
                 Description="--volume-max"
                 Header="{ext:Locale Name=MaxVolume}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Speaker2" />
+                </base:SettingsCard.HeaderIcon>
                 <NumberBox
                     x:Name="MaxVolumeBox"
                     MinWidth="120"

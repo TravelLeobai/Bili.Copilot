@@ -25,6 +25,9 @@
                 x:Name="Card"
                 Description="{ext:Locale Name=LogLevelDescription}"
                 Header="{ext:Locale Name=LogLevel}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="DocumentBulletList" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     x:Name="LevelComboBox"
                     MinWidth="120"

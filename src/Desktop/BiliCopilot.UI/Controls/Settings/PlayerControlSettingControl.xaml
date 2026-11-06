@@ -24,6 +24,9 @@
         </base:SettingsExpander.HeaderIcon>
         <base:SettingsExpander.Items>
             <base:SettingsCard Description="{ext:Locale Name=PreferCodecDescription}" Header="{ext:Locale Name=PreferCodec}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="VideoClip" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.PreferCodecCollection, Mode=OneWay}"
@@ -39,6 +42,9 @@
                 x:Name="StepForward"
                 Description="{ext:Locale Name=StepForwardSecondsDescription}"
                 Header="{ext:Locale Name=StepForwardSeconds}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="FastForward" />
+                </base:SettingsCard.HeaderIcon>
                 <NumberBox
                     x:Name="StepForwardBox"
                     MinWidth="120"
@@ -50,6 +56,9 @@
                 x:Name="StepBackward"
                 Description="{ext:Locale Name=StepBackwardSecondsDescription}"
                 Header="{ext:Locale Name=StepBackwardSeconds}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Previous" />
+                </base:SettingsCard.HeaderIcon>
                 <NumberBox
                     x:Name="StepBackwardBox"
                     MinWidth="120"
@@ -61,6 +70,9 @@
                 x:Name="TempSpeed"
                 Description="{ext:Locale Name=TemporaryPlaybackRateDescription}"
                 Header="{ext:Locale Name=TemporaryPlaybackRate}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TopSpeed" />
+                </base:SettingsCard.HeaderIcon>
                 <Slider
                     x:Name="TempSpeedSlider"
                     MinWidth="160"
@@ -72,9 +84,15 @@
                     ValueChanged="OnTempSpeedChanged" />
             </base:SettingsCard>
             <base:SettingsCard Description="{ext:Locale Name=GlobalPlaybackRateDescription}" Header="{ext:Locale Name=GlobalPlaybackRate}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TopSpeed" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.GlobalPlayerSpeed, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="{ext:Locale Name=BottomProgressVisibleDescription}" Header="{ext:Locale Name=BottomProgressVisible}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="LayoutColumnTwo" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.BottomProgressVisible, Mode=TwoWay}" />
             </base:SettingsCard>
         </base:SettingsExpander.Items>

@@ -34,7 +34,7 @@
 
         <base:SettingsExpander Description="使用系统亚克力材质作为窗口背景，可透出桌面内容" Header="亚克力背景">
             <base:SettingsExpander.HeaderIcon>
-                <ic:SymbolIcon Symbol="Color" />
+                <ic:SymbolIcon Symbol="Blur" />
             </base:SettingsExpander.HeaderIcon>
             <ToggleSwitch
                 IsOn="{x:Bind ViewModel.IsAcrylicBackdropEnabled, Mode=TwoWay}"

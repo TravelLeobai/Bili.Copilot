@@ -28,6 +28,9 @@
                 x:Name="HideMain"
                 Description="{ext:Locale Name=HideMainWindowOnPlayDescription}"
                 Header="{ext:Locale Name=HideMainWindowOnPlay}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ContractDownLeft" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.HideMainWindowOnPlay, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard
@@ -35,9 +38,15 @@
                 Description="{ext:Locale Name=UseIntegrationBehaviorDescription}"
                 Header="{ext:Locale Name=UseIntegrationBehavior}"
                 Visibility="{x:Bind ViewModel.HideMainWindowOnPlay, Mode=OneWay}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ArrowSwap" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.UseIntegrationWhenSinglePlayWindow, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="{ext:Locale Name=PreferDecodeDescription}" Header="{ext:Locale Name=PreferDecode}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="VideoPlayPause" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.PreferDecodeCollection, Mode=OneWay}"
@@ -53,12 +62,18 @@
                 Description="{ext:Locale Name=CustomMpvConfigDescription}"
                 Header="{ext:Locale Name=CustomMpvConfig}"
                 Visibility="{x:Bind ViewModel.IsMpvCustomOptionVisible, Mode=OneWay}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ContentSettings" />
+                </base:SettingsCard.HeaderIcon>
                 <Button
                     MinWidth="120"
                     Command="{x:Bind ViewModel.OpenMpvConfigInEditorCommand, Mode=OneWay}"
                     Content="{ext:Locale Name=OpenConfig}" />
             </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=PreferQuality}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TopSpeed" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.PreferQualityCollection, Mode=OneWay}"
@@ -71,6 +86,9 @@
                 </ComboBox>
             </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=DefaultPlayerDisplayMode}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="LayoutColumnTwo" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     MinWidth="120"
                     ItemsSource="{x:Bind ViewModel.PlayerDisplayModeCollection, Mode=OneWay}"
@@ -86,21 +104,39 @@
                 x:Name="ShowNextTip"
                 Description="{ext:Locale Name=PlayNextWithoutTipDescription}"
                 Header="{ext:Locale Name=PlayNextWithoutTip}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Next" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.PlayNextWithoutTip, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="{ext:Locale Name=AutoNextRelatedVideoDescription}" Header="{ext:Locale Name=AutoNextRelatedVideo}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Stream" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.IsAutoPlayNextRecommendVideo, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="{ext:Locale Name=StopWhenEndOfPlaylistDescription}" Header="{ext:Locale Name=StopWhenEndOfPlaylist}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Dismiss" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.EndWithPlaylist, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="{ext:Locale Name=NoP2PDescription}" Header="{ext:Locale Name=NoP2P}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Globe" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.NoP2P, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="改用 WebView2 网页播放器播放（参考 BiliLite 的 Shaka/Mpegts 方案）。网页模式不支持着色器、超分辨率与 mpv 字幕" Header="使用网页播放器">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Globe" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.PreferWebEngine, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="mpv 初始化或播放失败时，自动切到网页播放器（Shaka）并从当前进度继续" Header="播放失败自动回落">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ArrowUndo" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AutoFallbackToWeb, Mode=TwoWay}" />
             </base:SettingsCard>
         </base:SettingsExpander.Items>

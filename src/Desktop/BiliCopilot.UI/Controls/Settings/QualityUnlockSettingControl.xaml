@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Settings"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -18,20 +19,32 @@
         </base:SettingsExpander.HeaderIcon>
         <base:SettingsExpander.Items>
             <base:SettingsCard Description="关闭后所有请求都直接走 B 站官方接口" Header="启用画质解锁">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="VideoClip" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.QualityUnlockEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="进入视频后自动切到当前可用的最高一档画质" Header="自动选择最高画质">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TopSpeed" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch
                     IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
                     IsOn="{x:Bind ViewModel.QualityUnlockAutoMax, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="油猴脚本里的 box.home，可手改；每天会自动从上游同步一次" Header="解析服务器">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Globe" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBox
                     MinWidth="260"
                     IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
                     Text="{x:Bind ViewModel.QualityUnlockServer, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
             <base:SettingsCard Description="上游主页，assets/home.txt 与用户脚本都从这里取" Header="上游主页">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="BranchFork" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBox
                     MinWidth="260"
                     IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
@@ -40,6 +53,9 @@
 
 
             <base:SettingsCard Description="{x:Bind ViewModel.QualityUnlockStatusText, Mode=OneWay}" Header="同步状态">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ArrowSync" />
+                </base:SettingsCard.HeaderIcon>
                 <Button
                     VerticalAlignment="Center"
                     Command="{x:Bind ViewModel.SyncQualityUnlockCommand}"

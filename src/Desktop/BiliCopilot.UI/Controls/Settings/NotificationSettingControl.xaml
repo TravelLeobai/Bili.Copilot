@@ -18,6 +18,9 @@
         <ToggleSwitch IsOn="{x:Bind ViewModel.IsNotificationEnabled, Mode=TwoWay}" />
         <base:SettingsExpander.Items>
             <base:SettingsCard Header="{ext:Locale Name=VideoDynamicNotification}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="VideoClip" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsEnabled="{x:Bind ViewModel.IsNotificationEnabled, Mode=OneWay}" IsOn="{x:Bind ViewModel.IsVideoMomentNotificationEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
         </base:SettingsExpander.Items>

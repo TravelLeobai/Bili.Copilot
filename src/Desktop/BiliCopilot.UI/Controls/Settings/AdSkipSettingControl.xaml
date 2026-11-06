@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:base="using:Richasy.WinUIKernel.Share.Base"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Settings"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -12,15 +13,24 @@
     <base:SettingsExpander
         Description="自动识别并跳过视频里的植入广告、片头片尾"
         Header="空降助手">
+        <base:SettingsExpander.HeaderIcon>
+            <ic:SymbolIcon Symbol="Rocket" />
+        </base:SettingsExpander.HeaderIcon>
         <base:SettingsExpander.Items>
 
             <base:SettingsCard Description="自动跳过赞助、片头、片尾等片段（数据来自 SponsorBlock，原「跳过赞助片段」已并入这里）" Header="自动跳过">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="PlayCircle" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch
                     IsOn="{x:Bind ViewModel.IsSponsorBlockEnabled, Mode=TwoWay}"
                     OffContent="关"
                     OnContent="开" />
             </base:SettingsCard>
             <base:SettingsCard Description="SponsorBlock 数据源，可换 B 站专用镜像或自建实例" Header="片段数据服务器">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Globe" />
+                </base:SettingsCard.HeaderIcon>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <ComboBox MinWidth="240" SelectedIndex="{x:Bind ViewModel.SponsorServerIndex, Mode=TwoWay}">
                         <ComboBoxItem Content="自动（自建镜像 → bsbsb → 官方）" />
@@ -33,53 +43,92 @@
             </base:SettingsCard>
 
             <base:SettingsCard Description="开启后只提示不自动跳，由你点按钮决定" Header="手动模式">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Edit" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.SponsorManualMode, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="短于这个秒数的片段会被忽略" Header="最短片段时长（秒）">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TopSpeed" />
+                </base:SettingsCard.HeaderIcon>
                 <NumberBox MinWidth="120" Maximum="60" Minimum="0" SmallChange="1" SpinButtonPlacementMode="Inline" Value="{x:Bind ViewModel.SponsorMinDuration, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="除赞助片段外，还识别 UP 主自我推广" Header="包含自我推广">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Reward" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.SponsorIncludeSelfPromo, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="包含片头（Intro）片段" Header="包含片头">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="FastForward" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.SponsorIncludeIntro, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="包含片尾（Outro）片段" Header="包含片尾">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ArrowStepBack" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.SponsorIncludeOutro, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="从社区云端数据库按 BV 号拉取已标注的广告片段，需要填自建接口地址" Header="云端广告数据">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ArrowSync" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AdCloudEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="支持 {bvid} 占位符；不写占位符时会自动拼 ?bvid=" Header="云端接口地址">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="GlobeSearch" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBox MinWidth="360" PlaceholderText="https://your-worker.example.com/ads?bvid={bvid}" Text="{x:Bind ViewModel.AdCloudUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="复用下面配置的 AI 接口，在动态「已看过」里用一段话概括你的观看偏好" Header="分析观看兴趣">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="PeopleEye" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AiInterestEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="用大模型读字幕判断广告位置（OpenAI 兼容接口）" Header="AI 识别广告">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Sparkle" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AiAdEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="形如 https://api.example.com/v1，会自动补 /chat/completions" Header="AI 接口地址">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="BranchFork" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBox MinWidth="360" PlaceholderText="https://api.example.com/v1" Text="{x:Bind ViewModel.AiAdEndpoint, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="仅保存在本机设置里" Header="AI 密钥">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="LockClosed" />
+                </base:SettingsCard.HeaderIcon>
                 <PasswordBox MinWidth="280" Password="{x:Bind ViewModel.AiAdKey, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="例如 gemini-2.5-flash、gpt-4.1、deepseek-chat" Header="AI 模型">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ContentSettings" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBox MinWidth="240" Text="{x:Bind ViewModel.AiAdModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="发给模型的识别规则，要求模型只返回 ads 数组的 JSON" Header="识别提示词">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TextBulletList" />
+                </base:SettingsCard.HeaderIcon>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <TextBox
                         Width="420"
@@ -92,18 +141,30 @@
             </base:SettingsCard>
 
             <base:SettingsCard Description="没有字幕时把音频送去阿里云转写再识别，会产生时长费用" Header="音频分析">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Speaker2" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AudioAdEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="阿里云百炼（DashScope）API Key，用于语音转写" Header="阿里云密钥">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="LockClosed" />
+                </base:SettingsCard.HeaderIcon>
                 <PasswordBox MinWidth="280" Password="{x:Bind ViewModel.DashScopeKey, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="并行识别模型，默认 paraformer-v2" Header="转写模型">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="DocumentBulletList" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBox MinWidth="240" Text="{x:Bind ViewModel.DashScopeModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="填完点这里存下来；关掉下面的自动保存时必须用它" Header="AI 设置">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Settings" />
+                </base:SettingsCard.HeaderIcon>
                 <StackPanel Orientation="Horizontal" Spacing="10">
                     <Button Command="{x:Bind ViewModel.SaveAiSettingsCommand}" Content="保存" />
                     <Button Command="{x:Bind ViewModel.TestAiApiCommand}" Content="测试接口" />
@@ -112,14 +173,23 @@
             </base:SettingsCard>
 
             <base:SettingsCard Description="输入框一改就写进设置；关掉后只在点「保存」时落盘" Header="自动保存输入内容">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Save" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AiAutoSave, Mode=TwoWay}" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="保存、测试结果的回显" Header="配置状态">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Info" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBlock MaxWidth="520" Text="{x:Bind ViewModel.AiTestStatusText, Mode=OneWay}" TextWrapping="Wrap" />
             </base:SettingsCard>
 
             <base:SettingsCard Description="最近一次操作结果" Header="状态">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Info" />
+                </base:SettingsCard.HeaderIcon>
                 <TextBlock MaxWidth="520" Text="{x:Bind ViewModel.AdSkipStatusText, Mode=OneWay}" TextWrapping="Wrap" />
             </base:SettingsCard>
 

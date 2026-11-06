@@ -23,6 +23,9 @@
                 x:Name="Folder"
                 Description="{x:Bind ViewModel.ScreenshotFolderPath, Mode=OneWay}"
                 Header="{ext:Locale Name=ScreenshotFolder}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="FolderOpen" />
+                </base:SettingsCard.HeaderIcon>
                 <Button
                     MinWidth="120"
                     Command="{x:Bind ViewModel.PickScreenshotFolderCommand}"
@@ -32,6 +35,9 @@
                 x:Name="Behavior"
                 Description="{ext:Locale Name=ScreenshotPostBehaviorDescription}"
                 Header="{ext:Locale Name=ScreenshotPostBehavior}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Screenshot" />
+                </base:SettingsCard.HeaderIcon>
                 <ComboBox
                     x:Name="BehaviorComboBox"
                     MinWidth="120"

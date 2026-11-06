@@ -24,6 +24,9 @@
             Text="{x:Bind ViewModel.PackageVersion, Mode=OneWay}" />
         <base:SettingsExpander.Items>
             <base:SettingsCard HorizontalContentAlignment="Stretch" ContentAlignment="Left">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Info" />
+                </base:SettingsCard.HeaderIcon>
                 <StackPanel x:Name="LinkContainer" Margin="-12,0,0,0">
                     <HyperlinkButton Content="{ext:Locale Name=BiliHomePage}" NavigateUri="https://space.bilibili.com/5992670" />
                     <HyperlinkButton Content="{ext:Locale Name=ProjectHomePage}" NavigateUri="https://github.com/Richasy/Bili.Copilot" />

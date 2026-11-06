@@ -17,6 +17,9 @@
         </base:SettingsExpander.HeaderIcon>
         <base:SettingsExpander.Items>
             <base:SettingsCard Description="{x:Bind ViewModel.DefaultDownloadPath, Mode=OneWay}" Header="{ext:Locale Name=DefaultDownloadFolder}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="FolderOpen" />
+                </base:SettingsCard.HeaderIcon>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button
                         MinWidth="120"
@@ -33,27 +36,45 @@
                 </StackPanel>
             </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=DownloadWithDanmaku}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Comment" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.DownloadWithDanmaku, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=SkipAISubtitle}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Subtitles" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.FilterAISubtitle, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=OpenFolderWhenDownloaded}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="FolderOpen" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.OpenFolderAfterDownload, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard Description="{ext:Locale Name=UseExternalBBDownDescription}" Header="{ext:Locale Name=UseExternalBBDown}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ArrowDownload" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.UseExternalBBDown, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard
                 Description="{ext:Locale Name=CopyCommandWhenDownloadDescription}"
                 Header="{ext:Locale Name=CopyCommandWhenDownload}"
                 IsEnabled="{x:Bind ViewModel.UseExternalBBDown, Mode=OneWay}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Copy" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.OnlyCopyCommandWhenDownload, Mode=TwoWay}" />
             </base:SettingsCard>
             <base:SettingsCard
                 Description="{ext:Locale Name=GenCommandWithoutCredentialDescription}"
                 Header="{ext:Locale Name=GenCommandWithoutCredential}"
                 IsEnabled="{x:Bind ViewModel.UseExternalBBDown, Mode=OneWay}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="ClipboardTextEdit" />
+                </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.WithoutCredentialWhenGenDownloadCommand, Mode=TwoWay}" />
             </base:SettingsCard>
         </base:SettingsExpander.Items>
