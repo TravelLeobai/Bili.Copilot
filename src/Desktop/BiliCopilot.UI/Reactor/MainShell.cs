@@ -65,6 +65,9 @@ public sealed class MainShell : Component
         _favoriteButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(FavoritesPage), default);
         _viewLaterButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
         _historyButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(HistoryPage), default);
+        // 返回键：回退 overlay（收藏/历史/稍后再看这些）. 回退代码时这一行容易跟着丢，
+        // 丢了按钮就变成摆设 —— 点下去什么都不会发生.
+        _backButton.Click += (_, _) => _viewModel.Back();
 
         // 启动时清一次背景缓存残留（旧版 ThemeCache、没被索引引用的孤儿目录）.
         try
