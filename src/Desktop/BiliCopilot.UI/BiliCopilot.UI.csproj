@@ -26,6 +26,10 @@
   	</None>
   </ItemGroup>
   <ItemGroup>
+    <!--  主题包的图标和背景：复制到输出目录，用绝对路径读，不走 PRI  -->
+    <Content Update="Assets\Theme\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Remove="Assets\basic-mpv.conf" />
     <Content Remove="Assets\bbdown\arm64\BBDown.exe" />
     <Content Remove="Assets\bbdown\x64\BBDown.exe" />
@@ -1488,6 +1492,7 @@
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>
+
 
 
 
