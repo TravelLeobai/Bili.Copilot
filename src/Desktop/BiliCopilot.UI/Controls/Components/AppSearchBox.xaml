@@ -119,6 +119,14 @@
                             ItemClick="OnHotSearchItemInvoked"
                             ItemsSource="{x:Bind ViewModel.HotSearchItems}"
                             SelectionMode="None">
+                            <GridView.ItemContainerStyle>
+                                <Style TargetType="GridViewItem">
+                                    <Setter Property="Width" Value="264" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Margin" Value="0" />
+                                </Style>
+                            </GridView.ItemContainerStyle>
                             <GridView.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <!--  两列：每列 280，横向优先，11 条排成 6 行 x 2 列  -->
@@ -141,7 +149,8 @@
                                             VerticalAlignment="Center"
                                             FontSize="12"
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            Text="{x:Bind Index}" />
+                                            Text="{x:Bind Index}"
+                                            TextAlignment="Right" />
                                         <Image
                                             Grid.Column="1"
                                             Width="16"
@@ -169,3 +178,4 @@
         </Button>
     </Grid>
 </local:AppSearchBoxBase>
+
