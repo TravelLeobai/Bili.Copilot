@@ -65,6 +65,16 @@ public sealed class MainShell : Component
         _favoriteButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(FavoritesPage), default);
         _viewLaterButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
         _historyButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(HistoryPage), default);
+
+        // 启动时清一次背景缓存残留（旧版 ThemeCache、没被索引引用的孤儿目录）.
+        try
+        {
+            Services.BackgroundLibrary.CleanupOrphanCache();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "清理背景缓存失败");
+        }
     }
 
     /// <summary>
@@ -377,6 +387,7 @@ public sealed class MainShell : Component
         item?.NavigateCommand.Execute(default);
     }
 }
+
 
 
 

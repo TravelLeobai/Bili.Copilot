@@ -281,22 +281,64 @@ public static class BackgroundLibrary
         list.Remove(entry);
         SaveIndex(list);
 
-        var dir = Path.Combine(Root, id);
-        if (Directory.Exists(dir))
-        {
-            try
-            {
-                Directory.Delete(dir, recursive: true);
-            }
-            catch (Exception ex)
-            {
-                Serilog.Log.Warning(ex, "删除背景目录失败");
-            }
-        }
+        TryDeleteDirectory(Path.Combine(Root, id));
 
         if (CurrentId == id)
         {
             CurrentId = TransparentId;
+        }
+    }
+
+    /// <summary>
+    /// 清掉没被任何记录引用的残留：旧版本下的 ThemeCache，以及 Backgrounds 里孤儿目录.
+    /// </summary>
+    public static void CleanupOrphanCache()
+    {
+        var legacyCache = Path.Combine(ApplicationData.Current.LocalFolder.Path, "ThemeCache");
+        TryDeleteDirectory(legacyCache);
+
+        if (!Directory.Exists(Root))
+        {
+            return;
+        }
+
+        var used = Load().Select(entry => entry.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var dir in Directory.EnumerateDirectories(Root))
+        {
+            var name = Path.GetFileName(dir);
+            if (!used.Contains(name))
+            {
+                TryDeleteDirectory(dir);
+            }
+        }
+    }
+
+    private static void TryDeleteDirectory(string dir)
+    {
+        if (!Directory.Exists(dir))
+        {
+            return;
+        }
+
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (attempt == 2)
+                {
+                    Serilog.Log.Warning(ex, "删除目录失败：{Dir}", dir);
+                }
+                else
+                {
+                    // 文件刚被释放时可能还占着，等一下再试.
+                    System.Threading.Thread.Sleep(120);
+                }
+            }
         }
     }
 
@@ -324,4 +366,5 @@ public static class BackgroundLibrary
         return end < 0 ? null : json.Substring(start + 1, end - start - 1);
     }
 }
+
 

@@ -27,12 +27,25 @@ public sealed partial class SearchHomePage : SearchHomePageBase
     public SearchHomePage()
     {
         InitializeComponent();
+
+        // 构造里就跑一次清理，Loaded 只触发一次且页面可能被 Frame 缓存复用.
+        try
+        {
+            BackgroundLibrary.CleanupOrphanCache();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "清理背景缓存失败");
+        }
+
         Loaded += OnPageLoaded;
         Unloaded += OnPageUnloaded;
     }
 
     private void OnPageLoaded(object sender, RoutedEventArgs e)
     {
+        // 顺手把没被任何记录引用的残留目录清掉（比如旧版本下的 ThemeCache）.
+        BackgroundLibrary.CleanupOrphanCache();
         RefreshBackgroundList();
         ApplyCurrentBackground();
     }
@@ -190,6 +203,8 @@ public sealed partial class SearchHomePage : SearchHomePageBase
             return;
         }
 
+        // 删除前先把这个视频停掉，否则文件被 MediaPlayer 占着，目录删不干净.
+        StopVideo();
         BackgroundLibrary.Remove(id);
         ApplyCurrentBackground();
         RefreshBackgroundList();
@@ -301,4 +316,6 @@ public abstract class SearchHomePageBase : LayoutPageBase<SearchBoxViewModel>
     /// </summary>
     protected SearchHomePageBase() => ViewModel = this.Get<SearchBoxViewModel>();
 }
+
+
 
