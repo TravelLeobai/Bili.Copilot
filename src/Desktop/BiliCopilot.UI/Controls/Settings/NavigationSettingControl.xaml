@@ -22,6 +22,12 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.IsTopNavShown, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard Header="{ext:Locale Name=Search}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Search" />
+                </base:SettingsCard.HeaderIcon>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.IsSearchHomeNavVisible, Mode=TwoWay}" />
+            </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=Popular}">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="Rocket" />
@@ -67,3 +73,4 @@
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>
+

@@ -30,24 +30,12 @@ public sealed class MainShell : Component
     private readonly NavigationViewModel _viewModel;
     private readonly AccountViewModel _accountViewModel;
     private readonly Grid _contentHost;
-    private readonly AppSearchBox _searchBox = new()
-    {
-        MinWidth = 0,
-        MaxWidth = 420,
-        HorizontalAlignment = HorizontalAlignment.Stretch,
-        VerticalAlignment = VerticalAlignment.Center,
-    };
-
     private readonly HeaderAccountControl _accountControl = new();
     private readonly Button _paneToggleButton = CreateFlatIconButton("\uE700", "切换导航栏");
-    private readonly Button _compactSearchButton = CreateFlatIconButton("\uE721", "搜索");
-
-    private readonly Button _railSearchButton = CreateFlatIconButton("\uE721", "搜索");
     private readonly Button _backButton = CreateFlatIconButton("\uE72B", "返回");
     private readonly Button _favoriteButton = CreateFlatIconButton("\uE734", "我的收藏");
     private readonly Button _viewLaterButton = CreateFlatIconButton("\uE823", "稍后再看");
     private readonly Button _historyButton = CreateFlatIconButton("\uE81C", "历史记录");
-    private const string SearchRailTag = "__rail_search__";
 
     private Action? _togglePaneAction;
 
@@ -74,25 +62,9 @@ public sealed class MainShell : Component
         _contentHost.Children.Add(mainFrame);
         _contentHost.Children.Add(overlayFrame);
         _paneToggleButton.Click += (_, _) => _togglePaneAction?.Invoke();
-        _compactSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
-        _railSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
-        _backButton.Click += (_, _) => _viewModel.Back();
         _favoriteButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(FavoritesPage), default);
         _viewLaterButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(ViewLaterPage), default);
         _historyButton.Click += (_, _) => _viewModel.NavigateToOver(typeof(HistoryPage), default);
-    }
-
-    /// <summary>
-    /// 展开侧栏并把焦点送进搜索框（等侧栏动画走完再聚焦）.
-    /// </summary>
-    private void OpenPaneAndFocusSearch()
-    {
-        _openPaneAction?.Invoke();
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(200).ConfigureAwait(false);
-            _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
-        });
     }
 
     /// <summary>
@@ -165,14 +137,6 @@ public sealed class MainShell : Component
             .VAlign(VerticalAlignment.Center)
             .Margin(0, 12, 0, 0);
 
-        // 侧栏顶部：展开时是完整搜索框，收起时只剩一个搜索图标.
-        Element paneHeader = isPaneOpen
-            ? new XamlHostElement(() => _searchBox, _ => { })
-                .HAlign(HorizontalAlignment.Stretch)
-                .VAlign(VerticalAlignment.Center)
-                .Margin(12, 6, 8, 8)
-            : (Element)TextBlock(string.Empty);
-
 // 侧栏项改成内核 AppNavigationViewItem：模板里自带 Regular/Filled 两个
         // SymbolIcon 和 200ms 透明度隐式动画，选中/悬停/按下都由模板的 VisualState 管.
         // 菜单（动态/直播等）留在上面，收藏/稍后再看/历史/消息/设置全部进 footer.
@@ -199,7 +163,6 @@ public sealed class MainShell : Component
             PaneDisplayMode = NavigationViewPaneDisplayMode.LeftCompact,
             OpenPaneLength = 240,
             CompactPaneLength = 72,
-            PaneHeader = paneHeader,
             PaneCustomContent = sideNav,
         })
             .PaneFooter(paneFooterContent)
@@ -259,22 +222,11 @@ public sealed class MainShell : Component
             .Height(48)
             .Ref(titleBarRef);
 
-        // 折叠态：在左侧窄 rail 顶部叠一个真的搜索按钮（导航项点击在 rail 里不可靠）.
-        Element railSearch = isPaneOpen
-            ? (Element)TextBlock(string.Empty)
-            : new XamlHostElement(() => _railSearchButton, _ => { })
-                .Size(48, 36)
-                .HAlign(HorizontalAlignment.Left)
-                .VAlign(VerticalAlignment.Top)
-                .Margin(0, 6, 0, 0)
-                .Grid(row: 1);
-
         return Grid(
             columns: [GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Star()],
             titleBar.Grid(row: 0),
-            navigation,
-            railSearch);
+            navigation);
     }
 
     private static void HideDescendantTexts(DependencyObject root)
@@ -402,18 +354,6 @@ public sealed class MainShell : Component
     private void NavigateByTag(string tag)
     {
         Serilog.Log.Information("导航项被点击：{Tag}", tag);
-
-        if (tag == SearchRailTag)
-        {
-            // 点窄 rail 上的搜索图标：先展开侧栏，再把焦点送进搜索框.
-            _openPaneAction?.Invoke();
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(200).ConfigureAwait(false);
-                _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
-            });
-            return;
-        }
 
 // 收藏 / 稍后再看 / 历史记录 是 overlay 页面，PageKey 里没有这几种 tag，
         // 之前直接去 MenuItems 里找，找不到就静默返回，所以点了没反应.

@@ -317,6 +317,9 @@ public sealed partial class SettingsPageViewModel
     private bool _isLiveNavVisible;
 
     [ObservableProperty]
+    private bool _isSearchHomeNavVisible;
+
+    [ObservableProperty]
     private bool _isAnimeNavVisible;
 
     [ObservableProperty]
@@ -414,3 +417,4 @@ public sealed partial class SettingsPageViewModel
     /// </summary>
     public ObservableCollection<string> GpuDevices { get; } = [];
 }
+

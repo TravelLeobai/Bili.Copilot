@@ -257,6 +257,7 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
             GetItem<AnimePage>(StringNames.Anime, FluentIcons.Common.Symbol.Dust),
             GetItem<CinemaPage>(StringNames.Cinema, FluentIcons.Common.Symbol.FilmstripPlay),
             GetItem<ArticlePartitionPage>(StringNames.Article, FluentIcons.Common.Symbol.DocumentBulletList),
+            GetItem<SearchHomePage>(StringNames.Search, FluentIcons.Common.Symbol.Search),
         };
 
         foreach (var item in list)
@@ -316,3 +317,4 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         NavItemsVersion++;
     }
 }
+
