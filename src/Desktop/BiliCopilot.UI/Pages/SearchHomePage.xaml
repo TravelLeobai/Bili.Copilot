@@ -29,8 +29,9 @@
 
         <components:AppSearchBox
             Width="560"
-            Margin="0,72,0,0"
+            Margin="0,-110,0,0"
             HorizontalAlignment="Center"
-            VerticalAlignment="Top" />
+            VerticalAlignment="Center" />
     </Grid>
 </local:SearchHomePageBase>
+
