@@ -204,5 +204,7 @@ public enum SettingNames
     LastOpenedPopularVideoId,
     MomentVideoOpenedMarkStyle,
     MomentVideoLeftPaneRatio,
+    LiveDanmakuLevelFilter,
+    LiveDanmakuMedalFilter,
 }
 

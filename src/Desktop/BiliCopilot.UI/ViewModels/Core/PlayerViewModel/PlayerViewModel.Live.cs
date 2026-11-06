@@ -164,6 +164,34 @@ public sealed partial class PlayerViewModel
     private int _livePanelTab;
 
     /// <summary>
+    /// 过滤 B 站等级小于 3 的弹幕.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLiveDanmakuLevelFilterEnabled
+        = Toolkits.SettingsToolkit.ReadLocalSetting(
+            Models.Constants.SettingNames.LiveDanmakuLevelFilter,
+            false);
+
+    /// <summary>
+    /// 过滤没有粉丝牌的弹幕.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLiveDanmakuMedalFilterEnabled
+        = Toolkits.SettingsToolkit.ReadLocalSetting(
+            Models.Constants.SettingNames.LiveDanmakuMedalFilter,
+            false);
+
+    partial void OnIsLiveDanmakuLevelFilterEnabledChanged(bool value)
+        => Toolkits.SettingsToolkit.WriteLocalSetting(
+            Models.Constants.SettingNames.LiveDanmakuLevelFilter,
+            value);
+
+    partial void OnIsLiveDanmakuMedalFilterEnabledChanged(bool value)
+        => Toolkits.SettingsToolkit.WriteLocalSetting(
+            Models.Constants.SettingNames.LiveDanmakuMedalFilter,
+            value);
+
+    /// <summary>
     /// 主播头像地址（统一成绝对地址，取不到为空串）.
     /// </summary>
     public string LiveUserAvatarUrl
@@ -436,11 +464,40 @@ public sealed partial class PlayerViewModel
 
     private void AppendLiveInteraction(LiveInteractionItem item)
     {
+        if (ShouldFilterLiveDanmaku(item))
+        {
+            return;
+        }
+
         LiveInteractions.Add(new LiveInteractionViewModel(item));
         while (LiveInteractions.Count > 200)
         {
             LiveInteractions.RemoveAt(0);
         }
+    }
+
+    /// <summary>
+    /// 按用户设置过滤弹幕。只对普通弹幕生效：礼物、醒目留言、上舰、进场这些
+    /// 没有粉丝牌也不代表等级低，过滤掉反而丢信息.
+    /// </summary>
+    private bool ShouldFilterLiveDanmaku(LiveInteractionItem item)
+    {
+        if (item.Kind != LiveInteractionKind.Danmaku)
+        {
+            return false;
+        }
+
+        if (IsLiveDanmakuLevelFilterEnabled && item.UserLevel < 3)
+        {
+            return true;
+        }
+
+        if (IsLiveDanmakuMedalFilterEnabled && string.IsNullOrEmpty(item.MedalName))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private void StartUptimeTimer()
@@ -788,3 +845,5 @@ public sealed partial class PlayerViewModel
         }
     }
 }
+
+

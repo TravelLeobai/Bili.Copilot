@@ -316,6 +316,34 @@
                             Content="弹"
                             IsChecked="{x:Bind ViewModel.IsLiveDanmakuVisible, Mode=OneWay}"
                             ToolTipService.ToolTip="弹幕浮层开关" />
+                        <!--  弹幕过滤：等级和粉丝牌两个开关，选中状态存本地设置  -->
+                        <Button
+                            Padding="8,4"
+                            AutomationProperties.Name="弹幕过滤"
+                            Content="过滤"
+                            ToolTipService.ToolTip="弹幕过滤">
+                            <Button.Flyout>
+                                <Flyout Placement="Top">
+                                    <StackPanel MinWidth="250" Spacing="10">
+                                        <TextBlock
+                                            FontSize="14"
+                                            FontWeight="SemiBold"
+                                            Text="弹幕过滤" />
+                                        <ToggleSwitch
+                                            Header="过滤 B 站等级小于 3 的用户"
+                                            IsOn="{x:Bind ViewModel.IsLiveDanmakuLevelFilterEnabled, Mode=TwoWay}" />
+                                        <ToggleSwitch
+                                            Header="过滤没有粉丝牌的用户"
+                                            IsOn="{x:Bind ViewModel.IsLiveDanmakuMedalFilterEnabled, Mode=TwoWay}" />
+                                        <TextBlock
+                                            FontSize="11"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="只作用于普通弹幕，礼物、醒目留言、上舰和进场消息不受影响。"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                         <Button
                             Padding="8,4"
                             Click="OnGiftBagClick"
