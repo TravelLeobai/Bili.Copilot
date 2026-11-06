@@ -34,12 +34,72 @@ public partial class App : Application
     {
         // 本机 IPv6 出口不通，.NET 默认优先 AAAA 会一直挂到超时；关掉 IPv6 优先，走 IPv4.
         AppContext.SetSwitch("System.Net.DisableIPv6", true);
+
+        // 实验开关：把 ContextFlyout 的初始化推迟到第一次真正打开时。
+        // WinUI 认的是 AppContext 开关，名字就是 DeferContextFlyoutInit。
+        // 打包应用从 shell 启动时拿不到父进程环境变量，所以除了环境变量
+        // 还认一个标记文件，方便同一份二进制做开/关对比.
+        DeferContextFlyoutEnabled = string.Equals(
+            Environment.GetEnvironmentVariable("BILI_DEFER_CONTEXT_FLYOUT"),
+            "1",
+            StringComparison.Ordinal);
+        if (!DeferContextFlyoutEnabled)
+        {
+            // App 构造阶段 ApplicationData.Current 可能还没就绪（会抛异常），
+            // 所以直接用包族名拼路径，不依赖 WinRT 应用数据 API.
+            foreach (var candidate in GetDeferFlagCandidates())
+            {
+                try
+                {
+                    if (System.IO.File.Exists(candidate))
+                    {
+                        DeferContextFlyoutEnabled = true;
+                        break;
+                    }
+                }
+                catch
+                {
+                    // 单个候选路径读不了就跳过.
+                }
+            }
+        }
+
+        AppContext.SetSwitch("DeferContextFlyoutInit", DeferContextFlyoutEnabled);
         InitializeComponent();
+        Serilog.Log.Information("实验：DeferContextFlyoutInit={Enabled}", DeferContextFlyoutEnabled);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         UnhandledException += OnUnhandledException;
         _notificationManager = AppNotificationManager.Default;
         _notificationManager.NotificationInvoked += OnAppNotificationInvoked;
         _notificationManager.Register();
+    }
+
+    /// <summary>
+    /// 是否启用了 DeferContextFlyoutInit（埋点用来区分分组）.
+    /// </summary>
+    public static bool DeferContextFlyoutEnabled { get; private set; }
+
+    /// <summary>
+    /// 实验标记文件的候选路径：打包 LocalState 和运行目录都试一遍.
+    /// App 构造阶段 ApplicationData.Current 可能还没就绪，所以这里不走 WinRT 应用数据 API.
+    /// </summary>
+    private static string[] GetDeferFlagCandidates()
+    {
+        var list = new List<string>();
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        try
+        {
+            var family = Windows.ApplicationModel.Package.Current.Id.FamilyName;
+            list.Add(System.IO.Path.Combine(localAppData, "Packages", family, "LocalState", "defer-context-flyout.flag"));
+        }
+        catch
+        {
+            // 没包身份就算了.
+        }
+
+        list.Add(System.IO.Path.Combine(localAppData, "Packages", "Richasy.BiliCopilot.Dev_g7ew4fxhv1f46", "LocalState", "defer-context-flyout.flag"));
+        list.Add(System.IO.Path.Combine(AppContext.BaseDirectory, "defer-context-flyout.flag"));
+        return [.. list];
     }
 
     /// <summary>
@@ -278,3 +338,6 @@ public partial class App : Application
         }
     }
 }
+
+
+

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -33,8 +33,15 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             return;
         }
 
+        // 计时埋点：弹幕面板首次加载（渲染器/图层创建）耗时.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         ReloadRenderer();
         ResetDanmakuStyle();
+        stopwatch.Stop();
+        Serilog.Log.Information(
+            "计时[{Group}] 视频弹幕面板首次加载：{Elapsed:F2} ms",
+            App.DeferContextFlyoutEnabled ? "defer" : "baseline",
+            stopwatch.Elapsed.TotalMilliseconds);
     }
 
     private void ReloadRenderer()
@@ -301,3 +308,4 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
         _danmakuMaster?.UpdateTime(Convert.ToUInt32(pos * 1000));
     }
 }
+

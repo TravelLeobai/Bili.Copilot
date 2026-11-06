@@ -27,6 +27,8 @@ namespace BiliCopilot.UI.Reactor;
 public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 {
     private ScrollView? _interactionScrollView;
+    private int _lastLoggedRowCount = -1;
+    private int _contextMenuOpenCount;
 
     // 粉丝团勋章用小号字 + Segoe UI Variable Small，和 B 站直播间观感一致.
     private const string MedalFontFamily = "Segoe UI Variable Small";
@@ -237,6 +239,9 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildContent(PlayerViewModel vm)
     {
+        // 计时埋点：直播互动列表是每次渲染全量重建（不是虚拟化 ListView），
+        // 这里量的就是「收到一条弹幕后重建整列」的耗时.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var rows = new List<Element>();
         switch (vm.LivePanelTab)
         {
@@ -261,6 +266,21 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 }
 
                 break;
+        }
+
+        stopwatch.Stop();
+
+        // 列表会被频繁重建（每条新弹幕、每次滚动都会走一遍），全量打日志会淹掉文件，
+        // 只在条数变化时记一条，够对比就行.
+        if (rows.Count != _lastLoggedRowCount)
+        {
+            _lastLoggedRowCount = rows.Count;
+            Serilog.Log.Information(
+                "计时[{Group}] 直播弹幕列表构建：{Tab} 页 {Count} 条，{Elapsed:F2} ms",
+                App.DeferContextFlyoutEnabled ? "defer" : "baseline",
+                vm.LivePanelTab,
+                rows.Count,
+                stopwatch.Elapsed.TotalMilliseconds);
         }
 
         if (rows.Count == 0)
@@ -424,6 +444,35 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                     PlaceholderText = "发个弹幕…",
                     MinWidth = 0,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+
+                // 右键菜单计时：记录右键按下到 ContextRequested 的间隔，
+                // 量的是「第一次打开右键菜单」要不要现建 flyout.
+                // TextBox 自己会吃掉 PointerPressed，必须用 handledEventsToo 才收得到.
+                var contextWatch = new System.Diagnostics.Stopwatch();
+                box.AddHandler(
+                    UIElement.PointerPressedEvent,
+                    new Microsoft.UI.Xaml.Input.PointerEventHandler((_, args) =>
+                    {
+                        if (args.GetCurrentPoint(box).Properties.IsRightButtonPressed)
+                        {
+                            contextWatch.Restart();
+                        }
+                    }),
+                    true);
+                box.ContextRequested += (_, _) =>
+                {
+                    if (!contextWatch.IsRunning)
+                    {
+                        return;
+                    }
+
+                    contextWatch.Stop();
+                    Serilog.Log.Information(
+                        "计时[{Group}] 右键菜单打开（直播输入框 #{Seq}）：{Elapsed:F2} ms",
+                        App.DeferContextFlyoutEnabled ? "defer" : "baseline",
+                        ++_contextMenuOpenCount,
+                        contextWatch.Elapsed.TotalMilliseconds);
                 };
 
                 // 输入过程中不往 ViewModel 回写：回写会触发重渲染，重建/重置输入框导致吞字.
@@ -1141,4 +1190,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             : null;
     }
 }
+
+
+
 
