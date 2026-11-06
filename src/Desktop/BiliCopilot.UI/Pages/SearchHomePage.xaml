@@ -85,6 +85,14 @@
                             FontSize="12"
                             Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                             Text="" />
+
+                        <!--  右下角：去群里找现成的装扮  -->
+                        <HyperlinkButton
+                            Padding="0"
+                            HorizontalAlignment="Right"
+                            Content="获取装扮"
+                            FontSize="12"
+                            NavigateUri="https://t.me/Bilibili_skin" />
                     </StackPanel>
                 </Flyout>
             </Button.Flyout>
