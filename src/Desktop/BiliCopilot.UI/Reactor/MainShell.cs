@@ -227,12 +227,14 @@ public sealed class MainShell : Component
             viewModel.IsOverlayOpen
                 ? new XamlHostElement(() => _backButton, _ => { })
                     .Size(40, 40)
+                    // 纵向跟侧栏图标同一条竖线，横向跟顶栏文字同一条横线.
+                    .Margin(12, 0, 0, 0)
                     .HAlign(HorizontalAlignment.Left)
                     .VAlign(VerticalAlignment.Center)
                 : (Element)TextBlock(string.Empty),
             // 搜索图标只在侧栏窄 rail 上（折叠态），标题栏这里留空.
             (Element)TextBlock(string.Empty),
-            TextBlock("哔哩助理").SemiBold().FontSize(14).Margin(10, 0, 0, 0).VAlign(VerticalAlignment.Center))
+            TextBlock("哔哩助理").SemiBold().FontSize(14).Margin(4, 0, 0, 0).VAlign(VerticalAlignment.Center))
             .VAlign(VerticalAlignment.Center)
             .HAlign(HorizontalAlignment.Left)
             .Grid(row: 0, column: 0);
