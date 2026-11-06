@@ -12,13 +12,11 @@
     mc:Ignorable="d">
 
     <local:VideoPlayerControlBase.Resources>
-        <converters:TruncateTextConverter x:Key="TitleTruncateConverter" MaxLength="12" />
+        <converters:TruncateTextConverter x:Key="TitleTruncateConverter" MaxLength="20" />
     </local:VideoPlayerControlBase.Resources>
 
-    <Grid
-        Background="{ThemeResource SmokeFillColorDefaultBrush}"
-        CornerRadius="{StaticResource ControlCornerRadius}"
-        RequestedTheme="Dark">
+    <!--  外层不加底色，鼠标悬浮时由 Button 自己那层 hover 背景露出来  -->
+    <Grid RequestedTheme="Dark">
         <base:Shimmer
             MinWidth="200"
             MinHeight="72"
@@ -35,14 +33,21 @@
             x:Load="{x:Bind ViewModel.IsLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
             Background="Transparent"
             BorderThickness="0"
+            CornerRadius="12"
             Command="{x:Bind ViewModel.OpenPanelCommand, Mode=OneWay}">
+            <Button.Resources>
+                <!--  默认透明，只有指针进来/按下去才有底色  -->
+                <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
+                <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1AFFFFFF" />
+                <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#2EFFFFFF" />
+            </Button.Resources>
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!--  第一行小字：UP 头像、名称、播放量、点赞量、收藏量  -->
+                <!--  第一行小字：UP 头像、名称、BV 号  -->
                 <StackPanel
                     Orientation="Horizontal"
                     Spacing="6"
@@ -71,37 +76,18 @@
                         VerticalAlignment="Center"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Text="{x:Bind ViewModel.PlayCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Text="·" />
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Text="{x:Bind ViewModel.LikeCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Text="·" />
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Text="{x:Bind ViewModel.FavoriteCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                        IsTextSelectionEnabled="False"
+                        Text="{x:Bind ViewModel.BvId, Mode=OneWay}" />
                 </StackPanel>
 
-                <!--  第二行：粗体标题，12 字以内，超出补省略号  -->
+                <!--  第二行：粗体标题，20 字以内，超出补省略号  -->
                 <TextBlock
                     Grid.Row="1"
                     Margin="0,6,0,0"
                     FontSize="18"
                     FontWeight="Bold"
                     MaxLines="1"
-                    Text="{x:Bind ViewModel.Title, Mode=OneWay, Converter={StaticResource TitleTruncateConverter}, ConverterParameter=12}"
+                    Text="{x:Bind ViewModel.Title, Mode=OneWay, Converter={StaticResource TitleTruncateConverter}, ConverterParameter=20}"
                     TextTrimming="CharacterEllipsis" />
             </Grid>
         </Button>
