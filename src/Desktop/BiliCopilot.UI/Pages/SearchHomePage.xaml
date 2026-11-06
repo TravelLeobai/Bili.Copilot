@@ -5,26 +5,27 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:components="using:BiliCopilot.UI.Controls.Components"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Pages"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!--  搜索首页：背景来自 B 站装扮包，前景只有一个复用来的 AppSearchBox.  -->
+    <!--  搜索首页：背景来自用户导入的主题包/图片，前景只有一个复用来的 AppSearchBox.  -->
     <Grid x:Name="RootGrid" Background="Transparent">
 
-        <!--  静态背景，视频没就位时先用它  -->
+        <!--  静态背景  -->
         <Image
             x:Name="StaticBackground"
             Stretch="UniformToFill" />
 
-        <!--  动态背景：装扮包里的 head_myself_mp4_bg.mp4  -->
+        <!--  动态背景（mp4）  -->
         <MediaPlayerElement
             x:Name="VideoBackground"
             AreTransportControlsEnabled="False"
             Opacity="0"
             Stretch="UniformToFill" />
 
-        <!--  压一层半透明，保证搜索框和文字可读  -->
+        <!--  压一层半透明，保证搜索框和文字可读；透明背景时更淡  -->
         <Border x:Name="Scrim" Background="#40000000" />
 
         <components:AppSearchBox
@@ -32,8 +33,57 @@
             Margin="0,-110,0,0"
             HorizontalAlignment="Center"
             VerticalAlignment="Center" />
+
+        <!--  右下角：背景设置入口  -->
+        <Button
+            x:Name="BackgroundButton"
+            Width="40"
+            Height="40"
+            Margin="0,0,24,24"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            AutomationProperties.Name="背景设置"
+            Background="#33000000"
+            BorderThickness="0"
+            CornerRadius="20"
+            ToolTipService.ToolTip="背景设置">
+            <ic:SymbolIcon FontSize="16" Foreground="White" Symbol="Edit" />
+            <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedRight">
+                    <StackPanel Width="340" Spacing="10">
+                        <TextBlock
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Text="背景设置" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                MinWidth="150"
+                                Click="OnImportThemeClick"
+                                Content="导入主题 JSON" />
+                            <Button
+                                MinWidth="120"
+                                Click="OnImportImageClick"
+                                Content="上传图片" />
+                        </StackPanel>
+
+                        <TextBlock
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="已保存的背景（选中即生效，叉号删除）" />
+
+                        <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="BackgroundListPanel" Spacing="6" />
+                        </ScrollViewer>
+
+                        <TextBlock
+                            x:Name="StatusText"
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Text="" />
+                    </StackPanel>
+                </Flyout>
+            </Button.Flyout>
+        </Button>
     </Grid>
 </local:SearchHomePageBase>
-
-
-
