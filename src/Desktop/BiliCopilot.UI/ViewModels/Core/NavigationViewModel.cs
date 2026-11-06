@@ -300,5 +300,19 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
         IsFavoritesPage = IsOverlayOpen && overPageType == typeof(FavoritesPage);
         IsHistoryPage = IsOverlayOpen && overPageType == typeof(HistoryPage);
         IsViewLaterPage = IsOverlayOpen && overPageType == typeof(ViewLaterPage);
+
+        // overlay 打开时主框架那些项要取消选中，不然侧栏会同时亮两个
+        // （动态还亮着，稍后再看又亮了）.
+        if (IsOverlayOpen)
+        {
+            foreach (var entry in MenuItems)
+            {
+                entry.IsSelected = false;
+            }
+
+            CurrentPageKey = overPageType?.FullName;
+        }
+
+        NavItemsVersion++;
     }
 }
