@@ -154,13 +154,14 @@
                                         <Image
                                             Grid.Column="1"
                                             Width="16"
-                                            Margin="0,0,12,0"
+                                            Margin="8,0,0,0"
                                             VerticalAlignment="Center"
                                             Source="{x:Bind Icon.Uri, Converter={StaticResource BitmapConverter}}"
                                             Stretch="Uniform"
                                             Visibility="{x:Bind Icon, Converter={StaticResource ObjectToVisibilityConverter}}" />
                                         <TextBlock
                                             Grid.Column="2"
+                                            Margin="8,0,0,0"
                                             VerticalAlignment="Center"
                                             MaxLines="1"
                                             Style="{StaticResource BodyTextBlockStyle}"
@@ -178,4 +179,5 @@
         </Button>
     </Grid>
 </local:AppSearchBoxBase>
+
 
