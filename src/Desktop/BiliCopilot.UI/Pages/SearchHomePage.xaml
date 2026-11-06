@@ -50,7 +50,7 @@
             <ic:SymbolIcon FontSize="16" Foreground="White" Symbol="Edit" />
             <Button.Flyout>
                 <Flyout Placement="TopEdgeAlignedRight">
-                    <StackPanel Width="340" Spacing="10">
+                    <StackPanel Width="300" Spacing="10">
                         <TextBlock
                             FontSize="14"
                             FontWeight="SemiBold"
@@ -58,11 +58,11 @@
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button
-                                MinWidth="150"
+                                MinWidth="130"
                                 Click="OnImportThemeClick"
                                 Content="导入主题 JSON" />
                             <Button
-                                MinWidth="120"
+                                MinWidth="100"
                                 Click="OnImportImageClick"
                                 Content="上传图片" />
                         </StackPanel>

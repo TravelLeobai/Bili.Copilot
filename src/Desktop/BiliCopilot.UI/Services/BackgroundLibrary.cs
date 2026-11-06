@@ -31,6 +31,11 @@ public sealed class BackgroundEntry
     public string? ImagePath { get; set; }
 
     /// <summary>
+    /// 列表里用的静态预览图（主题包的 image_cover 或用户传的图本身）.
+    /// </summary>
+    public string? PreviewPath { get; set; }
+
+    /// <summary>
     /// 是否是「透明」这一项，需要它才能让用户主动选回无背景.
     /// </summary>
     public bool IsTransparent { get; set; }
@@ -92,6 +97,8 @@ public static class BackgroundLibrary
 
             var video = string.IsNullOrEmpty(parts[2]) ? null : parts[2];
             var image = string.IsNullOrEmpty(parts[3]) ? null : parts[3];
+            var preview = parts.Length > 4 && !string.IsNullOrEmpty(parts[4]) && File.Exists(parts[4]) ? parts[4] : null;
+            preview ??= image;
             if ((video is null || !File.Exists(video)) && (image is null || !File.Exists(image)))
             {
                 continue;
@@ -103,6 +110,7 @@ public static class BackgroundLibrary
                 Name = parts[1],
                 VideoPath = video,
                 ImagePath = image,
+                PreviewPath = preview,
             });
         }
 
@@ -114,7 +122,7 @@ public static class BackgroundLibrary
         Directory.CreateDirectory(Root);
         var lines = entries
             .Where(entry => !entry.IsTransparent)
-            .Select(entry => $"{entry.Id}|{entry.Name}|{entry.VideoPath}|{entry.ImagePath}");
+            .Select(entry => $"{entry.Id}|{entry.Name}|{entry.VideoPath}|{entry.ImagePath}|{entry.PreviewPath}");
         File.WriteAllLines(IndexFile, lines);
     }
 
@@ -162,6 +170,8 @@ public static class BackgroundLibrary
             Id = id,
             Name = Path.GetFileNameWithoutExtension(sourcePath),
             ImagePath = target,
+            // 用户传的图本身就是最好的预览.
+            PreviewPath = target,
         };
 
         var list = Load();
@@ -205,6 +215,7 @@ public static class BackgroundLibrary
 
         string? video = null;
         string? image = null;
+        string? cover = null;
 
         foreach (var file in Directory.EnumerateFiles(extractDir, "*", SearchOption.AllDirectories))
         {
@@ -218,6 +229,13 @@ public static class BackgroundLibrary
             {
                 // 优先 jpg，体积比 png 小一截.
                 image = file;
+            }
+            else if ((fileName.StartsWith("image_cover", StringComparison.OrdinalIgnoreCase)
+                    || fileName.StartsWith("image_preview", StringComparison.OrdinalIgnoreCase))
+                && cover is null)
+            {
+                // 装扮包自带的封面，拿来做列表预览.
+                cover = file;
             }
         }
 
@@ -233,6 +251,8 @@ public static class BackgroundLibrary
             Name = name,
             VideoPath = video,
             ImagePath = image,
+            // 装扮包如果带了 image_cover / image_preview 就用它当预览，否则退回静态背景图.
+            PreviewPath = cover ?? image,
         };
 
         var list = Load();
@@ -304,3 +324,4 @@ public static class BackgroundLibrary
         return end < 0 ? null : json.Substring(start + 1, end - start - 1);
     }
 }
+

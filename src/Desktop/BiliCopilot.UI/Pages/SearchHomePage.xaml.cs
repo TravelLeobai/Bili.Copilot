@@ -113,15 +113,42 @@ public sealed partial class SearchHomePage : SearchHomePageBase
 
         foreach (var entry in BackgroundLibrary.Load())
         {
-            var row = new Grid { Height = 40, ColumnSpacing = 8 };
+            var row = new Grid { Height = 56, ColumnSpacing = 8 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+            // 左边小预览图，右边名字；透明那项没有图就留空.
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
+            if (!string.IsNullOrEmpty(entry.PreviewPath) && System.IO.File.Exists(entry.PreviewPath))
+            {
+                content.Children.Add(new Border
+                {
+                    Width = 72,
+                    Height = 44,
+                    CornerRadius = new CornerRadius(4),
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black),
+                    Child = new Image
+                    {
+                        Source = new BitmapImage(new Uri(entry.PreviewPath)),
+                        Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
+                    },
+                });
+            }
+
+            content.Children.Add(new TextBlock
+            {
+                Text = (entry.Id == currentId ? "✓ " : string.Empty) + entry.Name,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 210,
+            });
+
             var pick = new Button
             {
-                Content = (entry.Id == currentId ? "✓ " : string.Empty) + entry.Name,
+                Content = content,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(6, 4, 6, 4),
                 Tag = entry.Id,
             };
             pick.Click += OnBackgroundPickClick;
@@ -274,3 +301,4 @@ public abstract class SearchHomePageBase : LayoutPageBase<SearchBoxViewModel>
     /// </summary>
     protected SearchHomePageBase() => ViewModel = this.Get<SearchBoxViewModel>();
 }
+
