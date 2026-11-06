@@ -124,7 +124,7 @@
                                     <!--  两列：每列 280，横向优先，11 条排成 6 行 x 2 列  -->
                                     <ItemsWrapGrid
                                         ItemHeight="44"
-                                        ItemWidth="280"
+                                        ItemWidth="264"
                                         MaximumRowsOrColumns="2"
                                         Orientation="Horizontal" />
                                 </ItemsPanelTemplate>
