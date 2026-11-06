@@ -208,13 +208,21 @@ public sealed partial class NavigationViewModel : ViewModelBase, INavServiceView
                 cancelPage.CancelLoading();
             }
 
-            _overFrame.GoBack();
-            if (_overFrame.GetBackStack().Count == 0)
+            // 有上级页就先回退，栈空了（或者本来就是直接 NavigateToOver 进来的）就直接关 overlay.
+            var stackBefore = _overFrame.GetBackStack().Count;
+            if (stackBefore > 0)
             {
-                IsOverlayOpen = false;
-                _navFrame?.Focus(FocusState.Programmatic);
-                _overFrame.SetOpen(false);
+                _overFrame.GoBack();
+                if (_overFrame.GetBackStack().Count > 0)
+                {
+                    CheckSubPageStatus();
+                    return;
+                }
             }
+
+            IsOverlayOpen = false;
+            _navFrame?.Focus(FocusState.Programmatic);
+            _overFrame.SetOpen(false);
         }
 
         CheckSubPageStatus();
