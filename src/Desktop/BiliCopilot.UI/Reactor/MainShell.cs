@@ -130,13 +130,14 @@ public sealed class MainShell : Component
             .Select(item => BuildSideNavItem(item, isPaneOpen))
             .ToArray();
 
-        var sideFooterItems = new List<Element>
+        // 收藏 / 稍后再看 / 历史记录 受「顶部导航栏可见性」开关控制.
+        var sideFooterItems = new List<Element>();
+        if (viewModel.IsTopNavBarShown)
         {
-            BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, "__favorites__", viewModel.IsFavoritesPage, isPaneOpen),
-            BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, "__view_later__", viewModel.IsViewLaterPage, isPaneOpen),
-            BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, "__history__", viewModel.IsHistoryPage, isPaneOpen),
-        };
-
+            sideFooterItems.Add(BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, "__favorites__", viewModel.IsFavoritesPage, isPaneOpen));
+            sideFooterItems.Add(BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, "__view_later__", viewModel.IsViewLaterPage, isPaneOpen));
+            sideFooterItems.Add(BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, "__history__", viewModel.IsHistoryPage, isPaneOpen));
+        }
         sideFooterItems.AddRange(viewModel.FooterItems
             .Where(item => item.IsVisible)
             .Select(item => BuildSideNavItem(item, isPaneOpen)));
@@ -231,7 +232,7 @@ public sealed class MainShell : Component
                 : (Element)TextBlock(string.Empty),
             // 搜索图标只在侧栏窄 rail 上（折叠态），标题栏这里留空.
             (Element)TextBlock(string.Empty),
-            TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
+            TextBlock("哔哩助理").SemiBold().FontSize(14).Margin(10, 0, 0, 0).VAlign(VerticalAlignment.Center))
             .VAlign(VerticalAlignment.Center)
             .HAlign(HorizontalAlignment.Left)
             .Grid(row: 0, column: 0);
@@ -405,6 +406,21 @@ public sealed class MainShell : Component
                 _searchBox.DispatcherQueue?.TryEnqueue(() => _searchBox.Focus(FocusState.Programmatic));
             });
             return;
+        }
+
+// 收藏 / 稍后再看 / 历史记录 是 overlay 页面，PageKey 里没有这几种 tag，
+        // 之前直接去 MenuItems 里找，找不到就静默返回，所以点了没反应.
+        switch (tag)
+        {
+            case "__favorites__":
+                _viewModel.NavigateToOver(typeof(BiliCopilot.UI.Pages.Overlay.FavoritesPage));
+                return;
+            case "__view_later__":
+                _viewModel.NavigateToOver(typeof(BiliCopilot.UI.Pages.Overlay.ViewLaterPage));
+                return;
+            case "__history__":
+                _viewModel.NavigateToOver(typeof(BiliCopilot.UI.Pages.Overlay.HistoryPage));
+                return;
         }
 
         var item = _viewModel.MenuItems.Concat(_viewModel.FooterItems)
