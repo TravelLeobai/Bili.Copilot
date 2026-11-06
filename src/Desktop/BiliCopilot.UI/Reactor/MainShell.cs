@@ -176,12 +176,12 @@ public sealed class MainShell : Component
 // 侧栏项改成内核 AppNavigationViewItem：模板里自带 Regular/Filled 两个
         // SymbolIcon 和 200ms 透明度隐式动画，选中/悬停/按下都由模板的 VisualState 管.
         // 菜单（动态/直播等）留在上面，收藏/稍后再看/历史/消息/设置全部进 footer.
-        Element sideNav = VStack(2, sideMenuItems).Margin(4, 8, 4, 0);
+        Element sideNav = VStack(2, sideMenuItems).Margin(2, 8, 2, 0);
 
         Element paneFooterContent = VStack(
             2,
             [.. sideFooterItems, accountPanel])
-            .Margin(4, 0, 4, 8);
+            .Margin(2, 0, 2, 8);
 
         var navigation = (NavigationView([]) with
         {
@@ -428,6 +428,7 @@ public sealed class MainShell : Component
         item?.NavigateCommand.Execute(default);
     }
 }
+
 
 
 
