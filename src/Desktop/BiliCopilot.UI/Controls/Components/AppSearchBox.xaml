@@ -109,7 +109,7 @@
                             <Setter Property="MaxHeight" Value="480" />
                         </Style>
                     </Flyout.FlyoutPresenterStyle>
-                    <Grid Width="300" MinHeight="150">
+                    <Grid Width="560" MinHeight="150">
                         <ItemsView
                             x:Name="HotSearchView"
                             Padding="4"
@@ -117,6 +117,14 @@
                             ItemInvoked="OnHotSearchItemInvoked"
                             ItemsSource="{x:Bind ViewModel.HotSearchItems}"
                             SelectionMode="None">
+                            <ItemsView.Layout>
+                                <!--  两列：每列 280 宽，横向优先，11 条会排成 6 行 x 2 列  -->
+                                <UniformGridLayout
+                                    MinItemHeight="44"
+                                    MinItemWidth="280"
+                                    MaximumRowsOrColumns="2"
+                                    Orientation="Horizontal" />
+                            </ItemsView.Layout>
                             <ItemsView.ItemTemplate>
                                 <DataTemplate x:DataType="search:HotSearchItem">
                                     <ItemContainer Height="44" AutomationProperties.Name="{x:Bind Text}">
@@ -159,3 +167,4 @@
         </Button>
     </Grid>
 </local:AppSearchBoxBase>
+
