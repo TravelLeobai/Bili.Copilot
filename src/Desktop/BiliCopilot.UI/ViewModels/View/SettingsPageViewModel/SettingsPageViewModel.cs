@@ -119,6 +119,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         IsMomentNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(MomentPage).Name}Visible", true);
         IsVideoNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(VideoPartitionPage).Name}Visible", true);
         IsLiveNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(LivePartitionPage).Name}Visible", true);
+        IsSearchHomeNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(SearchHomePage).Name}Visible", true);
         IsAnimeNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(AnimePage).Name}Visible", true);
         IsCinemaNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(CinemaPage).Name}Visible", true);
         IsArticleNavVisible = this.Get<ISettingsToolkit>().ReadLocalSetting($"Is{typeof(ArticlePartitionPage).Name}Visible", true);
@@ -845,6 +846,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     partial void OnIsLiveNavVisibleChanged(bool value)
         => WriteNavVisibleSetting(typeof(LivePartitionPage), value);
 
+    partial void OnIsSearchHomeNavVisibleChanged(bool value)
+        => WriteNavVisibleSetting(typeof(SearchHomePage), value);
+
     partial void OnIsAnimeNavVisibleChanged(bool value)
         => WriteNavVisibleSetting(typeof(AnimePage), value);
 
@@ -1008,3 +1012,4 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     }
 
 }
+
