@@ -176,12 +176,12 @@ public sealed class MainShell : Component
 // 侧栏项改成内核 AppNavigationViewItem：模板里自带 Regular/Filled 两个
         // SymbolIcon 和 200ms 透明度隐式动画，选中/悬停/按下都由模板的 VisualState 管.
         // 菜单（动态/直播等）留在上面，收藏/稍后再看/历史/消息/设置全部进 footer.
-        Element sideNav = VStack(2, sideMenuItems).Padding(0, 8, 8, 0);
+        Element sideNav = VStack(2, sideMenuItems).Padding(0, 8, 16, 0);
 
         Element paneFooterContent = VStack(
             2,
             [.. sideFooterItems, accountPanel])
-            .Padding(0, 0, 8, 8);
+            .Padding(0, 0, 16, 8);
 
         var navigation = (NavigationView([]) with
         {
@@ -228,7 +228,7 @@ public sealed class MainShell : Component
                 ? new XamlHostElement(() => _backButton, _ => { })
                     .Size(40, 40)
                     // 纵向跟侧栏图标同一条竖线，横向跟顶栏文字同一条横线.
-                    .Margin(24, 0, 0, 0)
+                    .Margin(17, 0, 0, 0)
                     .HAlign(HorizontalAlignment.Left)
                     .VAlign(VerticalAlignment.Center)
                 : (Element)TextBlock(string.Empty),
@@ -370,6 +370,8 @@ public sealed class MainShell : Component
             SelectsOnInvoked = false,
             // 模板自带内边距会把内容往右推，清掉让图标贴左.
             Padding = new Thickness(0),
+            // 模板的 CornerRadius 取 ControlCornerRadius(4)，放大一点圆角才看得出来.
+            CornerRadius = new CornerRadius(6),
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Tag = tag,
         };
@@ -433,6 +435,9 @@ public sealed class MainShell : Component
         item?.NavigateCommand.Execute(default);
     }
 }
+
+
+
 
 
 
