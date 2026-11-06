@@ -39,6 +39,7 @@ public sealed class MainShell : Component
     };
 
     private readonly HeaderAccountControl _accountControl = new();
+    private readonly Button _paneToggleButton = CreateFlatIconButton("\uE700", "切换导航栏");
     private readonly Button _compactSearchButton = CreateFlatIconButton("\uE721", "搜索");
 
     private readonly Button _railSearchButton = CreateFlatIconButton("\uE721", "搜索");
@@ -50,6 +51,7 @@ public sealed class MainShell : Component
 
     private Action? _togglePaneAction;
 
+    private NavigationView? _navView;
 
     // 侧栏项缓存：Reactor 每次 Render 都拿同一个控件实例，避免重建把动画打断.
     private readonly Dictionary<string, AppNavigationViewItem> _sideNavControls = new();
@@ -71,6 +73,7 @@ public sealed class MainShell : Component
         _contentHost = new Grid();
         _contentHost.Children.Add(mainFrame);
         _contentHost.Children.Add(overlayFrame);
+        _paneToggleButton.Click += (_, _) => _togglePaneAction?.Invoke();
         _compactSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _railSearchButton.Click += (_, _) => OpenPaneAndFocusSearch();
         _backButton.Click += (_, _) => _viewModel.Back();
@@ -100,11 +103,21 @@ public sealed class MainShell : Component
     /// <inheritdoc/>
     public override Element Render()
     {
-        // 汉堡按钮按你要求删掉了，侧栏就固定窄栏（84），不再有展开态.
-        var (isPaneOpen, setIsPaneOpen) = UseState(false);
-        // 自绘宽度：展开 240、窄栏 84.
-        // 自绘宽度：展开 240、窄栏 84.
-        _togglePaneAction = () => setIsPaneOpen(!isPaneOpen);
+        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+        _togglePaneAction = () =>
+        {
+            // Set(...) 是 Reactor 唯一能摸到 XAML NavigationView 的入口，
+            // 拿到真实控件后直接翻 IsPaneOpen，再到 hook 里同步一下.
+            if (_navView is { } navView)
+            {
+                navView.IsPaneOpen = !navView.IsPaneOpen;
+                setIsPaneOpen(navView.IsPaneOpen);
+            }
+            else
+            {
+                setIsPaneOpen(!isPaneOpen);
+            }
+        };
         _openPaneAction = () => setIsPaneOpen(true);
         var titleBarRef = this.UseElementRef<FrameworkElement>();
         _titleBarRef = titleBarRef;
@@ -117,22 +130,18 @@ public sealed class MainShell : Component
             .Select(item => BuildSideNavItem(item, isPaneOpen))
             .ToArray();
 
-        // footer：收藏 / 稍后再看 / 历史记录 三项受「顶部导航栏可见性」开关控制，
-        // 后面跟着消息、设置，最下面才是账号头像.
-        var sideFooterItems = new List<Element>();
-        if (viewModel.IsTopNavBarShown)
+        var sideFooterItems = new List<Element>
         {
-            sideFooterItems.Add(BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, "__favorites__", viewModel.IsFavoritesPage, isPaneOpen));
-            sideFooterItems.Add(BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, "__view_later__", viewModel.IsViewLaterPage, isPaneOpen));
-            sideFooterItems.Add(BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, "__history__", viewModel.IsHistoryPage, isPaneOpen));
-        }
+            BuildStaticNavItem("我的收藏", FluentIcons.Common.Symbol.StarLineHorizontal3, "__favorites__", viewModel.IsFavoritesPage, isPaneOpen),
+            BuildStaticNavItem("稍后再看", FluentIcons.Common.Symbol.CalendarClock, "__view_later__", viewModel.IsViewLaterPage, isPaneOpen),
+            BuildStaticNavItem("历史记录", FluentIcons.Common.Symbol.History, "__history__", viewModel.IsHistoryPage, isPaneOpen),
+        };
 
         sideFooterItems.AddRange(viewModel.FooterItems
             .Where(item => item.IsVisible)
             .Select(item => BuildSideNavItem(item, isPaneOpen)));
 
-        // 头像只留图：HeaderAccountControl 里的昵称在控件加载后才生成，
-        // 所以等它 Loaded 再递归藏掉那些 TextBlock.
+// 头像只留图，不要昵称；和上面的图标一样居中.
         Element accountRow = new XamlHostElement(() => _accountControl, control =>
             {
                 control.MinWidth = 0;
@@ -140,16 +149,7 @@ public sealed class MainShell : Component
                 control.Height = 32;
                 control.HorizontalAlignment = HorizontalAlignment.Center;
                 control.VerticalAlignment = VerticalAlignment.Center;
-                control.Loaded += (_, _) =>
-                {
-                    HideDescendantTexts(control);
-
-                    // 光藏文字还不够，控件内层布局仍会把它算进宽度，再裁一刀保险.
-                    control.Clip = new Microsoft.UI.Xaml.Media.RectangleGeometry
-                    {
-                        Rect = new Windows.Foundation.Rect(0, 0, 32, 32),
-                    };
-                };
+                control.Loaded += (_, _) => HideDescendantTexts(control);
             })
             .Size(32, 32)
             .HAlign(HorizontalAlignment.Center)
@@ -162,7 +162,7 @@ public sealed class MainShell : Component
             .HorizontalContentAlignment(HorizontalAlignment.Center)
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Center)
-            .Margin(0, 8, 0, 0);
+            .Margin(0, 12, 0, 0);
 
         // 侧栏顶部：展开时是完整搜索框，收起时只剩一个搜索图标.
         Element paneHeader = isPaneOpen
@@ -172,19 +172,54 @@ public sealed class MainShell : Component
                 .Margin(12, 6, 8, 8)
             : (Element)TextBlock(string.Empty);
 
-        // 侧栏整体三段：菜单占顶、中间留白、footer 组 + 头像贴底.
-        // 不再用 NavigationView 的 PaneFooter —— 那玩意儿贴不贴底由模板说了算，
-        // 自己排 Grid 才拿得住.
-        // 菜单放 PaneCustomContent，footer 组 + 头像走 PaneFooter（NavigationView 保证贴底）.
-        Element sideNav = VStack(2, sideMenuItems)
-            .Margin(2, 8, 12, 0)
-            .VAlign(VerticalAlignment.Top);
-        Element sideFooterGroup = VStack(2, [.. sideFooterItems, accountPanel])
-            .Margin(2, 0, 12, 8)
-            .VAlign(VerticalAlignment.Bottom);
+// 侧栏项改成内核 AppNavigationViewItem：模板里自带 Regular/Filled 两个
+        // SymbolIcon 和 200ms 透明度隐式动画，选中/悬停/按下都由模板的 VisualState 管.
+        // 菜单（动态/直播等）留在上面，收藏/稍后再看/历史/消息/设置全部进 footer.
+        Element sideNav = VStack(2, sideMenuItems).Margin(4, 8, 4, 0);
 
-        // 侧栏不用 NavigationView 的 pane 了：整块自己排两列，
-        // 中间一行吃 Star，footer 才会真正贴底（NavigationView 那条路试过，贴不住）.
+        Element paneFooterContent = VStack(
+            2,
+            [.. sideFooterItems, accountPanel])
+            .Margin(4, 0, 4, 8);
+
+        var navigation = (NavigationView([]) with
+        {
+            Content = new XamlHostElement(() => _contentHost, _ => { }),
+            FooterMenuItems = [],
+            IsBackEnabled = viewModel.IsOverlayOpen,
+            OnBackRequested = () => viewModel.Back(),
+            OnItemInvoked = tag => NavigateByTag(tag),
+            OnSettingsSelected = () => NavigateToSettings(),
+            IsPaneOpen = isPaneOpen,
+            IsPaneToggleButtonVisible = false,
+            IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+            IsSettingsVisible = false,
+            // 原版是窄栏：图标在上、文字在下。LeftCompact 才会走模板的竖向排版.
+            PaneDisplayMode = NavigationViewPaneDisplayMode.LeftCompact,
+            OpenPaneLength = 240,
+            CompactPaneLength = 72,
+            PaneHeader = paneHeader,
+            PaneCustomContent = sideNav,
+        })
+            .PaneFooter(paneFooterContent)
+            .PaneToggleButtonVisible(false)
+            .Background("Transparent")
+            // Set 是 Reactor 唯一能碰到 XAML NavigationView 的入口，折叠按钮靠它.
+            // 自绘的折叠按钮删了；NavigationView 模板里那个内置的等控件加载后藏掉.
+            .Set(nv =>
+            {
+                _navView = nv;
+                nv.IsPaneToggleButtonVisible = false;
+                nv.Loaded += (_, _) =>
+                {
+                    if (nv.FindName("TogglePaneButton") is FrameworkElement toggleButton)
+                    {
+                        toggleButton.Visibility = Visibility.Collapsed;
+                    }
+                };
+            })
+            .Grid(row: 1);
+
         var titleContent = HStack(
             4,
             viewModel.IsOverlayOpen
@@ -193,16 +228,23 @@ public sealed class MainShell : Component
                     .HAlign(HorizontalAlignment.Left)
                     .VAlign(VerticalAlignment.Center)
                 : (Element)TextBlock(string.Empty),
+            // 搜索图标只在侧栏窄 rail 上（折叠态），标题栏这里留空.
             (Element)TextBlock(string.Empty),
             TextBlock("哔哩助理").SemiBold().FontSize(14).VAlign(VerticalAlignment.Center))
             .VAlign(VerticalAlignment.Center)
             .HAlign(HorizontalAlignment.Left)
             .Grid(row: 0, column: 0);
 
+        // 顶部导航栏那套按钮后来删掉了，这里不再渲染.
+        Element navButtons = TextBlock(string.Empty);
+
         var titleBar = Grid(
             columns: [GridSize.Auto, GridSize.Star()],
             rows: [GridSize.Star()],
-            HStack(4, titleContent)
+            HStack(
+                4,
+                titleContent,
+                navButtons)
                 .VAlign(VerticalAlignment.Center)
                 .Grid(row: 0, column: 0),
             HStack(0, TextBlock(string.Empty))
@@ -213,45 +255,40 @@ public sealed class MainShell : Component
             .Height(48)
             .Ref(titleBarRef);
 
-var sideWidth = isPaneOpen ? 200 : 72;
-
-        Element sideMenuColumn = VStack(2, sideMenuItems)
-            .Grid(row: 0)
-            .VAlign(VerticalAlignment.Top)
-            .Margin(2, 8, 6, 0);
-
-        Element sideFooterColumn = VStack(2, [.. sideFooterItems, accountPanel])
-            .Grid(row: 2)
-            .Margin(2, 0, 6, 8);
-
-        Element sidebar = Grid(
-            columns: [GridSize.Star()],
-            rows: [GridSize.Auto, GridSize.Star(), GridSize.Auto],
-            sideMenuColumn,
-            sideFooterColumn)
-            .Width(sideWidth)
-            .HAlign(HorizontalAlignment.Left)
-            .VAlign(VerticalAlignment.Stretch);
-
-        // 内容区一层亚克力：AcrylicBackgroundFillColorDefaultBrush 是 WinUI 的
-        // 主题资源，系统亮色/暗色切换时它会自己换，不用我们判断.
-        Element contentCard = Border(new XamlHostElement(() => _contentHost, _ => { }))
-            .Background(LookupBrush("AcrylicBackgroundFillColorDefaultBrush"))
-            .CornerRadius(12)
-            .Margin(6, 0, 8, 8)
-            .Grid(row: 1, column: 1);
+        // 折叠态：在左侧窄 rail 顶部叠一个真的搜索按钮（导航项点击在 rail 里不可靠）.
+        Element railSearch = isPaneOpen
+            ? (Element)TextBlock(string.Empty)
+            : new XamlHostElement(() => _railSearchButton, _ => { })
+                .Size(48, 36)
+                .HAlign(HorizontalAlignment.Left)
+                .VAlign(VerticalAlignment.Top)
+                .Margin(0, 6, 0, 0)
+                .Grid(row: 1);
 
         return Grid(
-            columns: [GridSize.Px(sideWidth), GridSize.Star()],
+            columns: [GridSize.Star()],
             rows: [GridSize.Auto, GridSize.Star()],
-            titleBar.Grid(row: 0, columnSpan: 2),
-            sidebar.Grid(row: 1, column: 0),
-            contentCard);
+            titleBar.Grid(row: 0),
+            navigation,
+            railSearch);
     }
 
-    // 主题资源取刷子：AcrylicBackgroundFillColorDefaultBrush 会跟着亮/暗自动换.
-    private static Brush? LookupBrush(string key)
-        => Application.Current.Resources.TryGetValue(key, out var value) && value is Brush brush ? brush : null;
+    private static void HideDescendantTexts(DependencyObject root)
+    {
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is TextBlock textBlock)
+            {
+                textBlock.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                HideDescendantTexts(child);
+            }
+        }
+    }
 
     private static Button CreateFlatIconButton(string glyph, string automationName)
     {
@@ -330,23 +367,6 @@ var sideWidth = isPaneOpen ? 200 : 72;
             Tag = tag,
         };
 
-
-    private static void HideDescendantTexts(DependencyObject root)
-    {
-        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
-            if (child is TextBlock textBlock)
-            {
-                textBlock.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                HideDescendantTexts(child);
-            }
-        }
-    }
     private static void ApplySideNavItem(
         AppNavigationViewItem control,
         string content,
