@@ -291,7 +291,7 @@ public sealed class MainShell : Component
             _sideNavControls[item.PageKey] = control;
         }
 
-        ApplySideNavItem(control, isPaneOpen ? item.Title : string.Empty, item.Symbol, item.IsSelected, item.ShowUnread);
+        ApplySideNavItem(control, item.PageKey, isPaneOpen ? item.Title : string.Empty, item.Symbol, item.IsSelected, item.ShowUnread);
         return new XamlHostElement(() => control, _ => { }).WithKey("sidenav-" + item.PageKey);
     }
 
@@ -309,7 +309,7 @@ public sealed class MainShell : Component
             _sideNavControls[tag] = control;
         }
 
-        ApplySideNavItem(control, isPaneOpen ? title : string.Empty, symbol, isSelected, false);
+        ApplySideNavItem(control, tag, isPaneOpen ? title : string.Empty, symbol, isSelected, false);
         return new XamlHostElement(() => control, _ => { }).WithKey("sidenav-" + tag);
     }
 
@@ -330,14 +330,84 @@ public sealed class MainShell : Component
             Tag = tag,
         };
 
+// 装扮包里的导航图标只在几个关键项上换，其余保持 Fluent 图标.
+    // 映射依据 B 站装扮 zip 的命名：main=发现、dynamic=动态、channel=频道/直播.
+    private static string? GetThemeIconName(string tag)
+        => tag switch
+        {
+            _ when tag.Contains("SearchHomePage") => "tail_icon_main",
+            _ when tag.Contains("MomentPage") => "tail_icon_dynamic",
+            _ when tag.Contains("LivePartitionPage") => "tail_icon_channel",
+            _ => null,
+        };
+
+    private const string ThemeIconFolder = "ms-appx:///Assets/Theme/chuangzuo";
+
+    private static void ApplyThemeIcon(AppNavigationViewItem control, string tag, string content)
+    {
+        var iconName = GetThemeIconName(tag);
+        if (iconName is null)
+        {
+            control.Content = content;
+            return;
+        }
+
+        // 模板里的两个 SymbolIcon 要先藏掉，不然会跟下面的图片叠在一起.
+        control.ApplyTemplate();
+        HideTemplateSymbolIcons(control);
+
+        var source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(
+            new Uri($"{ThemeIconFolder}/{iconName}.png"));
+
+        control.Content = new StackPanel
+        {
+            Spacing = 2,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Children =
+            {
+                new Image
+                {
+                    Source = source,
+                    Width = 22,
+                    Height = 22,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                },
+                new TextBlock
+                {
+                    Text = content,
+                    FontSize = 12,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                },
+            },
+        };
+    }
+
+    private static void HideTemplateSymbolIcons(DependencyObject root)
+    {
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is FluentIcons.WinUI.SymbolIcon icon)
+            {
+                icon.Visibility = Visibility.Collapsed;
+            }
+            else if (child is DependencyObject childObject)
+            {
+                HideTemplateSymbolIcons(childObject);
+            }
+        }
+    }
+
     private static void ApplySideNavItem(
         AppNavigationViewItem control,
+        string tag,
         string content,
         FluentIcons.Common.Symbol symbol,
         bool isSelected,
         bool showUnread)
     {
-        control.Content = content;
+        ApplyThemeIcon(control, tag, content);
         control.Symbol = symbol;
         control.ShowUnread = showUnread;
 
