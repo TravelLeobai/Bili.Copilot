@@ -228,9 +228,11 @@ public sealed class MainShell : Component
                 .Padding(0, 0, 12, 0)
                 .HAlign(HorizontalAlignment.Right)
                 .VAlign(VerticalAlignment.Center)
-                .Grid(row: 0, column: 1))
-            .Height(48)
-            .Ref(titleBarRef);
+                .Grid(row: 0, column: 1)
+                // 拖拽区只挂在这块空白上：整条 titleBar 交给 SetTitleBar 的话，
+                // 左边的返回按钮会被窗口拖拽逻辑吞掉，点了没反应.
+                .Ref(titleBarRef))
+            .Height(48);
 
         return Grid(
             columns: [GridSize.Star()],
