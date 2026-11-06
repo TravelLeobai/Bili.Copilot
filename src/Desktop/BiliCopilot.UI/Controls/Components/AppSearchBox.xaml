@@ -107,59 +107,61 @@
                         <Style BasedOn="{StaticResource DefaultFlyoutPresenterStyle}" TargetType="FlyoutPresenter">
                             <Setter Property="Padding" Value="0" />
                             <Setter Property="MaxHeight" Value="480" />
+                            <!--  FlyoutPresenter 默认 MaxWidth 只有 456，会把 560 的面板压窄  -->
+                            <Setter Property="MaxWidth" Value="720" />
                         </Style>
                     </Flyout.FlyoutPresenterStyle>
                     <Grid Width="560" MinHeight="150">
-                        <ItemsView
+                        <GridView
                             x:Name="HotSearchView"
                             Padding="4"
-                            IsItemInvokedEnabled="True"
-                            ItemInvoked="OnHotSearchItemInvoked"
+                            IsItemClickEnabled="True"
+                            ItemClick="OnHotSearchItemInvoked"
                             ItemsSource="{x:Bind ViewModel.HotSearchItems}"
                             SelectionMode="None">
-                            <ItemsView.Layout>
-                                <!--  两列：每列 280 宽，横向优先，11 条会排成 6 行 x 2 列  -->
-                                <UniformGridLayout
-                                    MinItemHeight="44"
-                                    MinItemWidth="280"
-                                    MaximumRowsOrColumns="2"
-                                    Orientation="Horizontal" />
-                            </ItemsView.Layout>
-                            <ItemsView.ItemTemplate>
+                            <GridView.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <!--  两列：每列 280，横向优先，11 条排成 6 行 x 2 列  -->
+                                    <ItemsWrapGrid
+                                        ItemHeight="44"
+                                        ItemWidth="280"
+                                        MaximumRowsOrColumns="2"
+                                        Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </GridView.ItemsPanel>
+                            <GridView.ItemTemplate>
                                 <DataTemplate x:DataType="search:HotSearchItem">
-                                    <ItemContainer Height="44" AutomationProperties.Name="{x:Bind Text}">
-                                        <Grid Margin="12,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="28" />
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock
-                                                VerticalAlignment="Center"
-                                                FontSize="12"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Text="{x:Bind Index}" />
-                                            <Image
-                                                Grid.Column="1"
-                                                Width="16"
-                                                Margin="0,0,12,0"
-                                                VerticalAlignment="Center"
-                                                Source="{x:Bind Icon.Uri, Converter={StaticResource BitmapConverter}}"
-                                                Stretch="Uniform"
-                                                Visibility="{x:Bind Icon, Converter={StaticResource ObjectToVisibilityConverter}}" />
-                                            <TextBlock
-                                                Grid.Column="2"
-                                                VerticalAlignment="Center"
-                                                MaxLines="1"
-                                                Style="{StaticResource BodyTextBlockStyle}"
-                                                Text="{x:Bind Text}"
-                                                TextLineBounds="Tight"
-                                                TextTrimming="CharacterEllipsis" />
-                                        </Grid>
-                                    </ItemContainer>
+                                    <Grid Margin="12,0" AutomationProperties.Name="{x:Bind Text}">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="28" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind Index}" />
+                                        <Image
+                                            Grid.Column="1"
+                                            Width="16"
+                                            Margin="0,0,12,0"
+                                            VerticalAlignment="Center"
+                                            Source="{x:Bind Icon.Uri, Converter={StaticResource BitmapConverter}}"
+                                            Stretch="Uniform"
+                                            Visibility="{x:Bind Icon, Converter={StaticResource ObjectToVisibilityConverter}}" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            MaxLines="1"
+                                            Style="{StaticResource BodyTextBlockStyle}"
+                                            Text="{x:Bind Text}"
+                                            TextLineBounds="Tight"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </Grid>
                                 </DataTemplate>
-                            </ItemsView.ItemTemplate>
-                        </ItemsView>
+                            </GridView.ItemTemplate>
+                        </GridView>
                         <ProgressRing IsActive="{x:Bind ViewModel.IsHotSearchLoading, Mode=OneWay}" Style="{StaticResource PageProgressRingStyle}" />
                     </Grid>
                 </Flyout>
@@ -167,4 +169,3 @@
         </Button>
     </Grid>
 </local:AppSearchBoxBase>
-

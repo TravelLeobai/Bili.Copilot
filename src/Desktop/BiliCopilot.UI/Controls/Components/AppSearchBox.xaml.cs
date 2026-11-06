@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
@@ -40,9 +40,9 @@ public sealed partial class AppSearchBox : AppSearchBoxBase
     private void OnHotSearchFlyoutOpened(object sender, object e)
         => ViewModel.LoadHotSearchCommand.Execute(default);
 
-    private void OnHotSearchItemInvoked(ItemsView sender, ItemsViewItemInvokedEventArgs args)
+    private void OnHotSearchItemInvoked(object sender, ItemClickEventArgs args)
     {
-        var context = args.InvokedItem as HotSearchItem;
+        var context = args.ClickedItem as HotSearchItem;
         if (context is not null)
         {
             ViewModel.Keyword = context.Keyword;
@@ -80,3 +80,4 @@ public abstract class AppSearchBoxBase : LayoutUserControlBase<SearchBoxViewMode
     /// </summary>
     protected AppSearchBoxBase() => ViewModel = this.Get<SearchBoxViewModel>();
 }
+
