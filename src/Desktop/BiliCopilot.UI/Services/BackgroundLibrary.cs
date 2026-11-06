@@ -181,6 +181,32 @@ public static class BackgroundLibrary
     }
 
     /// <summary>
+    /// 导入一个本地视频当动态背景.
+    /// </summary>
+    public static BackgroundEntry ImportVideo(string sourcePath)
+    {
+        var id = "vid_" + DateTime.Now.ToString("yyyyMMddHHmmss");
+        var dir = Path.Combine(Root, id);
+        Directory.CreateDirectory(dir);
+
+        var fileName = Path.GetFileName(sourcePath);
+        var target = Path.Combine(dir, fileName);
+        File.Copy(sourcePath, target, overwrite: true);
+
+        var entry = new BackgroundEntry
+        {
+            Id = id,
+            Name = Path.GetFileNameWithoutExtension(sourcePath),
+            VideoPath = target,
+        };
+
+        var list = Load();
+        list.Add(entry);
+        SaveIndex(list);
+        return entry;
+    }
+
+    /// <summary>
     /// 导入一份 B 站主题 JSON：读 package_url，下载 zip，解出静态图和动态视频.
     /// </summary>
     public static async Task<BackgroundEntry> ImportThemeAsync(string jsonPath)
@@ -384,6 +410,7 @@ public static class BackgroundLibrary
         return end < 0 ? null : json.Substring(start + 1, end - start - 1);
     }
 }
+
 
 
 

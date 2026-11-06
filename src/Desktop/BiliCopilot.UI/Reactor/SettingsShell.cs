@@ -1,6 +1,10 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls.Settings;
+using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Toolkits;
+using Richasy.WinUIKernel.Share.Toolkits;
+using Microsoft.UI.Xaml.Controls;
 using BiliCopilot.UI.ViewModels.View;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -75,9 +79,9 @@ public sealed class SettingsShell : Component
             SectionTitle("通用"),
             Control<ThemeSettingControl>(),
             Control<LayoutSettingSection>(),
-            Control<CacheSettingControl>(),
+            CacheSettings(),
             Control<NavigationSettingControl>(),
-            Control<ScrollSettingControl>(),
+            ScrollSettings(),
             Control<NotificationSettingControl>(),
             Control<LoggerSettingControl>(),
             SectionTitle("关于"),
@@ -93,6 +97,43 @@ public sealed class SettingsShell : Component
             body.Grid(row: 1));
     }
 
+    /// <summary>
+    /// 图片缓存：一张卡，描述是缓存体积，右侧是清空按钮.
+    /// </summary>
+    private Element CacheSettings()
+    {
+        var button = new Button
+        {
+            Content = ResourceToolkit.GetLocalizedString(StringNames.ClearCache),
+            MinWidth = 120,
+            IsEnabled = _viewModel.IsTotalImageCacheClearEnabled,
+        };
+        button.Click += (_, _) => _viewModel.ClearCacheCommand.Execute(default);
+
+        return SettingCards.Card(
+            ResourceToolkit.GetLocalizedString(StringNames.ImageCache),
+            _viewModel.TotalImageCacheSize,
+            FluentIcons.Common.Symbol.SaveImage,
+            new XamlHostElement(() => button, _ => { }));
+    }
+
+    /// <summary>
+    /// 滚动加速：一张卡，右侧是开关.
+    /// </summary>
+    private Element ScrollSettings()
+    {
+        var (toggle, _) = SettingCards.Toggle(
+            _viewModel.ScrollAccelerate,
+            value => _viewModel.ScrollAccelerate = value,
+            ResourceToolkit.GetLocalizedString(StringNames.ScrollAccelerate));
+
+        return SettingCards.Card(
+            ResourceToolkit.GetLocalizedString(StringNames.ScrollAccelerate),
+            ResourceToolkit.GetLocalizedString(StringNames.ScrollAccelerateDescription),
+            FluentIcons.Common.Symbol.PhoneVerticalScroll,
+            toggle);
+    }
+
     private static Element SectionTitle(string text)
         => TextBlock(text).FontSize(13).SemiBold().Margin(0, 12, 0, 4);
 
@@ -102,3 +143,5 @@ public sealed class SettingsShell : Component
             () => _appControls.OfType<TControl>().First(),
             _ => { });
 }
+
+

@@ -56,15 +56,19 @@
                             FontWeight="SemiBold"
                             Text="背景设置" />
 
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
                             <Button
-                                MinWidth="130"
+                                MinWidth="118"
                                 Click="OnImportThemeClick"
-                                Content="导入主题 JSON" />
+                                Content="导入主题" />
                             <Button
-                                MinWidth="100"
+                                MinWidth="76"
                                 Click="OnImportImageClick"
-                                Content="上传图片" />
+                                Content="图片" />
+                            <Button
+                                MinWidth="76"
+                                Click="OnImportVideoClick"
+                                Content="视频" />
                         </StackPanel>
 
                         <TextBlock
@@ -87,3 +91,4 @@
         </Button>
     </Grid>
 </local:SearchHomePageBase>
+

@@ -278,6 +278,40 @@ public sealed partial class SearchHomePage : SearchHomePageBase
         }
     }
 
+    private async void OnImportVideoClick(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        var path = await PickFileAsync(".mp4", ".webm", ".mkv", ".mov", ".avi");
+        if (path is null)
+        {
+            return;
+        }
+
+        _isBusy = true;
+        StatusText.Text = "正在保存视频…";
+        try
+        {
+            var entry = BackgroundLibrary.ImportVideo(path);
+            BackgroundLibrary.CurrentId = entry.Id;
+            ApplyCurrentBackground();
+            RefreshBackgroundList();
+            StatusText.Text = $"已导入：{entry.Name}";
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "导入视频失败");
+            StatusText.Text = "导入失败：" + ex.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
     /// <summary>
     /// 弹文件选择器，返回选中文件的本地路径.
     /// </summary>
@@ -316,6 +350,7 @@ public abstract class SearchHomePageBase : LayoutPageBase<SearchBoxViewModel>
     /// </summary>
     protected SearchHomePageBase() => ViewModel = this.Get<SearchBoxViewModel>();
 }
+
 
 
 
