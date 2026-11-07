@@ -2,8 +2,10 @@
 
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
+using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Authorization;
@@ -173,6 +175,17 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
 
     private async Task<(string? video, string? audio)> GetPlayUrlsAsync()
     {
+        // 开了画质解锁就先让解析服务器用 ogv/player/playview 代取一遍（bzview3 那条接口），
+        // 失败再走原来的 getPgcPlayDetail 地址.
+        if (QualityUnlockService.IsEnabled)
+        {
+            var unlocked = await TryUnlockAsync();
+            if (unlocked is { } unlockedUrls)
+            {
+                return unlockedUrls;
+            }
+        }
+
         var videoSegments = _playbackInfo!.Videos;
         var audioSegments = _playbackInfo.Audios;
         var selectedFormat = GetCurrentFormat();
@@ -200,4 +213,87 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
         SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedPgcQuality, selectedFormat.Quality);
         return (videoUrl, audioUrl);
     }
+
+    /// <summary>
+    /// 通过解析服务器拿番剧地址；不可用时返回 null，让调用方回退.
+    /// </summary>
+    private async Task<(string? video, string? audio)?> TryUnlockAsync()
+    {
+        try
+        {
+            var cookie = cookiesResolver.GetCookieString();
+            if (string.IsNullOrEmpty(cookie))
+            {
+                return null;
+            }
+
+            var csrf = ExtractCookie(cookie, "bili_jct");
+            var mid = this.Get<AccountViewModel>().MyProfile?.User?.Id ?? string.Empty;
+            var cid = _episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid);
+            var epId = _episode.Identifier.Id;
+            var seasonId = _snapshot.Season?.Identifier.Id ?? string.Empty;
+
+            var format = GetCurrentFormat();
+            var targetQuality = QualityUnlockService.AutoMaxQuality
+                ? Math.Max(format?.Quality ?? 0, 127)
+                : format?.Quality ?? 0;
+
+            var unlocked = await QualityUnlockService.GetPgcPlayUrlsAsync(
+                epId,
+                seasonId,
+                cid.ToString(),
+                targetQuality,
+                cookie,
+                csrf,
+                mid,
+                logger);
+
+            if (!unlocked.Success)
+            {
+                logger.LogInformation("番剧画质解锁不可用（{Message}），改用常规地址", unlocked.Message);
+                return null;
+            }
+
+            var video = string.IsNullOrEmpty(unlocked.Video) ? null : CdnAccelerator.Rewrite(unlocked.Video!, true);
+            var audio = string.IsNullOrEmpty(unlocked.Audio) ? null : CdnAccelerator.Rewrite(unlocked.Audio!, true);
+            if (video is null && audio is null)
+            {
+                return null;
+            }
+
+            if (unlocked.Quality > 0)
+            {
+                SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedPgcQuality, unlocked.Quality);
+            }
+
+            logger.LogInformation("番剧画质解锁成功：qn={Quality}", unlocked.Quality);
+            return (video, audio);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "番剧画质解锁异常，回退常规地址");
+            return null;
+        }
+    }
+
+    private static string ExtractCookie(string cookie, string name)
+    {
+        foreach (var part in cookie.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var index = part.IndexOf('=', StringComparison.Ordinal);
+            if (index <= 0)
+            {
+                continue;
+            }
+
+            if (part[..index].Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return part[(index + 1)..].Trim();
+            }
+        }
+
+        return string.Empty;
+    }
 }
+
+

@@ -1,5 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -239,12 +240,17 @@ internal static class QualityUnlockService
         // 解锁服务器是拿这个 URL 自己去 B 站取 playurl 的，
         // 所以必须和浏览器发出的一样带 wbi 签名（wts + w_rid）；裸 URL 会被 B 站判风险，
         // 服务端取不到东西就回 {"code":2,"message":"fail"}——这就是「自动最高画质不起效」的直接原因.
+        // 解析服务的接口说明里 url.query 是 { avid, bvid, cid, fn }，浏览器那条请求本来也带着
+        // avid 和 fn，缺了容易被它判成"不是浏览器的请求"，所以先查 aid 再一起签名。
+        var aid = await GetAidAsync(bvid, cookie, logger).ConfigureAwait(false);
         var playQuery = await BiliWbiSigner.SignAsync(
             new Dictionary<string, string>
             {
+                ["avid"] = aid > 0 ? aid.ToString(CultureInfo.InvariantCulture) : "0",
                 ["bvid"] = bvid,
                 ["cid"] = cid,
-                ["qn"] = qn.ToString(),
+                ["qn"] = qn.ToString(CultureInfo.InvariantCulture),
+                ["fn"] = "0",
                 ["type"] = "0",
                 ["otype"] = "json",
                 ["fourk"] = "1",
@@ -260,51 +266,11 @@ internal static class QualityUnlockService
         // 登录态一律转发：解锁服务器要靠它拿到大会员画质.
         // buvid3 缺失时 B 站会对 playurl 走风控，服务端替我们取就失败（表现为 code=2 fail），
         // 所以先看看本地有没有，没有就要一个再一起转发.
-        var cookieForServer = cookie;
-        try
-        {
-            // 浏览器 document.cookie 里还有 buvid4 / _uuid / b_nut 这类风控字段，
-            // 客户端这边只有 6 个字段。服务端拿我们的 cookie 去刷 playurl 时缺这些容易被 B 站
-            // 判风控（表现为服务端取不到数据 → code=2 fail），所以补齐再转发.
-            var (buvid3, buvid4) = await BiliWbiSigner.GetBuvidPairAsync(cookie, logger).ConfigureAwait(false);
-            cookieForServer = AppendCookieValue(cookieForServer, "buvid3", buvid3);
-            cookieForServer = AppendCookieValue(cookieForServer, "buvid4", buvid4);
-
-            // _uuid 与 b_nut 是一对：B 站从这俩判断是不是同一个浏览器会话.
-            var nut = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var guid = Guid.NewGuid().ToString("N").ToUpperInvariant();
-            var uuid = $"{guid[..8]}-{guid[8..12]}-{guid[12..16]}-{guid[16..20]}-{guid[20..32]}{nut >> 8 & 0xFFFFFF:x2}infoc";
-            cookieForServer = AppendCookieValue(cookieForServer, "_uuid", uuid);
-            cookieForServer = AppendCookieValue(cookieForServer, "b_nut", nut.ToString());
-        }
-        catch (Exception ex)
-        {
-            logger?.LogDebug(ex, "补 buvid/风控字段失败，按原 cookie 转发");
-        }
+        var cookieForServer = await PrepareCookieForServerAsync(cookie, logger).ConfigureAwait(false);
 
         // 服务端要的 ui 结构是照脚本来的：ua/mid/vip/level/money/cookie/csrf/name/face.
         // 少了 name、face 会被判成 invalid（实测返回 {"code":2,"message":"invalid"}）.
-        var (name, face, vip, level) = await ReadAccountProfileAsync(cookie, mid, logger).ConfigureAwait(false);
-        logger?.LogInformation(
-            "画质解锁 ui 字段：mid={Mid} name={Name} face={HasFace} vip={Vip} level={Level}",
-            mid,
-            string.IsNullOrEmpty(name) ? "空" : name,
-            string.IsNullOrEmpty(face) ? "无" : "有",
-            vip,
-            level);
-        var sessdata = ExtractCookieValue(cookieForServer, "SESSDATA");
-        var biliJct = ExtractCookieValue(cookieForServer, "bili_jct");
-        var buvid3Value = ExtractCookieValue(cookieForServer, "buvid3");
-        var dedeUserId = ExtractCookieValue(cookieForServer, "DedeUserID");
-
-        // 服务端是拿这些字段自己拼 B 站请求的，所以除了整串 cookie，把关键凭证也单列一份，
-        // 免得它自己从 cookie 里解析失败（脚本侧本来就有 cookie 整串，这里只是多给一份）.
-        var ui = $"{{\"ua\":\"{Escape(UserAgent)}\",\"mid\":\"{Escape(mid)}\","
-            + $"\"vip\":{(vip ? 1 : 0)},\"level\":{level},\"money\":0,"
-            + $"\"cookie\":\"{Escape(cookieForServer)}\",\"csrf\":\"{Escape(csrf)}\","
-            + $"\"name\":\"{Escape(name)}\",\"face\":\"{Escape(face)}\","
-            + $"\"sessdata\":\"{Escape(sessdata)}\",\"bili_jct\":\"{Escape(biliJct)}\","
-            + $"\"buvid3\":\"{Escape(buvid3Value)}\",\"dedeuserid\":\"{Escape(dedeUserId)}\"}}";
+        var ui = await BuildUiAsync(cookieForServer, csrf, mid, logger).ConfigureAwait(false);
         var body = $"{{\"ui\":{ui},\"url\":\"{Escape(playUrl)}\"}}";
 
         // 只记字段名，不记值：日志有可能被贴出去，凭证不能跟着走.
@@ -317,15 +283,176 @@ internal static class QualityUnlockService
                     .Where(p => p.Length > 0)));
 
         // 失败时面板要能说清卡在哪，先把这次请求的"环境快照"备好.
-        var context = $"服务器={Server} qn={qn} "
+        // vip / level 在 BuildUiAsync 里读，这里只记请求侧能看到的.
+        var context = $"服务器={Server} qn={qn} avid={(aid > 0 ? aid.ToString(CultureInfo.InvariantCulture) : "未知")} "
             + $"wbi签名={(playQuery.Contains("w_rid=", StringComparison.Ordinal) ? "有" : "无")} "
             + $"buvid3={(cookieForServer.Contains("buvid3=", StringComparison.Ordinal) ? "有" : "无")} "
-            + $"vip={(vip ? 1 : 0)} lv{level} mid={mid}";
+            + $"mid={mid}";
+
+        return await SendToServerAsync("api/bzview2", ui, body, context, logger).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 番剧 / 影视走另一条接口：<c>api/bzview3</c>，body 里的 url 换成 ogv 的 playview.
+    /// 解析服务的说明里这条要求 <c>url.query = { ep_id, season_id, cid, qn }</c>，少一个都可能判非法.
+    /// </summary>
+    /// <param name="epId">剧集 ep_id.</param>
+    /// <param name="seasonId">番剧 season_id，可为空.</param>
+    /// <param name="cid">分 P cid.</param>
+    /// <param name="qn">请求画质.</param>
+    /// <param name="cookie">本机 cookie.</param>
+    /// <param name="csrf">bili_jct.</param>
+    /// <param name="mid">当前用户 mid.</param>
+    /// <param name="logger">日志.</param>
+    public static async Task<QualityUnlockResult> GetPgcPlayUrlsAsync(
+        string epId,
+        string seasonId,
+        string cid,
+        int qn,
+        string cookie,
+        string csrf,
+        string mid,
+        ILogger? logger = null)
+    {
+        var cookieForServer = await PrepareCookieForServerAsync(cookie, logger).ConfigureAwait(false);
+        var ui = await BuildUiAsync(cookieForServer, csrf, mid, logger).ConfigureAwait(false);
+
+        var query = new List<string>
+        {
+            $"ep_id={Uri.EscapeDataString(epId ?? string.Empty)}",
+            $"season_id={Uri.EscapeDataString(seasonId ?? string.Empty)}",
+            $"cid={Uri.EscapeDataString(cid ?? string.Empty)}",
+            $"qn={qn.ToString(CultureInfo.InvariantCulture)}",
+        };
+        var targetUrl = $"https://api.bilibili.com/ogv/player/playview?{string.Join("&", query)}";
+        var body = $"{{\"ui\":{ui},\"url\":\"{Escape(targetUrl)}\"}}";
+        var context = $"服务器={Server} ep={epId} season={seasonId} cid={cid} qn={qn}";
+
+        logger?.LogInformation("画质解锁（番剧）请求：{Context}", context);
+        return await SendToServerAsync("api/bzview3", ui, body, context, logger).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 补齐转发给服务器的 cookie：buvid3/buvid4 与 _uuid/b_nut 是 B 站的风控字段，
+    /// 客户端本地只有很少几个字段，缺了服务端替我们取 playurl 就会被判风控.
+    /// </summary>
+    private static async Task<string> PrepareCookieForServerAsync(string cookie, ILogger? logger)
+    {
+        var cookieForServer = cookie;
+        try
+        {
+            var (buvid3, buvid4) = await BiliWbiSigner.GetBuvidPairAsync(cookie, logger).ConfigureAwait(false);
+            cookieForServer = AppendCookieValue(cookieForServer, "buvid3", buvid3);
+            cookieForServer = AppendCookieValue(cookieForServer, "buvid4", buvid4);
+
+            // _uuid 与 b_nut 是一对：B 站从这俩判断是不是同一个浏览器会话.
+            var nut = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var guid = Guid.NewGuid().ToString("N").ToUpperInvariant();
+            var uuid = $"{guid[..8]}-{guid[8..12]}-{guid[12..16]}-{guid[16..20]}-{guid[20..32]}{nut >> 8 & 0xFFFFFF:x2}infoc";
+            cookieForServer = AppendCookieValue(cookieForServer, "_uuid", uuid);
+            cookieForServer = AppendCookieValue(cookieForServer, "b_nut", nut.ToString(CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex)
+        {
+            logger?.LogDebug(ex, "补 buvid/风控字段失败，按原 cookie 转发");
+        }
+
+        return cookieForServer;
+    }
+
+    /// <summary>
+    /// 组服务器要的 ui：ua / mid / vip / level / money / cookie / csrf / name / face，
+    /// 外加单列的 sessdata、bili_jct、buvid3、dedeuserid（免得服务端自己从 cookie 里解析失败）.
+    /// </summary>
+    private static async Task<string> BuildUiAsync(
+        string cookieForServer,
+        string csrf,
+        string mid,
+        ILogger? logger)
+    {
+        var (name, face, vip, level) = await ReadAccountProfileAsync(cookieForServer, mid, logger).ConfigureAwait(false);
+        logger?.LogInformation(
+            "画质解锁 ui 字段：mid={Mid} name={Name} face={HasFace} vip={Vip} level={Level}",
+            mid,
+            string.IsNullOrEmpty(name) ? "空" : name,
+            string.IsNullOrEmpty(face) ? "无" : "有",
+            vip,
+            level);
+
+        var sessdata = ExtractCookieValue(cookieForServer, "SESSDATA");
+        var biliJct = ExtractCookieValue(cookieForServer, "bili_jct");
+        var buvid3Value = ExtractCookieValue(cookieForServer, "buvid3");
+        var dedeUserId = ExtractCookieValue(cookieForServer, "DedeUserID");
+
+        return $"{{\"ua\":\"{Escape(UserAgent)}\",\"mid\":\"{Escape(mid)}\","
+            + $"\"vip\":{(vip ? 1 : 0)},\"level\":{level},\"money\":0,"
+            + $"\"cookie\":\"{Escape(cookieForServer)}\",\"csrf\":\"{Escape(csrf)}\","
+            + $"\"name\":\"{Escape(name)}\",\"face\":\"{Escape(face)}\","
+            + $"\"sessdata\":\"{Escape(sessdata)}\",\"bili_jct\":\"{Escape(biliJct)}\","
+            + $"\"buvid3\":\"{Escape(buvid3Value)}\",\"dedeuserid\":\"{Escape(dedeUserId)}\"}}";
+    }
+
+    /// <summary>
+    /// 查视频的 aid：解析服务的 url.query 里要求 avid，浏览器的 playurl 请求也同时带 avid 与 bvid.
+    /// 拿不到就返回 0，调用方按 0 处理.
+    /// </summary>
+    private static async Task<long> GetAidAsync(string bvid, string cookie, ILogger? logger)
+    {
+        if (string.IsNullOrEmpty(bvid))
+        {
+            return 0;
+        }
+
+        if (!bvid.StartsWith("BV", StringComparison.OrdinalIgnoreCase))
+        {
+            return long.TryParse(bvid, out var direct) ? direct : 0;
+        }
 
         try
         {
-            await RegisterAsync(ui, logger).ConfigureAwait(false);
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{Server}/api/bzview2")
+            using var request = CreateRequest($"https://api.bilibili.com/x/web-interface/view?bvid={Uri.EscapeDataString(bvid)}");
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return 0;
+            }
+
+            var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var document = JsonDocument.Parse(text);
+            if (document.RootElement.TryGetProperty("data", out var data)
+                && data.TryGetProperty("aid", out var aidNode))
+            {
+                return aidNode.GetInt64();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogDebug(ex, "画质解锁：查询 avid 失败");
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// 把请求发给解析服务器并解析返回（bzview2 与 bzview3 共用）.
+    /// </summary>
+    private static async Task<QualityUnlockResult> SendToServerAsync(
+        string apiPath,
+        string ui,
+        string body,
+        string context,
+        ILogger? logger)
+    {
+        try
+        {
+            // 注册只在普通视频那条链路上做过，番剧接口不带这一步.
+            if (apiPath.Equals("api/bzview2", StringComparison.Ordinal))
+            {
+                await RegisterAsync(ui, logger).ConfigureAwait(false);
+            }
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{Server}/{apiPath}")
             {
                 Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
             };
@@ -371,7 +498,7 @@ internal static class QualityUnlockService
                     $"{context} · 卡在=解析返回（code=0 但没有 dash）");
             }
 
-            logger.LogInformation("画质解锁成功：qn={Quality}", quality);
+            logger?.LogInformation("画质解锁成功：qn={Quality}", quality);
             return new QualityUnlockResult
             {
                 Success = true,
@@ -468,9 +595,21 @@ internal static class QualityUnlockService
     private static (string? Video, string? Audio, int Quality) ParseDash(JsonElement root)
     {
         // 服务器直接把 playurl 的 JSON 返回回来，结构同 B 站：data.dash.video[] / data.dash.audio[].
+        // 番剧那条（ogv/player/playview）不是这个形状，dash 可能埋在 data.result 或
+        // data.result.video_info 下面，所以逐层往下找，找到哪层用哪层.
         if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
         {
             root = data;
+        }
+
+        if (root.TryGetProperty("result", out var result) && result.ValueKind == JsonValueKind.Object)
+        {
+            root = result;
+        }
+
+        if (root.TryGetProperty("video_info", out var videoInfo) && videoInfo.ValueKind == JsonValueKind.Object)
+        {
+            root = videoInfo;
         }
 
         if (!root.TryGetProperty("dash", out var dash) || dash.ValueKind != JsonValueKind.Object)
@@ -630,6 +769,7 @@ internal sealed class QualityUnlockSyncResult
 
     public bool Success => !string.IsNullOrEmpty(Server);
 }
+
 
 
 
