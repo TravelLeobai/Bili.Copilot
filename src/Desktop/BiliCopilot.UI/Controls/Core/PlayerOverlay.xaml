@@ -817,10 +817,10 @@
                 <Border.Background>
                     <!--  暗色薄亚克力：颜色写死，不跟随应用主题，避免被别的样式带跑  -->
                     <AcrylicBrush
-                        FallbackColor="#E0141414"
+                        FallbackColor="#B8141414"
                         TintColor="#101010"
-                        TintLuminosityOpacity="0.42"
-                        TintOpacity="0.32" />
+                        TintLuminosityOpacity="0.24"
+                        TintOpacity="0.16" />
                 </Border.Background>
                 <Border.RenderTransform>
                     <TranslateTransform x:Name="StatisticsTransform" />
