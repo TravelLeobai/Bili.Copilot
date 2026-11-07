@@ -635,8 +635,9 @@ public sealed partial class PlayerViewModel
                 var endSec = isShowTip ? 2 : 0.1;
                 if (Math.Abs(Player.Position - Player.Duration) < endSec)
                 {
-                    // 到底了：进入结束状态，底部控制栏换成结束页（重播 / 互动 / 相关推荐）.
-                    MarkPlaybackEnded();
+                    // 到底了：先把速度、自动连播这些处理掉.
+                    // 结束页不在这里出现——这里最多提前 2 秒就会进，要等播放器真的停下
+                    // （Paused / Stopped）再切界面，见下面按 PlaybackState 的判断.
                     IsHoldingSpeedChanging = false;
                     if (Math.Abs(_lastSpeed - Player.PlaybackRate) > 0.01)
                     {
@@ -675,6 +676,13 @@ public sealed partial class PlayerViewModel
                         IsEnd = true;
                         IsControlsVisible = true;
                     }
+
+                    // 只有播放器真的停下（keep-open 下停在片尾是 Paused）才切结束页，
+                    // 不要一进"距片尾 2 秒"就切，画面还在走的时候切会显得很突兀.
+                    if (Player.PlaybackState is MpvPlayerState.Paused or MpvPlayerState.Idle)
+                    {
+                        MarkPlaybackEnded();
+                    }
                 }
                 else if (Math.Abs(Player.Position - Player.Duration) > 2 && IsNextTipShown)
                 {
@@ -692,11 +700,26 @@ public sealed partial class PlayerViewModel
                     ClearPlaybackEnded();
                 }
 
-                _prevPosition = Player.Position;
-            }
+                _prevPosition = Player.Position;            }
             else if (Player.Duration < 5)
             {
                 return;
+            }
+        }
+        else if (e.PropertyName == nameof(Player.PlaybackState))
+        {
+            // 状态变成暂停/停止、并且就停在片尾，这时才算"播完了"，切结束页.
+            if (!IsLive
+                && Player.Duration > 5
+                && Math.Abs(Player.Position - Player.Duration) < 1
+                && Player.PlaybackState is MpvPlayerState.Paused or MpvPlayerState.Idle)
+            {
+                MarkPlaybackEnded();
+            }
+            else if (Player.PlaybackState == MpvPlayerState.Playing)
+            {
+                // 重新开始播放（重播、跳回前面、切集）就退出结束状态.
+                ClearPlaybackEnded();
             }
         }
         else if (e.PropertyName == nameof(Player.Duration))
@@ -1349,4 +1372,5 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
 
