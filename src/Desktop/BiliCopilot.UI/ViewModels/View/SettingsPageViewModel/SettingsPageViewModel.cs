@@ -950,7 +950,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         => SettingsToolkit.WriteLocalSetting(SettingNames.AiAutoSave, value);
 
     [RelayCommand]
-    private void SaveAiSettings()
+    private async Task SaveAiSettingsAsync()
     {
         SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEndpoint, AiAdEndpoint ?? string.Empty);
         SettingsToolkit.WriteLocalSetting(SettingNames.AiAdKey, AiAdKey ?? string.Empty);
@@ -959,6 +959,26 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeKey, DashScopeKey ?? string.Empty);
         SettingsToolkit.WriteLocalSetting(SettingNames.DashScopeModel, DashScopeModel ?? string.Empty);
         AiTestStatusText = $"已保存（{DateTime.Now:HH:mm:ss}）";
+
+        // 音频分析用的是另一套配置（阿里云 Key + 转写模型），漏填要到播放时才暴露，
+        // 所以保存时顺手核一遍.
+        var (ok, message) = await AiEndpointTester.TestAudioAnalysisAsync(DashScopeKey, DashScopeModel);
+        AiTestStatusText += ok
+            ? $" · 音频分析可用：{message}"
+            : $" · 音频分析不可用：{message}";
+        if (!ok)
+        {
+            AdSkipStatusText = AiTestStatusText;
+        }
+    }
+
+    [RelayCommand]
+    private async Task TestAudioAnalysisAsync()
+    {
+        AiTestStatusText = "正在测试音频分析…";
+        var (ok, message) = await AiEndpointTester.TestAudioAnalysisAsync(DashScopeKey, DashScopeModel);
+        AiTestStatusText = (ok ? "音频分析可用：" : "音频分析有问题：") + message;
+        AdSkipStatusText = AiTestStatusText;
     }
 
     [RelayCommand]

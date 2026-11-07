@@ -13,6 +13,8 @@ namespace BiliCopilot.UI.Services;
 /// </summary>
 internal static class AiEndpointTester
 {
+    private const string DashScopeBase = "https://dashscope.aliyuncs.com";
+
     private static readonly HttpClient Client = new(new SocketsHttpHandler
     {
         AutomaticDecompression = DecompressionMethods.All,
@@ -133,6 +135,56 @@ internal static class AiEndpointTester
         {
             watch.Stop();
             return (false, $"请求失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 检查音频分析（阿里云 DashScope 转写）的 Key 与转写模型是否被接受.
+    /// </summary>
+    /// <remarks>
+    /// 走的是转写流程的第一步 getPolicy：这一步能同时验出 Key 是否有效、模型名是否被认可，
+    /// 又不会真的上传音频、也不会消耗转写额度.
+    /// </remarks>
+    /// <param name="key">阿里云 DashScope Key.</param>
+    /// <param name="model">转写模型，留空按 paraformer-v2 处理.</param>
+    public static async Task<(bool Ok, string Message)> TestAudioAnalysisAsync(string key, string model)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return (false, "阿里云 DashScope Key 还没填，音频分析会被直接跳过");
+        }
+
+        var useModel = string.IsNullOrWhiteSpace(model) ? "paraformer-v2" : model.Trim();
+        var url = $"{DashScopeBase}/api/v1/uploads?action=getPolicy&model={WebUtility.UrlEncode(useModel)}";
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {key}");
+
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            watch.Stop();
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                return body.Contains("upload_host", StringComparison.Ordinal)
+                    ? (true, $"Key 与模型 {useModel} 都被接受（{watch.ElapsedMilliseconds} ms）")
+                    : (true, $"接口通了（{watch.ElapsedMilliseconds} ms），但没返回上传策略：{Shorten(body, 80)}");
+            }
+
+            return response.StatusCode switch
+            {
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
+                    => (false, $"密钥被拒绝（HTTP {(int)response.StatusCode}）"),
+                HttpStatusCode.NotFound
+                    => (false, "接口路径不对（HTTP 404），检查网络或代理"),
+                _ => (false, $"HTTP {(int)response.StatusCode}：{Shorten(body)}"),
+            };
+        }
+        catch (Exception ex)
+        {
+            watch.Stop();
+            return (false, $"连不上：{ex.Message}");
         }
     }
 

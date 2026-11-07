@@ -180,7 +180,7 @@
                 <TextBox MinWidth="240" Text="{x:Bind ViewModel.DashScopeModel, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
-            <base:SettingsCard Description="填完点这里存下来；关掉下面的自动保存时必须用它" Header="AI 设置">
+            <base:SettingsCard Description="填完点这里存下来；关掉下面的自动保存时必须用它。保存时会顺带核验音频分析" Header="AI 设置">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="Settings" />
                 </base:SettingsCard.HeaderIcon>
@@ -188,6 +188,7 @@
                     <Button Command="{x:Bind ViewModel.SaveAiSettingsCommand}" Content="保存" />
                     <Button Command="{x:Bind ViewModel.TestAiApiCommand}" Content="测试接口" />
                     <Button Command="{x:Bind ViewModel.TestAiModelCommand}" Content="测试模型" />
+                    <Button Command="{x:Bind ViewModel.TestAudioAnalysisCommand}" Content="测试音频分析" />
                 </StackPanel>
             </base:SettingsCard>
 
