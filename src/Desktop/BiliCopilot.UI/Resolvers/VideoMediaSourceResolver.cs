@@ -221,12 +221,12 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         if (video is not null)
         {
             items.Add(new("分辨率", $"{video.Width} × {video.Height}"));
-            items.Add(new("视频码率", $"{video.Bandwidth / 1000} Kbps [{DescribeCodec(video.Codecs)}]"));
+            items.Add(new("视频码率（标称）", $"{video.Bandwidth / 1000} Kbps [{DescribeCodec(video.Codecs)}]"));
         }
 
         if (audio is not null)
         {
-            items.Add(new("音频码率", $"{audio.Bandwidth / 1000} Kbps [{DescribeCodec(audio.Codecs)}]"));
+            items.Add(new("音频码率（标称）", $"{audio.Bandwidth / 1000} Kbps [{DescribeCodec(audio.Codecs)}]"));
         }
 
         items.Add(new("分段", $"视频 {videos.Count} 段 / 音频 {audios.Count} 段"));
@@ -371,4 +371,5 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         return string.Empty;
     }
 }
+
 

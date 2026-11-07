@@ -16,6 +16,7 @@ namespace BiliCopilot.UI.ViewModels.Core;
 public sealed partial class PlayerViewModel
 {
     private DispatcherQueueTimer? _statisticsTimer;
+    private bool _statsProbeReady;
 
     /// <summary>
     /// 统计浮层是否显示.
@@ -46,6 +47,19 @@ public sealed partial class PlayerViewModel
     }
 
     /// <summary>
+    /// 统计浮层第一次打开时把 mpv 探针脚本挂上，之后每秒读一次它写出来的值.
+    /// </summary>
+    private async Task EnsureStatsProbeAsync()
+    {
+        if (_statsProbeReady)
+        {
+            return;
+        }
+
+        _statsProbeReady = await Services.MpvStatsProbe.EnsureLoadedAsync(Client);
+    }
+
+    /// <summary>
     /// 关掉统计浮层.
     /// </summary>
     [RelayCommand]
@@ -60,6 +74,8 @@ public sealed partial class PlayerViewModel
         var lines = new List<PlayerStatisticItem>();
         try
         {
+            await EnsureStatsProbeAsync();
+
             if (_sourceResolver is VideoMediaSourceResolver videoResolver)
             {
                 lines.AddRange(videoResolver.BuildStatistics());
@@ -67,6 +83,20 @@ public sealed partial class PlayerViewModel
             else
             {
                 lines.Add(new("状态", _sourceResolver is null ? "还没有开始播放" : "统计信息目前只对点播视频有效"));
+            }
+
+            // Lua 探针写出来的实时值：码率、丢帧、帧率.
+            var probe = Services.MpvStatsProbe.Read();
+            if (probe is { } stats)
+            {
+                lines.Add(new("视频码率（实时）", stats.VideoBitrate > 0 ? $"{stats.VideoBitrate / 1000d:F0} Kbps" : "—"));
+                lines.Add(new("音频码率（实时）", stats.AudioBitrate > 0 ? $"{stats.AudioBitrate / 1000d:F0} Kbps" : "—"));
+                lines.Add(new("丢帧", stats.Dropped >= 0 ? $"{stats.Dropped:F0}" : "—"));
+                lines.Add(new("帧率", stats.Fps > 0 ? $"{stats.Fps:F2} fps" : "—"));
+            }
+            else
+            {
+                lines.Add(new("mpv 实时统计", "还没读到（打开面板后约 1 秒出数）"));
             }
 
             // 网络活动直接用播放器已经在跟踪的缓存速度，实时且不额外发请求.
