@@ -20,6 +20,7 @@ namespace BiliCopilot.UI.Resolvers;
 internal sealed partial class VideoMediaSourceResolver(IPlayerService playerService, IBiliCookiesResolver cookiesResolver, ILogger<VideoMediaSourceResolver> logger) : MediaSourceResolverBase
 {
     private MediaSnapshot _snapshot;
+    private string _lastUnlockSummary = "未尝试";
     private VideoPart _part;
     private TaskCompletionSource<bool>? _initTask;
     private CancellationTokenSource? _initCts;
@@ -37,6 +38,15 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
     internal void ResetSnapshot(MediaSnapshot snapshot)
     {
         _snapshot = snapshot;
+    }
+
+    /// <summary>
+    /// 这次播放有没有走第三方服务器解锁画质，给统计面板显示.
+    /// </summary>
+    internal string LastUnlockSummary
+    {
+        get => _lastUnlockSummary;
+        private set => _lastUnlockSummary = value;
     }
 
     internal PlayerFormatInformation? GetCurrentFormat()
@@ -207,6 +217,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             "Mime Type",
             $"{video?.MimeType}; codecs=\"{video?.Codecs}\", {audio?.MimeType}; codecs=\"{audio?.Codecs}\""));
         items.Add(new("播放内核", "mpv"));
+        items.Add(new("高画质解锁", LastUnlockSummary));
         if (video is not null)
         {
             items.Add(new("分辨率", $"{video.Width} × {video.Height}"));
@@ -277,6 +288,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         const string referer = InternalHttpExtensions.VideoReferer;
 
         // 启用了画质解锁时，先让第三方服务器代取 playurl（可拿到高画质 dash 地址）.
+        LastUnlockSummary = QualityUnlockService.IsEnabled ? "未尝试" : "否（设置里没开画质解锁）";
         if (QualityUnlockService.IsEnabled)
         {
             var cookie = cookiesResolver.GetCookieString();
@@ -300,9 +312,11 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 var unlockedVideo = string.IsNullOrEmpty(unlocked.Video) ? null : CdnAccelerator.Rewrite(unlocked.Video!, true);
                 var unlockedAudio = string.IsNullOrEmpty(unlocked.Audio) ? null : CdnAccelerator.Rewrite(unlocked.Audio!, true);
                 SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality);
+                LastUnlockSummary = $"是（第三方服务器，qn={(unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality)}）";
                 return (unlockedVideo, unlockedAudio);
             }
 
+            LastUnlockSummary = $"否（{unlocked.Message}）";
             logger.LogInformation("画质解锁不可用（{Message}），改用常规地址", unlocked.Message);
         }
 
@@ -357,3 +371,4 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         return string.Empty;
     }
 }
+

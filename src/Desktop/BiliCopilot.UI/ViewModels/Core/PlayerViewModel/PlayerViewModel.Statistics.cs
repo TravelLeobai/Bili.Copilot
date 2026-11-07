@@ -72,6 +72,8 @@ public sealed partial class PlayerViewModel
             // 网络活动直接用播放器已经在跟踪的缓存速度，实时且不额外发请求.
             var cacheSpeed = Player?.CacheSpeed ?? 0;
             lines.Add(new("网络活动", cacheSpeed < 1 ? "—" : $"{cacheSpeed / 1024d:F0} KB/s"));
+
+            AppendSponsorStatistics(lines);
         }
         catch (Exception ex)
         {
@@ -103,4 +105,49 @@ public sealed partial class PlayerViewModel
     {
         _statisticsTimer?.Stop();
     }
+
+    /// <summary>
+    /// 把广告片段的三个字段接到统计面板后面：有没有、时间戳、识别方式.
+    /// </summary>
+    private void AppendSponsorStatistics(List<PlayerStatisticItem> lines)
+    {
+        var segments = _sponsorSegments ?? [];
+        if (segments.Count == 0)
+        {
+            lines.Add(new("广告片段", "没有"));
+            return;
+        }
+
+        lines.Add(new("广告片段", $"有 {segments.Count} 段"));
+
+        var ordered = segments.OrderBy(p => p.Start).ToList();
+        const int maxShow = 6;
+        var stamps = string.Join(
+            "、",
+            ordered.Take(maxShow).Select(p => $"{FormatSkipStamp(p.Start)}–{FormatSkipStamp(p.End)}"));
+        if (ordered.Count > maxShow)
+        {
+            stamps += $"…共 {ordered.Count} 段";
+        }
+
+        lines.Add(new("广告时间戳", stamps));
+        lines.Add(new(
+            "识别方式",
+            string.Join(" + ", ordered.Select(p => DescribeSponsorSource(p.Source)).Distinct())));
+    }
+
+    /// <summary>
+    /// 片段来源转成人能看懂的说法：来自空降助手服务器，还是本地 AI 识别.
+    /// </summary>
+    private static string DescribeSponsorSource(string? source)
+        => (source ?? string.Empty).ToLowerInvariant() switch
+        {
+            "sponsorblock" => "空降助手服务器（SponsorBlock）",
+            "cloud" => "云端广告数据",
+            "ai" => "AI 识别（字幕 / 音频）",
+            "test" => "测试数据",
+            "" => "未知来源",
+            _ => source!,
+        };
 }
+
