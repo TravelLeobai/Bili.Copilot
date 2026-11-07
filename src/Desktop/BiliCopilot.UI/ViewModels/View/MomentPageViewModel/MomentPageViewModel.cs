@@ -64,7 +64,8 @@ public sealed partial class MomentPageViewModel : ViewModelBase
     [RelayCommand]
     private void ShowComment(MomentInformation data)
     {
-        IsCommentsOpened = true;
+        // 打开请求用版本号表达，面板自己负责收起，两边不互相覆盖.
+        CommentsOpenVersion++;
         if (CommentModule.Id == data.CommentId)
         {
             return;

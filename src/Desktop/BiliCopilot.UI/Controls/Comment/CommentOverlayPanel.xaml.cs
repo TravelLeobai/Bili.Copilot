@@ -29,6 +29,11 @@ public sealed partial class CommentOverlayPanel : CommentMainPanelBase
     /// <summary>
     /// 面板可见性.
     /// </summary>
+    /// <remarks>
+    /// 这个属性归控件自己管：点遮罩收起时只改它，不回调 ViewModel。
+    /// 之前试过把点击结果同步回 ViewModel，结果是在点击事件里触发重绘、把面板自己从
+    /// 可视树拆掉，直接崩溃；而且 ViewModel 那边一旦把它推回 true，面板就自己弹回来.
+    /// </remarks>
     public bool IsPanelOpened
     {
         get => (bool)GetValue(IsPanelOpenedProperty);
@@ -68,5 +73,9 @@ public sealed partial class CommentOverlayPanel : CommentMainPanelBase
     }
 
     private void OnHolderTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
-        => IsPanelOpened = !IsPanelOpened;
+    {
+        // 遮罩只在面板打开时可见，所以这里一定是「关闭」.
+        // 只动自己的可见性，不碰 ViewModel：碰了就会在事件派发途中触发重绘.
+        IsPanelOpened = false;
+    }
 }

@@ -22,12 +22,20 @@ public sealed class MomentShell : Component
     private readonly VideoMomentSectionDetailControl _videoControl = new();
     private readonly ComprehensiveMomentSectionDetailControl _comprehensiveControl = new();
     private readonly CommentOverlayPanel _commentPanel = new();
+    private int _commentsOpenVersion;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MomentShell"/> class.
     /// </summary>
     /// <param name="viewModel">页面视图模型.</param>
-    public MomentShell(MomentPageViewModel viewModel) => _viewModel = viewModel;
+    public MomentShell(MomentPageViewModel viewModel)
+    {
+        _viewModel = viewModel;
+
+        // 用当前版本号做基线：只响应「之后」的打开请求，
+        // 否则首次渲染就会当成发生了一次打开，面板一进来就盖在动态页上.
+        _commentsOpenVersion = viewModel.CommentsOpenVersion;
+    }
 
     /// <inheritdoc/>
     public override Element Render()
@@ -45,7 +53,15 @@ public sealed class MomentShell : Component
         }
 
         _commentPanel.ViewModel = vm.CommentModule;
-        _commentPanel.IsPanelOpened = vm.IsCommentsOpened;
+
+        // 只在「用户又请求打开」时把面板打开；收起由面板自己处理（点遮罩）.
+        // 这里绝不能无条件写 IsPanelOpened = vm 的值：用户刚收起的面板会被下一帧推回打开，
+        // 动态列表一滚动就复现「旧评论列表自己弹出来」.
+        if (_commentsOpenVersion != vm.CommentsOpenVersion)
+        {
+            _commentsOpenVersion = vm.CommentsOpenVersion;
+            _commentPanel.IsPanelOpened = true;
+        }
 
         // 两个分区的控件都常驻，切 tab 只切控件的 Visibility.
         // 之前是在同一个位置换 TypeKey，Reactor 会重建宿主元素，挂在上面的控件实例
@@ -65,14 +81,16 @@ public sealed class MomentShell : Component
             new XamlHostElement(() => _comprehensiveControl, _ => { })
                 .Grid(row: 1)
                 .WithKey("moment-comprehensive"),
-        };
 
-        if (vm.IsCommentsOpened)
-        {
-            children.Add(new XamlHostElement(() => _commentPanel, _ => { })
+            // 评论面板常驻，开关只切它自己的 Visibility（绑 IsPanelOpened）.
+            // 之前是按 IsCommentsOpened 决定要不要把它加进树：每次开关就是挂载/卸载一次，
+            // 卸载时 OnControlUnloaded 会把里面挂着的 Reactor 宿主整个 dispose 掉，
+            // 于是每关一次面板都要重建评论组件，列表跟着从头来过；
+            // 在点击事件里同步触发还会把事件源自己拆掉，直接把进程搞崩.
+            new XamlHostElement(() => _commentPanel, _ => { })
                 .Grid(row: 0, rowSpan: 2)
-                .WithKey("moment-comments"));
-        }
+                .WithKey("moment-comments"),
+        };
 
         return Grid(
             columns: [GridSize.Star()],
