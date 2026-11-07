@@ -295,6 +295,12 @@ internal static class QualityUnlockService
             + $"\"name\":\"{Escape(name)}\",\"face\":\"{Escape(face)}\"}}";
         var body = $"{{\"ui\":{ui},\"url\":\"{Escape(playUrl)}\"}}";
 
+        // 失败时面板要能说清卡在哪，先把这次请求的"环境快照"备好.
+        var context = $"服务器={Server} qn={qn} "
+            + $"wbi签名={(playQuery.Contains("w_rid=", StringComparison.Ordinal) ? "有" : "无")} "
+            + $"buvid3={(cookieForServer.Contains("buvid3=", StringComparison.Ordinal) ? "有" : "无")} "
+            + $"vip={(vip ? 1 : 0)} lv{level} mid={mid}";
+
         try
         {
             await RegisterAsync(ui, logger).ConfigureAwait(false);
@@ -310,7 +316,9 @@ internal static class QualityUnlockService
             if (!response.IsSuccessStatusCode)
             {
                 logger?.LogWarning("画质解锁请求失败：HTTP {Status}", (int)response.StatusCode);
-                return QualityUnlockResult.Failed($"HTTP {(int)response.StatusCode}");
+                return QualityUnlockResult.Failed(
+                    $"HTTP {(int)response.StatusCode}",
+                    $"{context} · 卡在=服务器响应 · 返回={Shorten(text, 120)}");
             }
 
             using var document = JsonDocument.Parse(text);
@@ -325,14 +333,18 @@ internal static class QualityUnlockService
                 }
 
                 logger?.LogWarning("画质解锁被拒绝：code={Code} message={Message}", code, message);
-                return QualityUnlockResult.Failed(message);
+                return QualityUnlockResult.Failed(
+                    message,
+                    $"{context} · 卡在=服务端替我们取 playurl · code={code} · 服务器返回={Shorten(text, 120)}");
             }
 
             var (video, audio, quality) = ParseDash(root);
             if (string.IsNullOrEmpty(video) && string.IsNullOrEmpty(audio))
             {
                 logger?.LogWarning("画质解锁返回里没有 dash 地址");
-                return QualityUnlockResult.Failed("返回数据里没有可用地址");
+                return QualityUnlockResult.Failed(
+                    "返回数据里没有可用地址",
+                    $"{context} · 卡在=解析返回（code=0 但没有 dash）");
             }
 
             logger.LogInformation("画质解锁成功：qn={Quality}", quality);
@@ -347,7 +359,9 @@ internal static class QualityUnlockService
         catch (Exception ex)
         {
             logger?.LogWarning(ex, "画质解锁请求异常");
-            return QualityUnlockResult.Failed(ex.Message);
+            return QualityUnlockResult.Failed(
+                ex.Message,
+                $"{context} · 卡在=请求服务器（{ex.GetType().Name}）");
         }
     }
 
@@ -499,6 +513,20 @@ internal static class QualityUnlockService
     private static string Escape(string value)
         => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
+    /// <summary>
+    /// 截断服务器返回体，诊断信息里只留一小段.
+    /// </summary>
+    private static string Shorten(string? value, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "空";
+        }
+
+        var text = value.Replace("\r", " ").Replace("\n", " ").Trim();
+        return text.Length <= max ? text : text[..max] + "…";
+    }
+
     private const string UserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 }
@@ -518,8 +546,13 @@ internal sealed class QualityUnlockResult
 
     public string? Message { get; init; }
 
-    public static QualityUnlockResult Failed(string message)
-        => new() { Success = false, Message = message };
+    /// <summary>
+    /// 诊断用的详细信息：走的哪个服务器、签名和风控标记有没有、卡在哪一步.
+    /// </summary>
+    public string? Diagnostic { get; init; }
+
+    public static QualityUnlockResult Failed(string message, string? diagnostic = null)
+        => new() { Success = false, Message = message, Diagnostic = diagnostic };
 }
 
 /// <summary>
@@ -535,6 +568,7 @@ internal sealed class QualityUnlockSyncResult
 
     public bool Success => !string.IsNullOrEmpty(Server);
 }
+
 
 
 

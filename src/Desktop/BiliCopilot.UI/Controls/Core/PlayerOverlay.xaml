@@ -810,11 +810,18 @@
                 Padding="0,0,0,10"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
-                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderBrush="#33FFFFFF"
                 BorderThickness="1"
                 CornerRadius="10"
-                Opacity="0.92">
+                RequestedTheme="Dark">
+                <Border.Background>
+                    <!--  暗色薄亚克力：颜色写死，不跟随应用主题，避免被别的样式带跑  -->
+                    <AcrylicBrush
+                        FallbackColor="#E0141414"
+                        TintColor="#101010"
+                        TintLuminosityOpacity="0.42"
+                        TintOpacity="0.32" />
+                </Border.Background>
                 <Border.RenderTransform>
                     <TranslateTransform x:Name="StatisticsTransform" />
                 </Border.RenderTransform>
@@ -839,18 +846,25 @@
                             FontSize="14"
                             FontWeight="SemiBold"
                             Text="统计信息" />
-                        <Button
+                        <Border
                             Grid.Column="1"
-                            Width="32"
-                            Height="28"
-                            Padding="0"
-                            AutomationProperties.Name="关闭统计信息"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Click="OnCloseStatisticsClick"
-                            ToolTipService.ToolTip="关闭">
-                            <ic:SymbolIcon Symbol="Dismiss" />
-                        </Button>
+                            Background="#22FFFFFF"
+                            BorderBrush="#33FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <Button
+                                Width="32"
+                                Height="28"
+                                Padding="0"
+                                AutomationProperties.Name="关闭统计信息"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OnCloseStatisticsClick"
+                                CornerRadius="8"
+                                ToolTipService.ToolTip="关闭">
+                                <ic:SymbolIcon Symbol="Dismiss" />
+                            </Button>
+                        </Border>
                     </Grid>
                     <ItemsControl
                         Grid.Row="1"

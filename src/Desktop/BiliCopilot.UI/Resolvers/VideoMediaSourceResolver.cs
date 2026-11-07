@@ -21,6 +21,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 {
     private MediaSnapshot _snapshot;
     private string _lastUnlockSummary = "未尝试";
+    private string _lastUnlockDiagnostic = string.Empty;
     private VideoPart _part;
     private TaskCompletionSource<bool>? _initTask;
     private CancellationTokenSource? _initCts;
@@ -47,6 +48,15 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
     {
         get => _lastUnlockSummary;
         private set => _lastUnlockSummary = value;
+    }
+
+    /// <summary>
+    /// 解锁失败时的诊断信息（成功或没尝试时为空）.
+    /// </summary>
+    internal string LastUnlockDiagnostic
+    {
+        get => _lastUnlockDiagnostic;
+        private set => _lastUnlockDiagnostic = value;
     }
 
     internal PlayerFormatInformation? GetCurrentFormat()
@@ -218,6 +228,10 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             $"{video?.MimeType}; codecs=\"{video?.Codecs}\", {audio?.MimeType}; codecs=\"{audio?.Codecs}\""));
         items.Add(new("播放内核", "mpv"));
         items.Add(new("高画质解锁", LastUnlockSummary));
+        if (!string.IsNullOrEmpty(LastUnlockDiagnostic))
+        {
+            items.Add(new("解锁失败原因", LastUnlockDiagnostic));
+        }
         if (video is not null)
         {
             items.Add(new("分辨率", $"{video.Width} × {video.Height}"));
@@ -313,10 +327,12 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                 var unlockedAudio = string.IsNullOrEmpty(unlocked.Audio) ? null : CdnAccelerator.Rewrite(unlocked.Audio!, true);
                 SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality);
                 LastUnlockSummary = $"是（第三方服务器，qn={(unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality)}）";
+                LastUnlockDiagnostic = string.Empty;
                 return (unlockedVideo, unlockedAudio);
             }
 
             LastUnlockSummary = $"否（{unlocked.Message}）";
+            LastUnlockDiagnostic = unlocked.Diagnostic ?? string.Empty;
             logger.LogInformation("画质解锁不可用（{Message}），改用常规地址", unlocked.Message);
         }
 
@@ -371,5 +387,6 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         return string.Empty;
     }
 }
+
 
 
