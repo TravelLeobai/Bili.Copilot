@@ -137,18 +137,25 @@ public sealed class CommentPanel : Component
                     box.ResetSelectedCommand = detail.ResetReplyTargetCommand;
                     box.ReplyTip = detail.ReplyTarget;
                     box.IsEnabled = !detail.IsReplying;
+                    if (viewModel.ShouldFocusInput)
+                    {
+                        viewModel.ShouldFocusInput = false;
+                        box.Focus(FocusState.Programmatic);
+                    }
                 });
+
+            // 返回按钮改成箭头图标：文字版在窄面板里会挤掉其它元素.
+            var backButton = CreateBackButton(viewModel);
 
             return Grid(
                 columns: new[] { GridSize.Star() },
                 rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
-                HyperlinkButton("返回上一级", onClick: () => viewModel.BackToMainCommand.Execute(default))
-                    .Margin(16, 2, 0, 2)
-                    .Grid(row: 0, column: 0),
+                backButton.Grid(row: 0, column: 0),
                 detailStatus.Grid(row: 1, column: 0),
-                detailList.Grid(row: 2, column: 0),
-                detailInput.Grid(row: 3, column: 0))
-                .Padding(0, 6, 0, 12);
+                detailList.WithKey("detail-list").Grid(row: 2, column: 0),
+                detailInput.WithKey("detail-input").Grid(row: 3, column: 0))
+                .Padding(0, 6, 0, 12)
+                .WithKey("panel-detail");
         }
 
 
@@ -230,16 +237,22 @@ public sealed class CommentPanel : Component
                 box.ResetSelectedCommand = viewModel.ResetReplyTargetCommand;
                 box.ReplyTip = viewModel.ReplyTarget;
                 box.IsEnabled = !viewModel.IsReplying;
+                if (viewModel.ShouldFocusInput)
+                {
+                    viewModel.ShouldFocusInput = false;
+                    box.Focus(FocusState.Programmatic);
+                }
             });
 
         return Grid(
             columns: new[] { GridSize.Star() },
             rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
-            header.Grid(row: 0, column: 0),
+            header.WithKey("panel-head").Grid(row: 0, column: 0),
             status.Grid(row: 1, column: 0),
-            list.Grid(row: 2, column: 0),
-            input.Grid(row: 3, column: 0))
-            .Padding(0, 12, 0, 12);
+            list.WithKey("main-list").Grid(row: 2, column: 0),
+            input.WithKey("main-input").Grid(row: 3, column: 0))
+            .Padding(0, 12, 0, 12)
+            .WithKey("panel-main");
     }
 
     private static string GetSortName(CommentSortType sortType)
@@ -333,8 +346,33 @@ public sealed class CommentPanel : Component
             .WithKey(key);
     }
 
-    private static Button CreateReplyButton()
-    {
+    /// <summary>
+    /// 返回上一级：箭头图标按钮.
+    /// </summary>
+    private static Element CreateBackButton(CommentMainViewModel viewModel)
+        => new XamlHostElement(
+            () =>
+            {
+                var button = new Button
+                {
+                    Content = new FluentIcons.WinUI.SymbolIcon
+                    {
+                        Symbol = FluentIcons.Common.Symbol.ArrowLeft,
+                        FontSize = 14,
+                    },
+                    Padding = new Thickness(10, 6, 10, 6),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                ToolTipService.SetToolTip(button, "返回上一级");
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "返回上一级");
+                button.Click += (_, _) => viewModel.BackToMainCommand.Execute(default);
+                return button;
+            },
+            _ => { })
+            .HAlign(HorizontalAlignment.Left);
+
+    private static Button CreateReplyButton()    {
         var button = new Button
         {
             Style = Application.Current.Resources.TryGetValue("SmallIconButtonStyle", out var style) && style is Style buttonStyle ? buttonStyle : null,
@@ -485,3 +523,4 @@ public sealed class CommentPanel : Component
         }
     }
 }
+

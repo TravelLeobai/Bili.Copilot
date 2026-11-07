@@ -158,12 +158,18 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
     {
         _replyItem = null;
         ReplyTarget = default;
+        ShouldFocusInput = false;
     }
 
     private void SetReplyTarget(CommentItemViewModel item)
     {
         _replyItem = item;
         ReplyTarget = item?.Data.User.User.Name;
+
+        // 同一个人再点一次时 ReplyTarget 值不变，不发通知面板就毫无反应.
+        // 版本号强制通知一次，并让输入框抢焦点，给个能看见的反馈.
+        ReplyTargetVersion++;
+        ShouldFocusInput = true;
     }
 
     private void ShowMore(CommentDetailViewModel vm)

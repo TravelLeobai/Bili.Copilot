@@ -47,6 +47,20 @@ public sealed partial class CommentMainViewModel
     [ObservableProperty]
     private string _replyTarget;
 
+    /// <summary>
+    /// 点过回复按钮的计数.
+    /// 光改 ReplyTarget 时，如果目标还是同一个人（值没变）不会触发重绘，
+    /// 面板看起来就像没反应；用这个计数保证每次都通知一次.
+    /// </summary>
+    [ObservableProperty]
+    private int _replyTargetVersion;
+
+    /// <summary>
+    /// 需要把焦点丢进输入框（点回复按钮后给个可见反馈）.
+    /// </summary>
+    [ObservableProperty]
+    private bool _shouldFocusInput;
+
     [ObservableProperty]
     private bool _isReplying;
 
