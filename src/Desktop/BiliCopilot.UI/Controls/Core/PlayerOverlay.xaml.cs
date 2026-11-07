@@ -378,6 +378,15 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     /// 直播弹幕浮层可见性.
     /// </summary>
     /// <summary>
+    /// 顶栏右侧那排按钮（画质 / CDN / 空降 / 置顶 / 设置）的可见性：
+    /// 播放结束页会占满整屏，这排留着既没用又碍事，只在播放中显示.
+    /// </summary>
+    /// <param name="isEnded">是否播放结束.</param>
+    /// <returns>可见性.</returns>
+    public static Visibility GetFooterVisibility(bool isEnded)
+        => isEnded ? Visibility.Collapsed : Visibility.Visible;
+
+    /// <summary>
     /// 控制栏可见性：播放结束时收起（结束页自己带一根不可拖动的进度条）.
     /// </summary>
     /// <param name="controlsVisible">控制栏是否应当可见.</param>
@@ -448,4 +457,5 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
 

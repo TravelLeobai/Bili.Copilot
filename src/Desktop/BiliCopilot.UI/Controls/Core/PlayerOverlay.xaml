@@ -463,7 +463,8 @@
                         <StackPanel
                             x:Name="FooterContainer"
                             HorizontalAlignment="Right"
-                            Orientation="Horizontal">
+                            Orientation="Horizontal"
+                            Visibility="{x:Bind local:PlayerOverlay.GetFooterVisibility(ViewModel.IsPlaybackEnded), Mode=OneWay}">
                             <TextBlock
                                 VerticalAlignment="Center"
                                 FontSize="12"
