@@ -85,6 +85,8 @@ public sealed partial class PlayerViewModel
                 lines.Add(new("状态", _sourceResolver is null ? "还没有开始播放" : "统计信息目前只对点播视频有效"));
             }
 
+            AppendEnhancementStatistics(lines);
+
             // Lua 探针写出来的实时值：码率、丢帧、帧率.
             var probe = Services.MpvStatsProbe.Read();
             if (probe is { } stats)
@@ -134,6 +136,63 @@ public sealed partial class PlayerViewModel
     private void StopStatisticsTimer()
     {
         _statisticsTimer?.Stop();
+    }
+
+    /// <summary>
+    /// 着色器与英伟达超分的当前状态.
+    /// 状态取自播放器上的这几个枚举，和右键菜单里勾着的一致.
+    /// </summary>
+    private void AppendEnhancementStatistics(List<PlayerStatisticItem> lines)
+    {
+        if (IsLive)
+        {
+            lines.Add(new("着色器", "不适用（直播）"));
+            lines.Add(new("英伟达超分", "不适用（直播）"));
+            return;
+        }
+
+        var shaders = new List<string>();
+        AddShader(shaders, "Anime4K", Anime4KMode.ToString());
+        AddShader(shaders, "ArtCNN", ArtCNNMode.ToString());
+        AddShader(shaders, "NNEDI3", Nnedi3Mode.ToString());
+        AddShader(shaders, "RAVU", RavuMode.ToString());
+
+        var shaderText = shaders.Count == 0 ? "未启用" : string.Join(" + ", shaders);
+        if (IsEnhancementRecovered)
+        {
+            shaderText += "（本次已回退）";
+        }
+
+        lines.Add(new("着色器", shaderText));
+        lines.Add(new("英伟达超分", DescribeVsr(Models.Constants.VsrScale.None == VsrScale ? "None" : VsrScale.ToString(), IsEnhancementRecovered)));
+    }
+
+    private static void AddShader(List<string> target, string name, string? value)
+    {
+        if (string.IsNullOrEmpty(value) || string.Equals(value, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        target.Add($"{name}={value}");
+    }
+
+    private static string DescribeVsr(string? value, bool rolledBack)
+    {
+        if (string.IsNullOrEmpty(value) || string.Equals(value, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            return rolledBack ? "未启用（本次已回退）" : "未启用";
+        }
+
+        var label = value.ToLowerInvariant() switch
+        {
+            "x1_5" => "1.5x",
+            "x2_0" => "2x",
+            "x3_0" => "3x",
+            "x4_0" => "4x",
+            _ => value,
+        };
+        return rolledBack ? $"{label}（本次已回退）" : label;
     }
 
     /// <summary>
