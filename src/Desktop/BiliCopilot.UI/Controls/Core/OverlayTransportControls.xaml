@@ -451,7 +451,8 @@
                         Click="OnDanmakuOptionsButtonClick"
                         IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
                         Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}">
+                        ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}"
+                        Visibility="{x:Bind local:OverlayTransportControls.GetLiveHidden(ViewModel.IsLive), Mode=OneWay}">
                         <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
                     </Button>
                 </StackPanel>
