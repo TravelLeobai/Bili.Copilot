@@ -151,7 +151,7 @@
                                     Height="48"
                                     Padding="0"
                                     HorizontalAlignment="Center"
-                                    Command="{x:Bind ViewModel.EndShareCommand, Mode=OneWay}"
+                                    Command="{x:Bind ViewModel.ShareFromEndCommand, Mode=OneWay}"
                                     CornerRadius="24"
                                     ToolTipService.ToolTip="分享">
                                     <ic:SymbolIcon FontSize="16" Symbol="Share" />
@@ -205,4 +205,5 @@
             Value="{x:Bind ViewModel.Player.Position, Mode=OneWay}" />
     </Grid>
 </core:PlayerControlBase>
+
 

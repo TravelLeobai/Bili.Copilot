@@ -1,6 +1,8 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using System.Collections.ObjectModel;
+using Richasy.WinUIKernel.Share.Base;
+using Windows.ApplicationModel.DataTransfer;
 using BiliCopilot.UI.ViewModels.Components;
 using Richasy.BiliKernel.Bili.Media;
 using BiliCopilot.UI.Models.Constants;
@@ -72,6 +74,31 @@ public sealed partial class PlayerViewModel
     /// 收藏数文字.
     /// </summary>
     public string EndFavoriteText => FormatEndCount(EndConnector?.FavoriteCount ?? 0);
+
+    /// <summary>
+    /// 分享：直接把视频链接复制到剪贴板，并在播放窗口弹一条提示.
+    /// 原来走的是系统分享面板（ShareVideoUrlCommand），在播放窗口里既多一步、提示也不可见.
+    /// </summary>
+    [RelayCommand]
+    private void ShareFromEnd()
+    {
+        var connector = EndConnector;
+        if (connector is null)
+        {
+            return;
+        }
+
+        var url = !string.IsNullOrEmpty(connector.BvId)
+            ? $"https://www.bilibili.com/video/{connector.BvId}"
+            : $"https://www.bilibili.com/video/av{connector.AvId}";
+
+        var package = new DataPackage();
+        package.SetText(url);
+        package.SetWebLink(new Uri(url));
+        Clipboard.SetContent(package);
+
+        Window?.ShowTip("已经复制视频链接，请自行粘贴", InfoType.Success);
+    }
 
     /// <summary>
     /// 关注命令.
@@ -264,6 +291,8 @@ public sealed partial class PlayerViewModel
             ? $"{value / 10000:F1}万"
             : Math.Round(value).ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
 }
+
+
 
 
 
