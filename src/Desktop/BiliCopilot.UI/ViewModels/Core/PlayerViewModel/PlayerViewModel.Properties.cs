@@ -44,6 +44,7 @@ public sealed partial class PlayerViewModel
     private const int RightKeyLongPressDelay = 500;
     private bool _isRightKeyDown;
     private bool _isTlsFailed;
+    private DispatcherQueueTimer? _endSettleTimer;
     private double _prevPosition;
     private bool _isBroken;
     private IReadOnlyList<SponsorSegment> _sponsorSegments = Array.Empty<SponsorSegment>();
@@ -284,3 +285,4 @@ public sealed partial class PlayerViewModel
 
     public ObservableCollection<SystemFont> Fonts { get; } = [];
 }
+

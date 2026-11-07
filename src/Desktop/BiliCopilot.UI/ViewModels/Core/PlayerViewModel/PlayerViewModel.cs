@@ -273,19 +273,35 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         CheckFullScreen();
         CheckCompactOverlay();
         ProgressChanged?.Invoke(this, 0);
-        await LoadSourcesAsync();
-        await LoadSubtitlesAsync();
-        if (Window.IsClosed)
+        try
         {
-            return;
-        }
+            logger.LogInformation("重载诊断：开始解析播放源");
+            await LoadSourcesAsync();
+            logger.LogInformation("重载诊断：播放源解析完成，开始加载字幕");
+            await LoadSubtitlesAsync();
+            logger.LogInformation("重载诊断：字幕加载完成");
+            if (Window.IsClosed)
+            {
+                return;
+            }
 
-        if (UseWebEngine)
+            if (UseWebEngine)
+            {
+                await LoadWebMediaAsync();
+            }
+        }
+        catch (Exception ex)
         {
-            await LoadWebMediaAsync();
+            // 必须兜住：以前没有 try/finally，任何异常都会让 IsConnecting 永远为 true，
+            // 界面就卡在"连接中，请稍候"——重播走重载链路时实测就是这样卡死的.
+            logger.LogError(ex, "加载播放源或字幕失败");
+            ErrorMessage = ex.Message;
         }
-
-        IsConnecting = false;
+        finally
+        {
+            logger.LogInformation("重载诊断：播放初始化收尾，关闭连接中状态");
+            IsConnecting = false;
+        }
     }
 
     public void UpdateTheme(ElementTheme theme)
@@ -1131,6 +1147,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
+
 
 
 

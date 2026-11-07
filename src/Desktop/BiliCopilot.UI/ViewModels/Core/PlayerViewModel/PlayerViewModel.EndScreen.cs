@@ -8,6 +8,8 @@ using Richasy.BiliKernel.Bili.Media;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.ViewModels.Items;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Dispatching;
+using Richasy.MpvKernel.Core.Enums;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -159,10 +161,30 @@ public sealed partial class PlayerViewModel
     public IRelayCommand? EndOpenUserSpaceCommand => EndConnector?.OpenUserSpaceCommand;
 
     /// <summary>
-    /// 重播：整条链路重新加载后从头播（沿用修复"播完后点播放没反应"的那条路径）.
+    /// 结束页的"重播"：把当前媒体跳回 0 秒继续播即可，不要走 ReloadAtAsync——
+    /// 那条路会重走一遍网络解析（画质解锁 / CDN / 字幕 / 空降），实测会卡在"连接中".
     /// </summary>
     [RelayCommand]
-    private async Task ReplayFromEndAsync() => await ReloadAtAsync(0);
+    private async Task ReplayFromEndAsync()
+    {
+        logger.LogInformation("结束页重播：跳回 0 秒继续播放（不重新解析源）");
+        try
+        {
+            ClearPlaybackEnded();
+            await ApplySeekAsync(0);
+            if (Player is not null && !Player.IsWebEngine && Player.PlaybackState != MpvPlayerState.Playing)
+            {
+                await ApplyResumeAsync();
+            }
+
+            IsControlsVisible = false;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "结束页重播失败");
+            Window?.ShowTip("重播失败，请退出后重新打开视频", InfoType.Error);
+        }
+    }
 
     /// <summary>
     /// 结束页用到的视频连接器（互动按钮直接绑它，保证收藏夹等异步数据能实时更新）.
@@ -172,6 +194,43 @@ public sealed partial class PlayerViewModel
     /// <summary>
     /// 标记进入结束状态，并准备推荐数据.
     /// </summary>
+    /// <summary>
+    /// 片尾防抖：最后一次位置更新后再等 700ms，位置还在片尾就算播完了.
+    /// mpv keep-open 停住时上报的位置常常离真实时长差零点几秒，光靠位置阈值判不出来.
+    /// </summary>
+    private void ScheduleEndSettleCheck()
+    {
+        if (_endSettleTimer is null)
+        {
+            _endSettleTimer = queue.CreateTimer();
+            _endSettleTimer.IsRepeating = false;
+        }
+
+        _endSettleTimer.Interval = TimeSpan.FromMilliseconds(700);
+        _endSettleTimer.Tick -= OnEndSettleTimerTick;
+        _endSettleTimer.Tick += OnEndSettleTimerTick;
+        _endSettleTimer.Start();
+    }
+
+    private void OnEndSettleTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        sender.Tick -= OnEndSettleTimerTick;
+        if (Player is null || IsPlaybackEnded || IsLive)
+        {
+            return;
+        }
+
+        if (Player.Duration > 5 && Player.Position >= Player.Duration - 2)
+        {
+            logger.LogInformation(
+                "片尾防抖命中，切结束页：position={Position:F2} duration={Duration:F2}",
+                Player.Position,
+                Player.Duration);
+            MarkPlaybackEnded();
+        }
+    }
+
     internal void MarkPlaybackEnded()
     {
         if (IsPlaybackEnded)
@@ -291,6 +350,8 @@ public sealed partial class PlayerViewModel
             ? $"{value / 10000:F1}万"
             : Math.Round(value).ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
 }
+
+
 
 
 

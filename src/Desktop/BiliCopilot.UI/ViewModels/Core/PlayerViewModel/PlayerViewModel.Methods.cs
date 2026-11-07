@@ -677,9 +677,9 @@ public sealed partial class PlayerViewModel
                         IsControlsVisible = true;
                     }
 
-                    // 切结束页的时机：位置到片尾最后 0.3 秒，或者播放器状态已经变成暂停/空闲.
-                    // 只靠 PlaybackState 不行——PlayerSurface 是把 mpv 的属性变更原样转发的，
-                    // 实测播完时不一定有 PlaybackState 的变更事件（上一版就是这样导致结束页不出现）.
+                    // 切结束页的时机：位置真的到片尾（最后 0.3 秒），
+                    // 或者位置已经不再推进（用防抖定时器判断，见 ScheduleEndSettleCheck）.
+                    // 只靠 PlaybackState 不行——片尾那一刻 mpv 上报的仍是 Playing.
                     if (Player.Position >= Player.Duration - 0.3
                         || Player.PlaybackState is MpvPlayerState.Paused or MpvPlayerState.Idle)
                     {
@@ -693,6 +693,11 @@ public sealed partial class PlayerViewModel
                         }
 
                         MarkPlaybackEnded();
+                    }
+                    else
+                    {
+                        // 还在最后一两秒里、位置仍在推进：起个防抖，等它停下来再切.
+                        ScheduleEndSettleCheck();
                     }
                 }
                 else if (Math.Abs(Player.Position - Player.Duration) > 2 && IsNextTipShown)
@@ -1060,7 +1065,9 @@ public sealed partial class PlayerViewModel
         {
             if (_sourceResolver is VideoMediaSourceResolver videoResolver)
             {
+                logger.LogInformation("重载诊断：开始解析视频源");
                 var sources = await videoResolver.GetSourcesAsync();
+                logger.LogInformation("重载诊断：视频源解析完成，共 {Count} 个", sources?.Count ?? 0);
                 IsSourceSelectable = sources?.Count > 1;
                 Sources.Clear();
                 if (sources != null)
@@ -1082,7 +1089,9 @@ public sealed partial class PlayerViewModel
 
                 var c = ((VideoConnectorViewModel)Connector);
                 DanmakuSend.ResetData(c._view.Information.Identifier.Id, c._part.Identifier.Id);
+                logger.LogInformation("重载诊断：开始初始化下载器");
                 c.InitializeDownloader(sources);
+                logger.LogInformation("重载诊断：下载器初始化完成");
             }
             else if (_sourceResolver is PgcMediaSourceResolver pgcResolver)
             {
@@ -1381,5 +1390,6 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
 
 
