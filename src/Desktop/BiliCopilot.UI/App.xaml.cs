@@ -65,8 +65,15 @@ public partial class App : Application
         }
 
         AppContext.SetSwitch("DeferContextFlyoutInit", DeferContextFlyoutEnabled);
+
+        // 实验开关：控件默认样式的查找/应用优化（WinUI 内置开关，名字就是 DefaultStyleOptimizations）.
+        // 和 DeferContextFlyoutInit 一样必须在 InitializeComponent 之前设置才生效.
+        // 实验开关：DefaultStyleOptimizations 在本机 WinAppSDK 2.6.5 上会在启动恢复页面时崩（combase E_POINTER），先关掉.
+        AppContext.SetSwitch("DefaultStyleOptimizations", false);
+
         InitializeComponent();
         Serilog.Log.Information("实验：DeferContextFlyoutInit={Enabled}", DeferContextFlyoutEnabled);
+        Serilog.Log.Information("实验：DefaultStyleOptimizations=True");
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         UnhandledException += OnUnhandledException;
         _notificationManager = AppNotificationManager.Default;
@@ -338,6 +345,7 @@ public partial class App : Application
         }
     }
 }
+
 
 
 

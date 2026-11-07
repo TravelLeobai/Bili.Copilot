@@ -35,6 +35,7 @@ public sealed class CommentPanel : Component
 
     private readonly CommentMainViewModel _viewModel;
     private int _version;
+    private int _lastReplyVersion;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommentPanel"/> class.
@@ -150,7 +151,8 @@ public sealed class CommentPanel : Component
             return Grid(
                 columns: new[] { GridSize.Star() },
                 rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
-                backButton.Grid(row: 0, column: 0),
+                // 左边距 12 = 评论卡片的 Margin(12,4,12,4)，让箭头左缘与卡片左缘齐平；顶部再加一点留白.
+                backButton.Grid(row: 0, column: 0).Margin(12, 12, 0, 8).HAlign(HorizontalAlignment.Left),
                 detailStatus.Grid(row: 1, column: 0),
                 detailList.WithKey("detail-list").Grid(row: 2, column: 0),
                 detailInput.WithKey("detail-input").Grid(row: 3, column: 0))
@@ -240,6 +242,19 @@ public sealed class CommentPanel : Component
                 box.ResetSelectedCommand = viewModel.ResetReplyTargetCommand;
                 box.ReplyTip = viewModel.ReplyTarget;
                 box.IsEnabled = !viewModel.IsReplying;
+
+                // 每次点回复按钮（版本号 +1）就把「@某人 」直接写进输入框并抢焦点：
+                // 只看输入框上方的小字提示太不明显，用户会以为按钮没反应.
+                if (viewModel.ReplyTargetVersion != _lastReplyVersion)
+                {
+                    _lastReplyVersion = viewModel.ReplyTargetVersion;
+                    if (!string.IsNullOrEmpty(viewModel.ReplyTarget))
+                    {
+                        box.Text = $"@{viewModel.ReplyTarget} ";
+                        box.Focus(FocusState.Programmatic);
+                    }
+                }
+
                 if (viewModel.ShouldFocusInput)
                 {
                     viewModel.ShouldFocusInput = false;
@@ -547,4 +562,5 @@ public sealed class CommentPanel : Component
         }
     }
 }
+
 

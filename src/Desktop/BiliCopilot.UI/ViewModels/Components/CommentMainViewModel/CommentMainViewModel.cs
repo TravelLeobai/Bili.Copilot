@@ -168,6 +168,7 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         // 逐级 ?. ：置顶评论有数据缺字段，直接点 User.User.Name 会抛异常，
         // 命令一抛就等于「点了没反应」.
         var name = item?.Data?.User?.User?.Name;
+        _logger.LogInformation("点了回复按钮：rpid={Rpid} 用户={Name}", item?.Data.Id, name);
         ReplyTarget = string.IsNullOrEmpty(name) ? "该用户" : name;
 
         // 同一个人再点一次时 ReplyTarget 值不变，不发通知面板就毫无反应.
@@ -202,3 +203,4 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         ResetReplyTarget();
     }
 }
+

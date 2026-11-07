@@ -71,6 +71,7 @@
             ItemTemplateSelector="{StaticResource SuggestSelector}"
             ItemsSource="{x:Bind ViewModel.Suggestion}"
             PlaceholderText="{ext:Locale Name=SearchTip}"
+            PointerPressed="OnBoxPointerPressed"
             QueryIcon="Find"
             QuerySubmitted="OnQuerySubmitted"
             Text="{x:Bind ViewModel.Keyword, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -179,5 +180,6 @@
         </Button>
     </Grid>
 </local:AppSearchBoxBase>
+
 
 
