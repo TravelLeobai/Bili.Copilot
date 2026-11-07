@@ -829,6 +829,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid
                         x:Name="StatisticsHeader"
@@ -843,7 +844,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock
                             VerticalAlignment="Center"
-                            FontSize="14"
+                            FontSize="18"
                             FontWeight="SemiBold"
                             Text="统计信息" />
                         <Border
@@ -866,8 +867,14 @@
                             </Button>
                         </Border>
                     </Grid>
-                    <ItemsControl
+                    <!--  标题与内容之间的分割线  -->
+                    <Border
                         Grid.Row="1"
+                        Height="1"
+                        Margin="14,0,14,6"
+                        Background="#26FFFFFF" />
+                    <ItemsControl
+                        Grid.Row="2"
                         Margin="14,0,14,0"
                         ItemsSource="{x:Bind ViewModel.StatisticsLines, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
