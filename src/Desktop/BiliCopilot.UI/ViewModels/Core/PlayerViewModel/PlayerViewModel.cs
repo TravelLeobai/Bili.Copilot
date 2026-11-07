@@ -439,9 +439,23 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 AiAdAnalyzer.IsEnabled,
                 AdCloudService.IsEnabled);
 
-            // 三路来源合并：SponsorBlock（可换镜像）、云端广告库、AI 识别.
+            // 四路来源并行查：SponsorBlock（可换镜像）、云端广告库、Bilijump 数据库、AI 识别.
+            // 并行是为了不让最慢的一路（AI）拖住其它来源，谁先回来先并入.
             var segments = new List<SponsorSegment>();
-            var sponsorSegments = await SponsorBlockService.GetSegmentsAsync(videoId, logger);
+            var sponsorTask = SponsorBlockService.GetSegmentsAsync(videoId, logger);
+            var cloudTask = AdCloudService.IsEnabled
+                ? AdCloudService.GetSegmentsAsync(videoId, logger)
+                : Task.FromResult<IReadOnlyList<SponsorSegment>>([]);
+            var bilijumpTask = BiliJumpService.IsEnabled
+                ? QueryBiliJumpAsync(videoId)
+                : Task.FromResult<IReadOnlyList<SponsorSegment>>([]);
+            var aiTask = AiAdAnalyzer.IsEnabled
+                ? AnalyzeAdsWithAiAsync(videoId, snapshot)
+                : Task.FromResult<IReadOnlyList<SponsorSegment>>([]);
+
+            await Task.WhenAll(sponsorTask, cloudTask, bilijumpTask, aiTask);
+
+            var sponsorSegments = await sponsorTask;
             segments.AddRange(sponsorSegments);
             logger.LogInformation("片段来源 sponsorblock：{Count} 段（视频 {VideoId}，服务器 {Server}）", sponsorSegments.Count, videoId, SponsorBlockService.CurrentServer);
             foreach (var item in sponsorSegments)
@@ -451,7 +465,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
             if (AdCloudService.IsEnabled)
             {
-                var cloudSegments = await AdCloudService.GetSegmentsAsync(videoId, logger);
+                var cloudSegments = await cloudTask;
                 segments.AddRange(cloudSegments);
                 logger.LogInformation("片段来源 云端广告库：{Count} 段", cloudSegments.Count);
             }
@@ -460,9 +474,24 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 logger.LogInformation("云端广告库未启用，跳过该来源");
             }
 
+            if (BiliJumpService.IsEnabled)
+            {
+                var bilijumpSegments = await bilijumpTask;
+                segments.AddRange(bilijumpSegments);
+                logger.LogInformation("片段来源 Bilijump 云端库：{Count} 段", bilijumpSegments.Count);
+                foreach (var item in bilijumpSegments)
+                {
+                    logger.LogInformation("  Bilijump {Start:F1}-{End:F1}s 广告主={Note}", item.Start, item.End, string.IsNullOrEmpty(item.Note) ? "未标注" : item.Note);
+                }
+            }
+            else
+            {
+                logger.LogInformation("Bilijump 云端库未启用，跳过该来源");
+            }
+
             if (AiAdAnalyzer.IsEnabled)
             {
-                var aiSegments = await AnalyzeAdsWithAiAsync(videoId, snapshot);
+                var aiSegments = await aiTask;
                 segments.AddRange(aiSegments);
                 logger.LogInformation("片段来源 AI 识别：{Count} 段（音频分析 {Audio}）", aiSegments.Count, AiAdAnalyzer.IsAudioEnabled ? "开" : "关");
             }
@@ -493,6 +522,50 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             _isSponsorLoading = false;
         }
     }
+
+    /// <summary>
+    /// 查 Bilijump 云端广告库（按 cid），并行参与上面的多源合并.
+    /// </summary>
+    private async Task<IReadOnlyList<SponsorSegment>> QueryBiliJumpAsync(string videoId)
+    {
+        var cid = await BiliJumpService.ResolveCidAsync(videoId, logger);
+        if (string.IsNullOrEmpty(cid))
+        {
+            logger.LogInformation("Bilijump：拿不到 cid，跳过");
+            return [];
+        }
+
+        var result = await BiliJumpService.GetSegmentsAsync(cid, logger);
+        logger.LogInformation("Bilijump：cid={Cid} 命中 {Count} 段", cid, result.Count);
+        return result;
+    }
+
+    /// <summary>
+    /// 更新药丸提示文字：剩余时间 + 来源 + 广告主.
+    /// </summary>
+    private void UpdateSkipPromptCountdown(SponsorSegment segment, double position)
+    {
+        var remaining = Math.Max(0, (int)Math.Ceiling(segment.End - position));
+        var source = DescribeSegmentSource(segment.Source);
+        var text = string.IsNullOrEmpty(segment.Note)
+            ? $"跳过广告片段 · 剩 {remaining}s · {source}"
+            : $"跳过广告 · {segment.Note} · 剩 {remaining}s · {source}";
+        if (!string.Equals(SkipPromptText, text, StringComparison.Ordinal))
+        {
+            SkipPromptText = text;
+        }
+    }
+
+    private static string DescribeSegmentSource(string? source)
+        => (source ?? string.Empty).ToLowerInvariant() switch
+        {
+            "sponsorblock" => "空降助手",
+            "cloud" => "云端库",
+            "bilijump" => "Bilijump 库",
+            "ai" => "AI 识别",
+            "test" => "自检",
+            _ => "未知来源",
+        };
 
     private async Task<IReadOnlyList<SponsorSegment>> AnalyzeAdsWithAiAsync(string videoId, MediaSnapshot snapshot)
     {
@@ -823,13 +896,15 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             if (Player.Position < Player.Duration - 3)
             {
-                ShowSkipPrompt(new SponsorSegment
+                var testSegment = new SponsorSegment
                 {
                     Start = 0,
                     End = Player.Duration - 1,
                     Category = "test",
                     Source = "test",
-                });
+                };
+                ShowSkipPrompt(testSegment);
+                UpdateSkipPromptCountdown(testSegment, Player.Position);
             }
             else
             {
@@ -875,6 +950,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             // 手动模式：只弹提示，等用户点跳过.
             ShowSkipPrompt(current);
+            UpdateSkipPromptCountdown(current, position);
             return;
         }
 
@@ -949,6 +1025,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
 
         SkipPromptSegment = default;
+        SkipPromptText = "跳过广告片段";
     }
 
     /// <summary>
@@ -1039,3 +1116,4 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+

@@ -81,6 +81,12 @@ public sealed partial class PlayerViewModel
     /// </summary>
     public SponsorSegment? SkipPromptSegment { get; set; }
 
+    /// <summary>
+    /// 药丸提示上的文字：剩余时间 + 是哪个来源认出来的 + 广告主.
+    /// </summary>
+    [ObservableProperty]
+    public partial string SkipPromptText { get; set; } = "跳过广告片段";
+
     public bool IsNextTipShown { get; set; }
 
     public bool IsNextTipShownInThisMedia { get; set; }

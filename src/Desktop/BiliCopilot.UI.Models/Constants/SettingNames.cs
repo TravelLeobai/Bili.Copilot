@@ -16,6 +16,7 @@ public enum SettingNames
     SponsorBlockIncludeOutro,
     AdCloudEnabled,
     AdCloudUrl,
+    BiliJumpEnabled,
     AiAdEnabled,
     AiInterestEnabled,
     AiAdEndpoint,
@@ -207,4 +208,6 @@ public enum SettingNames
     LiveDanmakuLevelFilter,
     LiveDanmakuMedalFilter,
 }
+
+
 

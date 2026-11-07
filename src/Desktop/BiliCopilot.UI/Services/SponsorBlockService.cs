@@ -39,6 +39,16 @@ public sealed class SponsorSegment
     public string Source { get; set; } = string.Empty;
 
     /// <summary>
+    /// 备注（Bilijump 云端库给的广告主名称；其它来源为空）.
+    /// </summary>
+    public string Note { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 细节（Bilijump 云端库给的广告内容描述；其它来源为空）.
+    /// </summary>
+    public string Detail { get; set; } = string.Empty;
+
+    /// <summary>
     /// 动作类型（skip / mute / full），对齐 SponsorBlock 的 actionType.
     /// </summary>
     public string ActionType { get; set; } = "skip";
