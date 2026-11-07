@@ -47,13 +47,9 @@ public sealed class SearchShell : Component
         var sections = viewModel.Sections ?? [];
         var selectedIndex = Math.Max(0, sections.IndexOf(viewModel.SelectedSection));
 
-        var title = TextBlock($"搜索 {viewModel.Keyword}")
-            .FontSize(16)
-            .SemiBold()
-            .VAlign(VerticalAlignment.Center);
-
+        // 搜索框与搜索首页同宽（560 DIP），在整条顶栏里居中.
         var searchBoxHost = ViewLaterShell.Host(_searchBox, _ => ApplySearchBox(viewModel))
-            .Width(320)
+            .Width(560)
             .VAlign(VerticalAlignment.Center);
 
         // 排序按钮仍是原有 XAML 控件，只在视频分区显示.
@@ -64,13 +60,20 @@ public sealed class SearchShell : Component
 
         var refresh = BuildRefreshButton(viewModel);
 
-        var header = Grid(
-            [GridSize.Auto, GridSize.Star(), GridSize.Auto, GridSize.Auto],
+        // 同一格里两个子元素：搜索框居中，排序/刷新靠右.
+        var headerActions = Grid(
+            [GridSize.Auto, GridSize.Auto],
             [GridSize.Star()],
-            title.Grid(row: 0, column: 0).Margin(0, 0, 16, 0),
-            searchBoxHost.Grid(row: 0, column: 1).HAlign(HorizontalAlignment.Right),
-            extra.Grid(row: 0, column: 2).Margin(8, 0, 0, 0),
-            refresh.Grid(row: 0, column: 3).Margin(8, 0, 0, 0))
+            extra.Grid(row: 0, column: 0),
+            refresh.Grid(row: 0, column: 1).Margin(8, 0, 0, 0))
+            .HAlign(HorizontalAlignment.Right)
+            .VAlign(VerticalAlignment.Center);
+
+        var header = Grid(
+            [GridSize.Star()],
+            [GridSize.Star()],
+            searchBoxHost.Grid(row: 0, column: 0).HAlign(HorizontalAlignment.Center),
+            headerActions.Grid(row: 0, column: 0))
             .Padding(16, 0, 16, 0)
             .WithKey("search-header");
 
@@ -210,6 +213,9 @@ public sealed class SearchShell : Component
     /// </summary>
     private void ApplySearchBox(SearchPageViewModel viewModel)
     {
+        // 每次渲染都压一次建议浮层：它会在各种时机被重新打开，只压一次压不住.
+        _searchBox.SuppressSuggestions();
+
         var keyword = viewModel.Keyword ?? string.Empty;
         if (string.Equals(keyword, _appliedKeyword, StringComparison.Ordinal))
         {
@@ -289,6 +295,7 @@ public sealed class SearchShell : Component
             _ => type.ToString(),
         };
 }
+
 
 
 

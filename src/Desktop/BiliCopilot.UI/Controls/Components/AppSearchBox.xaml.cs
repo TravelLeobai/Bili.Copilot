@@ -47,6 +47,17 @@ public sealed partial class AppSearchBox : AppSearchBoxBase
         });
     }
 
+    /// <summary>
+    /// 强制收起建议浮层（结果页顶栏用：浮层是 Popup，会挡住下面的分区栏）.
+    /// </summary>
+    public void SuppressSuggestions()
+    {
+        _suppressSuggestions = true;
+        Box.ItemsSource = null;
+        Box.IsSuggestionListOpen = false;
+        ViewModel.Suggestion.Clear();
+    }
+
     private void OnBoxPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         // 用户开始自己操作了，放开建议.
@@ -139,6 +150,7 @@ public abstract class AppSearchBoxBase : LayoutUserControlBase<SearchBoxViewMode
     /// </summary>
     protected AppSearchBoxBase() => ViewModel = this.Get<SearchBoxViewModel>();
 }
+
 
 
 
