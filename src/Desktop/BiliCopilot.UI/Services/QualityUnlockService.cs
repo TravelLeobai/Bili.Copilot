@@ -263,20 +263,23 @@ internal static class QualityUnlockService
         var cookieForServer = cookie;
         try
         {
-            if (!cookieForServer.Contains("buvid3=", StringComparison.Ordinal))
-            {
-                var buvid3 = await BiliWbiSigner.GetBuvid3Async(cookie, logger).ConfigureAwait(false);
-                if (!string.IsNullOrEmpty(buvid3))
-                {
-                    cookieForServer = string.IsNullOrEmpty(cookieForServer)
-                        ? $"buvid3={buvid3}"
-                        : $"{cookieForServer.TrimEnd(';')}; buvid3={buvid3}";
-                }
-            }
+            // 浏览器 document.cookie 里还有 buvid4 / _uuid / b_nut 这类风控字段，
+            // 客户端这边只有 6 个字段。服务端拿我们的 cookie 去刷 playurl 时缺这些容易被 B 站
+            // 判风控（表现为服务端取不到数据 → code=2 fail），所以补齐再转发.
+            var (buvid3, buvid4) = await BiliWbiSigner.GetBuvidPairAsync(cookie, logger).ConfigureAwait(false);
+            cookieForServer = AppendCookieValue(cookieForServer, "buvid3", buvid3);
+            cookieForServer = AppendCookieValue(cookieForServer, "buvid4", buvid4);
+
+            // _uuid 与 b_nut 是一对：B 站从这俩判断是不是同一个浏览器会话.
+            var nut = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var guid = Guid.NewGuid().ToString("N").ToUpperInvariant();
+            var uuid = $"{guid[..8]}-{guid[8..12]}-{guid[12..16]}-{guid[16..20]}-{guid[20..32]}{nut >> 8 & 0xFFFFFF:x2}infoc";
+            cookieForServer = AppendCookieValue(cookieForServer, "_uuid", uuid);
+            cookieForServer = AppendCookieValue(cookieForServer, "b_nut", nut.ToString());
         }
         catch (Exception ex)
         {
-            logger?.LogDebug(ex, "取 buvid3 失败，按原 cookie 转发");
+            logger?.LogDebug(ex, "补 buvid/风控字段失败，按原 cookie 转发");
         }
 
         // 服务端要的 ui 结构是照脚本来的：ua/mid/vip/level/money/cookie/csrf/name/face.
@@ -289,11 +292,29 @@ internal static class QualityUnlockService
             string.IsNullOrEmpty(face) ? "无" : "有",
             vip,
             level);
+        var sessdata = ExtractCookieValue(cookieForServer, "SESSDATA");
+        var biliJct = ExtractCookieValue(cookieForServer, "bili_jct");
+        var buvid3Value = ExtractCookieValue(cookieForServer, "buvid3");
+        var dedeUserId = ExtractCookieValue(cookieForServer, "DedeUserID");
+
+        // 服务端是拿这些字段自己拼 B 站请求的，所以除了整串 cookie，把关键凭证也单列一份，
+        // 免得它自己从 cookie 里解析失败（脚本侧本来就有 cookie 整串，这里只是多给一份）.
         var ui = $"{{\"ua\":\"{Escape(UserAgent)}\",\"mid\":\"{Escape(mid)}\","
             + $"\"vip\":{(vip ? 1 : 0)},\"level\":{level},\"money\":0,"
             + $"\"cookie\":\"{Escape(cookieForServer)}\",\"csrf\":\"{Escape(csrf)}\","
-            + $"\"name\":\"{Escape(name)}\",\"face\":\"{Escape(face)}\"}}";
+            + $"\"name\":\"{Escape(name)}\",\"face\":\"{Escape(face)}\","
+            + $"\"sessdata\":\"{Escape(sessdata)}\",\"bili_jct\":\"{Escape(biliJct)}\","
+            + $"\"buvid3\":\"{Escape(buvid3Value)}\",\"dedeuserid\":\"{Escape(dedeUserId)}\"}}";
         var body = $"{{\"ui\":{ui},\"url\":\"{Escape(playUrl)}\"}}";
+
+        // 只记字段名，不记值：日志有可能被贴出去，凭证不能跟着走.
+        logger?.LogInformation(
+            "画质解锁转发的 cookie 字段：{Keys}",
+            string.Join(
+                ",",
+                cookieForServer.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(p => p.Split('=')[0].Trim())
+                    .Where(p => p.Length > 0)));
 
         // 失败时面板要能说清卡在哪，先把这次请求的"环境快照"备好.
         var context = $"服务器={Server} qn={qn} "
@@ -309,6 +330,9 @@ internal static class QualityUnlockService
                 Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
             };
             request.Headers.TryAddWithoutValidation("Origin", Server);
+
+            // 脚本是在 hd2a 页面上发的请求，Referer 也照抄，免得服务端校验来源时判非法.
+            request.Headers.TryAddWithoutValidation("Referer", $"{Server}/hd2a/");
             request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
 
             using var response = await Client.SendAsync(request).ConfigureAwait(false);
@@ -512,6 +536,44 @@ internal static class QualityUnlockService
 
     private static string Escape(string value)
         => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    /// <summary>
+    /// 有就跳过，没有才追加一个 cookie 字段.
+    /// </summary>
+    private static string AppendCookieValue(string cookie, string name, string? value)
+    {
+        if (string.IsNullOrEmpty(value)
+            || cookie.Contains($"{name}=", StringComparison.OrdinalIgnoreCase))
+        {
+            return cookie;
+        }
+
+        return string.IsNullOrEmpty(cookie)
+            ? $"{name}={value}"
+            : $"{cookie.TrimEnd(';')}; {name}={value}";
+    }
+
+    /// <summary>
+    /// 从整串 cookie 里取某一个字段的值，取不到就返回空串.
+    /// </summary>
+    private static string ExtractCookieValue(string? cookie, string name)
+    {
+        if (string.IsNullOrEmpty(cookie))
+        {
+            return string.Empty;
+        }
+
+        foreach (var part in cookie.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (pair.Length == 2 && pair[0].Trim().Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return pair[1].Trim();
+            }
+        }
+
+        return string.Empty;
+    }
 
     /// <summary>
     /// 截断服务器返回体，诊断信息里只留一小段.

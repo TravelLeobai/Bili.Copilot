@@ -88,6 +88,51 @@ internal static class BiliWbiSigner
     private static string Filter(string value)
         => string.Concat(value.Where(c => "!'()*".IndexOf(c) < 0));
 
+    /// <summary>
+    /// 一次取回 buvid3 与 buvid4（同一个 spi 接口本来就一起给）.
+    /// cookie 里已有的优先用已有的.
+    /// </summary>
+    public static async Task<(string Buvid3, string Buvid4)> GetBuvidPairAsync(string cookie, ILogger? logger = null)
+    {
+        var existing3 = ReadCookie(cookie, "buvid3");
+        var existing4 = ReadCookie(cookie, "buvid4");
+        if (!string.IsNullOrEmpty(existing3) && !string.IsNullOrEmpty(existing4))
+        {
+            return (existing3, existing4);
+        }
+
+        var b3 = existing3;
+        var b4 = existing4;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.bilibili.com/x/frontend/finger/spi");
+            request.Headers.TryAddWithoutValidation(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.TryGetProperty("data", out var data))
+            {
+                if (string.IsNullOrEmpty(b3) && data.TryGetProperty("b_3", out var node3))
+                {
+                    b3 = node3.GetString() ?? string.Empty;
+                }
+
+                if (string.IsNullOrEmpty(b4) && data.TryGetProperty("b_4", out var node4))
+                {
+                    b4 = node4.GetString() ?? string.Empty;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "获取 buvid 失败");
+        }
+
+        return (b3, b4);
+    }
+
     private static async Task<string> GetMixinKeyAsync(string cookie, ILogger? logger)
     {
         if (!string.IsNullOrEmpty(_mixinKey) && _mixinKeyExpire > DateTimeOffset.Now)
