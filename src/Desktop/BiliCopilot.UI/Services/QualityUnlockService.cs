@@ -26,12 +26,12 @@ internal static class QualityUnlockService
     /// <summary>
     /// 默认上游主页（脚本的 @homepage，assets/home.txt 也挂在这里）.
     /// </summary>
-    public const string DefaultHomePage = "https://hd2a.page.gd";
+    public const string DefaultHomePage = "http://mxd.indevs.in/hd2a";
 
     /// <summary>
     /// 默认用户脚本地址（上游提供的最小化脚本）.
     /// </summary>
-    public const string DefaultScriptUrl = "https://hd2a.page.gd/assets/min.baidu.user.js";
+    public const string DefaultScriptUrl = "http://mxd.indevs.in/hd2a/assets/min.baidu.user.js";
 
     private static readonly HttpClient Client = new(new SocketsHttpHandler
     {
@@ -81,11 +81,9 @@ internal static class QualityUnlockService
                 return DefaultHomePage;
             }
 
-            // 上游已经走 https，旧配置里的 http 自动升级，避免被中间跳转拖慢.
-            value = value.TrimEnd('/');
-            return value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-                ? "https://" + value[7..]
-                : value;
+            // 不要自作聪明把 http 升级成 https：mxd.indevs.in 只有 http 能用，
+            // 走 https 会卡在 TLS 握手直到超时，整条解锁链路被判失败、回退常规地址.
+            return value.TrimEnd('/');
         }
     }
 
@@ -209,12 +207,19 @@ internal static class QualityUnlockService
 
         // 登录态一律转发：解锁服务器要靠它拿到大会员画质.
         var cookieForServer = cookie;
-        var ui = $"{{\"ua\":\"{Escape(UserAgent)}\",\"mid\":\"{Escape(mid)}\",\"vip\":0,\"level\":2,\"money\":0,"
-            + $"\"cookie\":\"{Escape(cookieForServer)}\",\"csrf\":\"{Escape(csrf)}\"}}";
+
+        // 服务端要的 ui 结构是照脚本来的：ua/mid/vip/level/money/cookie/csrf/name/face.
+        // 少了 name、face 会被判成 invalid（实测返回 {"code":2,"message":"invalid"}）.
+        var (name, face, vip, level) = await ReadAccountProfileAsync(cookie, mid, logger).ConfigureAwait(false);
+        var ui = $"{{\"ua\":\"{Escape(UserAgent)}\",\"mid\":\"{Escape(mid)}\","
+            + $"\"vip\":{(vip ? 1 : 0)},\"level\":{level},\"money\":0,"
+            + $"\"cookie\":\"{Escape(cookieForServer)}\",\"csrf\":\"{Escape(csrf)}\","
+            + $"\"name\":\"{Escape(name)}\",\"face\":\"{Escape(face)}\"}}";
         var body = $"{{\"ui\":{ui},\"url\":\"{Escape(playUrl)}\"}}";
 
         try
         {
+            await RegisterAsync(ui, logger).ConfigureAwait(false);
             using var request = new HttpRequestMessage(HttpMethod.Post, $"{Server}/api/bzview2")
             {
                 Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
@@ -235,6 +240,12 @@ internal static class QualityUnlockService
             if (root.TryGetProperty("code", out var codeNode) && codeNode.TryGetInt32(out var code) && code != 0)
             {
                 var message = root.TryGetProperty("message", out var msg) ? msg.GetString() ?? string.Empty : string.Empty;
+                if (code == 9)
+                {
+                    // 脚本里 code 9 是「次数已达上限」，提示投币重置额度.
+                    message = "解锁次数已达上限，给任意视频投币可以重置额度";
+                }
+
                 logger?.LogWarning("画质解锁被拒绝：code={Code} message={Message}", code, message);
                 return QualityUnlockResult.Failed(message);
             }
@@ -259,6 +270,82 @@ internal static class QualityUnlockService
         {
             logger?.LogWarning(ex, "画质解锁请求异常");
             return QualityUnlockResult.Failed(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 读一份当前账号的资料：解锁服务器的 ui 需要昵称、头像、会员状态和等级.
+    /// 拿不到就退回空串，让服务端自己去判断.
+    /// </summary>
+    private static async Task<(string Name, string Face, bool Vip, int Level)> ReadAccountProfileAsync(
+        string cookie,
+        string mid,
+        ILogger? logger)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.bilibili.com/x/web-interface/nav");
+            request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+            request.Headers.TryAddWithoutValidation("Referer", "https://www.bilibili.com");
+            if (!string.IsNullOrWhiteSpace(cookie))
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            }
+
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return (string.Empty, string.Empty, false, 2);
+            }
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync().ConfigureAwait(false));
+            if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            {
+                return (string.Empty, string.Empty, false, 2);
+            }
+
+            var name = data.TryGetProperty("uname", out var uname) ? uname.GetString() ?? string.Empty : string.Empty;
+            var face = data.TryGetProperty("face", out var faceNode) ? faceNode.GetString() ?? string.Empty : string.Empty;
+            var vip = data.TryGetProperty("vipStatus", out var vipNode) && vipNode.TryGetInt32(out var vipStatus) && vipStatus != 0;
+            var level = 2;
+            if (data.TryGetProperty("level_info", out var levelInfo)
+                && levelInfo.ValueKind == JsonValueKind.Object
+                && levelInfo.TryGetProperty("current_level", out var currentLevel)
+                && currentLevel.TryGetInt32(out var currentLevelValue))
+            {
+                level = currentLevelValue;
+            }
+
+            return (name, face, vip, level);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogDebug(ex, "读取账号资料失败，按游客身份继续");
+            return (string.Empty, string.Empty, false, 2);
+        }
+    }
+
+    /// <summary>
+    /// 向解锁服务器登记一次身份（脚本初始化时也会调 /api/bzusta）.
+    /// 失败不影响后续请求，服务端会自己去取.
+    /// </summary>
+    private static async Task RegisterAsync(string ui, ILogger? logger)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"{Server}/api/bzusta")
+            {
+                Content = new StringContent($"{{\"ui\":{ui}}}", System.Text.Encoding.UTF8, "application/json"),
+            };
+            request.Headers.TryAddWithoutValidation("Origin", Server);
+            request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            logger?.LogDebug("画质解锁服务器登记结果：HTTP {Status} {Body}", (int)response.StatusCode, text.Length > 120 ? text[..120] : text);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogDebug(ex, "画质解锁服务器登记失败，继续尝试直接解锁");
         }
     }
 
@@ -370,3 +457,6 @@ internal sealed class QualityUnlockSyncResult
 
     public bool Success => !string.IsNullOrEmpty(Server);
 }
+
+
+

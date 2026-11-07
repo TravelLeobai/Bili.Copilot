@@ -233,7 +233,11 @@ public static class AiAdAnalyzer
             return null;
         }
 
-        var audioBytes = await audioResponse.Content.ReadAsByteArrayAsync();
+        var audioBytes = await ReadMediaBytesAsync(audioResponse, logger);
+        if (audioBytes is null)
+        {
+            return null;
+        }
         using var policyRequest = new HttpRequestMessage(
             HttpMethod.Get,
             $"{DashScopeBase}/api/v1/uploads?action=getPolicy&model={WebUtility.UrlEncode(model)}");
@@ -421,12 +425,68 @@ public static class AiAdAnalyzer
             "User-Agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
         request.Headers.TryAddWithoutValidation("Referer", "https://www.bilibili.com");
+
+        // 明确要原始字节，别让 CDN 走压缩.
+        request.Headers.TryAddWithoutValidation("Accept-Encoding", "identity");
         if (!string.IsNullOrWhiteSpace(cookie))
         {
             request.Headers.TryAddWithoutValidation("Cookie", cookie);
         }
 
-        return await Client.SendAsync(request);
+        return await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+    }
+
+    /// <summary>
+    /// 把下载回来的响应体变成真正的 m4s 字节：
+    /// 兜一下「还是被压过」的情况，并确认拿到的确实是媒体数据而不是错误页.
+    /// </summary>
+    private static async Task<byte[]?> ReadMediaBytesAsync(HttpResponseMessage response, ILogger? logger)
+    {
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        if (bytes.Length == 0)
+        {
+            logger?.LogWarning("音频下载回来是空内容");
+            return null;
+        }
+
+        // 极少数节点无视 identity，仍然回 gzip，这里手工解开.
+        if (bytes.Length > 2 && bytes[0] == 0x1F && bytes[1] == 0x8B)
+        {
+            try
+            {
+                using var input = new MemoryStream(bytes);
+                using var gzip = new System.IO.Compression.GZipStream(input, System.IO.Compression.CompressionMode.Decompress);
+                using var output = new MemoryStream();
+                await gzip.CopyToAsync(output);
+                bytes = output.ToArray();
+                logger?.LogInformation("音频响应被 gzip 压过，已手工解压到 {Size} 字节", bytes.Length);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "音频响应声称是 gzip 但解不开");
+                return null;
+            }
+        }
+
+        // m4s/mp4 的第 4-8 字节是 "ftyp"（有的分段是 "styp"），不对就是错误页或被截断.
+        var isMedia = bytes.Length > 12
+            && ((bytes[4] == 'f' && bytes[5] == 't' && bytes[6] == 'y' && bytes[7] == 'p')
+                || (bytes[4] == 's' && bytes[5] == 't' && bytes[6] == 'y' && bytes[7] == 'p'));
+        if (!isMedia)
+        {
+            var head = Convert.ToHexString(bytes.AsSpan(0, Math.Min(16, bytes.Length)));
+            logger?.LogWarning(
+                "音频下载回来的不是媒体数据（{Size} 字节，Content-Type={Type}，Content-Encoding={Encoding}，头部 {Head}），放弃这次音频识别",
+                bytes.Length,
+                response.Content.Headers.ContentType?.MediaType ?? "无",
+                response.Content.Headers.ContentEncoding.Count > 0
+                    ? string.Join(",", response.Content.Headers.ContentEncoding)
+                    : "无",
+                head);
+            return null;
+        }
+
+        return bytes;
     }
 
     private static double? ReadDouble(JsonElement item, string name)
@@ -446,7 +506,11 @@ public static class AiAdAnalyzer
 
     private static HttpClient CreateClient()
     {
-        var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All };
+        // 请求体里既有 JSON 也有整段音频（m4s 二进制），所以关闭自动解压：
+        // 之前开 DecompressionMethods.All 时，B 站 CDN 会回一个声称 Content-Encoding: gzip
+        // 但内容其实是原始 m4s 的响应，.NET 解压时抛 "Decoder ran into invalid data."，
+        // 音频识别就整个失败了（日志里反复出现的那条）.
+        var handler = new HttpClientHandler { AutomaticDecompression = DecompressionMethods.None };
         return new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
     }
     /// <summary>
@@ -503,3 +567,4 @@ public static class AiAdAnalyzer
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }
+
