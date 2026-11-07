@@ -978,6 +978,46 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         AiTestStatusText = (ok ? "模型正常：" : "模型有问题：") + message;
         AdSkipStatusText = AiTestStatusText;
     }
+
+    [RelayCommand]
+    private async Task DetectAiModelsAsync()
+    {
+        AiModelDetectStatusText = "正在查询可用模型…";
+        var (ok, message, models) = await AiEndpointTester.FetchModelsAsync(AiAdEndpoint, AiAdKey);
+        AiModelOptions.Clear();
+        if (!ok)
+        {
+            AiModelDetectStatusText = message;
+            return;
+        }
+
+        foreach (var model in models)
+        {
+            AiModelOptions.Add(model);
+        }
+
+        AiModelDetectStatusText = models.Count > 0
+            ? $"{message}，在下面挑一个，或继续手填"
+            : message;
+
+        // 已经填着的模型如果就在列表里，顺手选中，免得用户以为没查出来.
+        if (models.Count > 0 && !string.IsNullOrWhiteSpace(AiAdModel))
+        {
+            var matched = models.FirstOrDefault(p => string.Equals(p, AiAdModel.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (matched is not null)
+            {
+                AiModelPicked = matched;
+            }
+        }
+    }
+
+    partial void OnAiModelPickedChanged(string value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            AiAdModel = value;
+        }
+    }
     /// <summary>
     /// 按当前节点池重建可选的 CDN 服务器列表.
     /// 第一项是「自动优选」，其余来自内置节点 + 抓到的节点池.

@@ -218,6 +218,23 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     private string _aiAdModel;
 
+    /// <summary>
+    /// 联网查到的可用模型列表（点「检测可用模型」后填充）.
+    /// </summary>
+    public ObservableCollection<string> AiModelOptions { get; } = [];
+
+    /// <summary>
+    /// 下拉里选中的模型，选中即写回 <see cref="AiAdModel"/>.
+    /// </summary>
+    [ObservableProperty]
+    private string _aiModelPicked;
+
+    /// <summary>
+    /// 检测模型列表的过程状态.
+    /// </summary>
+    [ObservableProperty]
+    private string _aiModelDetectStatusText;
+
     [ObservableProperty]
     private string _aiAdPrompt;
 

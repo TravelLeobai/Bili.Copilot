@@ -136,6 +136,111 @@ internal static class AiEndpointTester
         }
     }
 
+    /// <summary>
+    /// 拉取接口声明的可用模型列表.
+    /// </summary>
+    /// <param name="endpoint">接口地址.</param>
+    /// <param name="key">密钥.</param>
+    public static async Task<(bool Ok, string Message, List<string> Models)> FetchModelsAsync(string endpoint, string key)
+    {
+        var models = new List<string>();
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return (false, "接口地址还没填", models);
+        }
+
+        var baseUrl = endpoint.Trim().TrimEnd('/');
+        if (baseUrl.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+        {
+            baseUrl = baseUrl[..^"/chat/completions".Length];
+        }
+
+        var url = $"{baseUrl}/models";
+        var watch = Stopwatch.StartNew();
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            if (!string.IsNullOrWhiteSpace(key))
+            {
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {key}");
+            }
+
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            watch.Stop();
+            var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                var reason = response.StatusCode switch
+                {
+                    HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => "密钥被拒绝",
+                    HttpStatusCode.NotFound => "接口没有 /models 端点，只能手动填模型名",
+                    _ => $"HTTP {(int)response.StatusCode}：{Shorten(body)}",
+                };
+                return (false, reason, models);
+            }
+
+            models.AddRange(ParseModelIds(body));
+            models.Sort(StringComparer.OrdinalIgnoreCase);
+            return models.Count > 0
+                ? (true, $"查到 {models.Count} 个模型（{watch.ElapsedMilliseconds} ms）", models)
+                : (true, "接口能通，但没解析到模型列表，手动填吧", models);
+        }
+        catch (Exception ex)
+        {
+            watch.Stop();
+            return (false, $"请求失败：{ex.Message}", models);
+        }
+    }
+
+    /// <summary>
+    /// 从 /models 的返回里抠出模型名，兼容 data[].id 和 models[].name 两种写法.
+    /// </summary>
+    private static IEnumerable<string> ParseModelIds(string body)
+    {
+        var result = new List<string>();
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            if (document.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in data.EnumerateArray())
+                {
+                    var id = ReadString(item, "id") ?? ReadString(item, "name");
+                    if (!string.IsNullOrWhiteSpace(id))
+                    {
+                        result.Add(id);
+                    }
+                }
+            }
+            else if (document.RootElement.TryGetProperty("models", out var list) && list.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in list.EnumerateArray())
+                {
+                    var name = item.ValueKind == JsonValueKind.String
+                        ? item.GetString()
+                        : ReadString(item, "name") ?? ReadString(item, "id");
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        result.Add(name);
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // 返回不是 JSON，交给上层提示.
+        }
+
+        return result.Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string? ReadString(JsonElement element, string property)
+        => element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(property, out var value)
+            && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
     private static string ReadReply(string body)
     {
         try
