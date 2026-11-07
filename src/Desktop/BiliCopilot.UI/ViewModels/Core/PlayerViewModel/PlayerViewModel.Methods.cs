@@ -310,6 +310,9 @@ public sealed partial class PlayerViewModel
         }
 
         updater.Update();
+
+        // 关注/点赞/投币/收藏状态变了，结束页上的按钮要跟着刷新.
+        RaiseEndScreenProperties();
     }
 
     private void OnSmtcButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
@@ -632,6 +635,8 @@ public sealed partial class PlayerViewModel
                 var endSec = isShowTip ? 2 : 0.1;
                 if (Math.Abs(Player.Position - Player.Duration) < endSec)
                 {
+                    // 到底了：进入结束状态，底部控制栏换成结束页（重播 / 互动 / 相关推荐）.
+                    MarkPlaybackEnded();
                     IsHoldingSpeedChanging = false;
                     if (Math.Abs(_lastSpeed - Player.PlaybackRate) > 0.01)
                     {
@@ -679,6 +684,12 @@ public sealed partial class PlayerViewModel
                 if (Player.PlaybackState == MpvPlayerState.Playing && _isTlsFailed)
                 {
                     _isTlsFailed = false;
+                }
+
+                // 位置已经离开片尾（用户往回拖了），退出结束状态.
+                if (Math.Abs(Player.Position - Player.Duration) > 2)
+                {
+                    ClearPlaybackEnded();
                 }
 
                 _prevPosition = Player.Position;
@@ -1338,3 +1349,4 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+

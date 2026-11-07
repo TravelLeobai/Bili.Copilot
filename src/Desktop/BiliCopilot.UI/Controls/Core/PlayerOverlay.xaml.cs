@@ -377,6 +377,24 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     /// <summary>
     /// 直播弹幕浮层可见性.
     /// </summary>
+    /// <summary>
+    /// 控制栏可见性：播放结束时收起（结束页自己带一根不可拖动的进度条）.
+    /// </summary>
+    /// <param name="controlsVisible">控制栏是否应当可见.</param>
+    /// <param name="isEnded">是否播放结束.</param>
+    /// <returns>可见性.</returns>
+    public static Visibility GetTransportVisibility(bool controlsVisible, bool isEnded)
+        => controlsVisible && !isEnded ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
+    /// 结束页可见性：直播不显示（直播没有"播完"）.
+    /// </summary>
+    /// <param name="isEnded">是否播放结束.</param>
+    /// <param name="isLive">是否直播.</param>
+    /// <returns>可见性.</returns>
+    public static Visibility GetEndPanelVisibility(bool isEnded, bool isLive)
+        => isEnded && !isLive ? Visibility.Visible : Visibility.Collapsed;
+
     public static Visibility GetLiveDanmakuVisibility(bool isLive, bool isVisible)
         => isLive && isVisible ? Visibility.Visible : Visibility.Collapsed;
     /// <summary>
@@ -430,3 +448,4 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+

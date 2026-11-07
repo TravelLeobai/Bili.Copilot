@@ -126,7 +126,7 @@
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Bottom"
                     ViewModel="{x:Bind ViewModel, Mode=OneWay}"
-                    Visibility="{x:Bind ViewModel.IsControlsVisible, Mode=OneWay}">
+                    Visibility="{x:Bind local:PlayerOverlay.GetTransportVisibility(ViewModel.IsControlsVisible, ViewModel.IsPlaybackEnded), Mode=OneWay}">
                     <local:OverlayTransportControls.LeftElement>
                         <ContentControl
                             HorizontalAlignment="Stretch"
@@ -158,6 +158,15 @@
                             Duration="0:0:0.25" />
                     </animations:Implicit.HideAnimations>
                 </local:OverlayTransportControls>
+                <!--  播放结束页：底部控制栏收起，换成 UP 信息 / 重播 / 互动 / 相关推荐  -->
+                <player:PlaybackEndPanel
+                    x:Name="EndPanel"
+                    Margin="0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    IsTabStop="False"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}"
+                    Visibility="{x:Bind local:PlayerOverlay.GetEndPanelVisibility(ViewModel.IsPlaybackEnded, ViewModel.IsLive), Mode=OneWay}" />
                 <!--  跳过日志：贴在跳过按钮上方，新的从下面顶上来，每条自己算两秒  -->
                 <ItemsControl
                     x:Name="AdSkipLogList"
