@@ -25,6 +25,11 @@ namespace BiliCopilot.UI.Reactor;
 /// </summary>
 public sealed class SearchShell : Component
 {
+    /// <summary>
+    /// 顶栏与分区栏的宽度分界（DIP）：宽于此值排序/刷新留在顶栏，窄于此值挪到分区栏那一行.
+    /// </summary>
+    private const double WideBreakpointDip = 1000d;
+
     private readonly SearchPageViewModel _viewModel;
     private readonly AppSearchBox _searchBox = new();
     private readonly VideoSearchExtraHeader _videoExtra = new();
@@ -47,10 +52,16 @@ public sealed class SearchShell : Component
         var sections = viewModel.Sections ?? [];
         var selectedIndex = Math.Max(0, sections.IndexOf(viewModel.SelectedSection));
 
-        // 搜索框与搜索首页同宽（560 DIP），在整条顶栏里居中.
+        // 窗口够宽时排序/刷新留在顶栏；窄窗口顶栏只放搜索框，
+        // 排序和刷新挪到分区栏那一行，避免三个东西挤在一起互相压住.
+        var isWide = UseBreakpoint(WideBreakpointDip);
+
         var searchBoxHost = ViewLaterShell.Host(_searchBox, _ => ApplySearchBox(viewModel))
-            .Width(560)
             .VAlign(VerticalAlignment.Center);
+        if (isWide)
+        {
+            searchBoxHost = searchBoxHost.Width(560);
+        }
 
         // 排序按钮仍是原有 XAML 控件，只在视频分区显示.
         Element extra = viewModel.SelectedSection is VideoSearchSectionDetailViewModel videoSection
@@ -60,24 +71,47 @@ public sealed class SearchShell : Component
 
         var refresh = BuildRefreshButton(viewModel);
 
-        // 同一格里两个子元素：搜索框居中，排序/刷新靠右.
-        var headerActions = Grid(
+        var actions = Grid(
             [GridSize.Auto, GridSize.Auto],
             [GridSize.Star()],
             extra.Grid(row: 0, column: 0),
             refresh.Grid(row: 0, column: 1).Margin(8, 0, 0, 0))
-            .HAlign(HorizontalAlignment.Right)
             .VAlign(VerticalAlignment.Center);
 
-        var header = Grid(
-            [GridSize.Star()],
-            [GridSize.Star()],
-            searchBoxHost.Grid(row: 0, column: 0).HAlign(HorizontalAlignment.Center),
-            headerActions.Grid(row: 0, column: 0))
-            .Padding(16, 0, 16, 0)
-            .WithKey("search-header");
+        Element header;
+        Element tabs;
+        if (isWide)
+        {
+            // 顶栏：搜索框居中，排序/刷新靠右.
+            header = Grid(
+                [GridSize.Star()],
+                [GridSize.Star()],
+                searchBoxHost.Grid(row: 0, column: 0).HAlign(HorizontalAlignment.Center),
+                actions.Grid(row: 0, column: 0).HAlign(HorizontalAlignment.Right))
+                .Padding(16, 0, 16, 0)
+                .WithKey("search-header");
 
-        var tabs = BuildSectionTabs(sections, selectedIndex, viewModel);
+            // 分区栏单独一行，右侧不放东西.
+            tabs = BuildSectionTabs(sections, selectedIndex, viewModel).WithKey("search-tabs-row");
+        }
+        else
+        {
+            // 窄窗口：顶栏只放搜索框，铺满整行.
+            header = Grid(
+                [GridSize.Star()],
+                [GridSize.Star()],
+                searchBoxHost.Grid(row: 0, column: 0))
+                .Padding(16, 0, 16, 0)
+                .WithKey("search-header-narrow");
+
+            // 分区栏这一行右侧接上排序和刷新.
+            tabs = Grid(
+                [GridSize.Star(), GridSize.Auto],
+                [GridSize.Auto],
+                BuildSectionTabs(sections, selectedIndex, viewModel).Grid(row: 0, column: 0),
+                actions.Grid(row: 0, column: 1).Margin(0, 0, 16, 0))
+                .WithKey("search-tabs-row-narrow");
+        }
 
         return Grid(
             [GridSize.Star()],
