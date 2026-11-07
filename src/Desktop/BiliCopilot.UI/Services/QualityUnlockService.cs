@@ -236,15 +236,59 @@ internal static class QualityUnlockService
         string mid,
         ILogger? logger = null)
     {
-        var playUrl = $"https://api.bilibili.com/x/player/wbi/playurl?bvid={bvid}&cid={cid}&qn={qn}"
-            + "&type=0&otype=json&fourk=1&fnver=0&fnval=4048&platform=pc&high_quality=1";
+        // 解锁服务器是拿这个 URL 自己去 B 站取 playurl 的，
+        // 所以必须和浏览器发出的一样带 wbi 签名（wts + w_rid）；裸 URL 会被 B 站判风险，
+        // 服务端取不到东西就回 {"code":2,"message":"fail"}——这就是「自动最高画质不起效」的直接原因.
+        var playQuery = await BiliWbiSigner.SignAsync(
+            new Dictionary<string, string>
+            {
+                ["bvid"] = bvid,
+                ["cid"] = cid,
+                ["qn"] = qn.ToString(),
+                ["type"] = "0",
+                ["otype"] = "json",
+                ["fourk"] = "1",
+                ["fnver"] = "0",
+                ["fnval"] = "4048",
+                ["platform"] = "pc",
+                ["high_quality"] = "1",
+            },
+            cookie,
+            logger).ConfigureAwait(false);
+        var playUrl = $"https://api.bilibili.com/x/player/wbi/playurl?{playQuery}";
 
         // 登录态一律转发：解锁服务器要靠它拿到大会员画质.
+        // buvid3 缺失时 B 站会对 playurl 走风控，服务端替我们取就失败（表现为 code=2 fail），
+        // 所以先看看本地有没有，没有就要一个再一起转发.
         var cookieForServer = cookie;
+        try
+        {
+            if (!cookieForServer.Contains("buvid3=", StringComparison.Ordinal))
+            {
+                var buvid3 = await BiliWbiSigner.GetBuvid3Async(cookie, logger).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(buvid3))
+                {
+                    cookieForServer = string.IsNullOrEmpty(cookieForServer)
+                        ? $"buvid3={buvid3}"
+                        : $"{cookieForServer.TrimEnd(';')}; buvid3={buvid3}";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger?.LogDebug(ex, "取 buvid3 失败，按原 cookie 转发");
+        }
 
         // 服务端要的 ui 结构是照脚本来的：ua/mid/vip/level/money/cookie/csrf/name/face.
         // 少了 name、face 会被判成 invalid（实测返回 {"code":2,"message":"invalid"}）.
         var (name, face, vip, level) = await ReadAccountProfileAsync(cookie, mid, logger).ConfigureAwait(false);
+        logger?.LogInformation(
+            "画质解锁 ui 字段：mid={Mid} name={Name} face={HasFace} vip={Vip} level={Level}",
+            mid,
+            string.IsNullOrEmpty(name) ? "空" : name,
+            string.IsNullOrEmpty(face) ? "无" : "有",
+            vip,
+            level);
         var ui = $"{{\"ua\":\"{Escape(UserAgent)}\",\"mid\":\"{Escape(mid)}\","
             + $"\"vip\":{(vip ? 1 : 0)},\"level\":{level},\"money\":0,"
             + $"\"cookie\":\"{Escape(cookieForServer)}\",\"csrf\":\"{Escape(csrf)}\","
@@ -375,7 +419,7 @@ internal static class QualityUnlockService
             request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
             using var response = await Client.SendAsync(request).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            logger?.LogDebug("画质解锁服务器登记结果：HTTP {Status} {Body}", (int)response.StatusCode, text.Length > 120 ? text[..120] : text);
+            logger?.LogInformation("画质解锁服务器登记：HTTP {Status} {Body}", (int)response.StatusCode, text.Length > 200 ? text[..200] : text);
         }
         catch (Exception ex)
         {
@@ -491,6 +535,9 @@ internal sealed class QualityUnlockSyncResult
 
     public bool Success => !string.IsNullOrEmpty(Server);
 }
+
+
+
 
 
 

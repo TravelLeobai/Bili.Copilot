@@ -146,13 +146,22 @@ public static class AiAdAnalyzer
 
         try
         {
-            var fileUrl = await UploadToDashScopeAsync(audioUrl, cookie, dashScopeKey, dashScopeModel, logger);
-            if (string.IsNullOrEmpty(fileUrl))
+            // 先让 DashScope 自己去拉 B 站音频地址：转写接口本来就收 file_urls，
+            // 这样能绕开 OSS 上传（那边一直回 MalformedPOSTRequest）.
+            var transcript = await TranscribeAsync(audioUrl, dashScopeKey, dashScopeModel, logger);
+            if (string.IsNullOrWhiteSpace(transcript))
             {
-                return Array.Empty<SponsorSegment>();
+                // 拉不到（B 站 CDN 要 Referer 之类）就退回上传，再转写一次.
+                logger?.LogInformation("DashScope 直接拉音频没拿到转写结果，改走上传");
+                var fileUrl = await UploadToDashScopeAsync(audioUrl, cookie, dashScopeKey, dashScopeModel, logger);
+                if (string.IsNullOrEmpty(fileUrl))
+                {
+                    return Array.Empty<SponsorSegment>();
+                }
+
+                transcript = await TranscribeAsync(fileUrl, dashScopeKey, dashScopeModel, logger);
             }
 
-            var transcript = await TranscribeAsync(fileUrl, dashScopeKey, dashScopeModel, logger);
             return string.IsNullOrWhiteSpace(transcript)
                 ? Array.Empty<SponsorSegment>()
                 : await AnalyzeSubtitleAsync(transcript, logger);
@@ -274,14 +283,20 @@ public static class AiAdAnalyzer
             { new StringContent("200"), "success_action_status" },
         };
 
+        // 文件段不要自己指定 Content-Type：DashScope 的上传策略里对 content-type 有条件，
+        // 写死 audio/mp4 会被 OSS 判 400（实测就是这条）。让它按默认的 application/octet-stream 走.
         var fileContent = new ByteArrayContent(audioBytes);
-        fileContent.Headers.ContentType = new MediaTypeHeaderValue("audio/mp4");
         form.Add(fileContent, "file", Path.GetFileName(key));
 
         using var uploadResponse = await Client.PostAsync(uploadHost, form);
         if (!uploadResponse.IsSuccessStatusCode)
         {
-            logger?.LogWarning("上传音频到临时存储失败：{Status}", (int)uploadResponse.StatusCode);
+            // OSS 的 400 会带 XML（Code/Message），不看正文根本不知道哪条策略没过.
+            var body = await uploadResponse.Content.ReadAsStringAsync();
+            logger?.LogWarning(
+                "上传音频到临时存储失败：{Status} {Body}",
+                (int)uploadResponse.StatusCode,
+                body.Length > 600 ? body[..600] : body);
             return null;
         }
 
@@ -567,4 +582,5 @@ public static class AiAdAnalyzer
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }
+
 
