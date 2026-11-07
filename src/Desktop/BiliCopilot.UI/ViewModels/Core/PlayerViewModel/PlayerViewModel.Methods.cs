@@ -677,10 +677,21 @@ public sealed partial class PlayerViewModel
                         IsControlsVisible = true;
                     }
 
-                    // 只有播放器真的停下（keep-open 下停在片尾是 Paused）才切结束页，
-                    // 不要一进"距片尾 2 秒"就切，画面还在走的时候切会显得很突兀.
-                    if (Player.PlaybackState is MpvPlayerState.Paused or MpvPlayerState.Idle)
+                    // 切结束页的时机：位置到片尾最后 0.3 秒，或者播放器状态已经变成暂停/空闲.
+                    // 只靠 PlaybackState 不行——PlayerSurface 是把 mpv 的属性变更原样转发的，
+                    // 实测播完时不一定有 PlaybackState 的变更事件（上一版就是这样导致结束页不出现）.
+                    if (Player.Position >= Player.Duration - 0.3
+                        || Player.PlaybackState is MpvPlayerState.Paused or MpvPlayerState.Idle)
                     {
+                        if (!IsPlaybackEnded)
+                        {
+                            logger.LogInformation(
+                                "播放到片尾，切结束页：position={Position:F2} duration={Duration:F2} state={State}",
+                                Player.Position,
+                                Player.Duration,
+                                Player.PlaybackState);
+                        }
+
                         MarkPlaybackEnded();
                     }
                 }
@@ -708,18 +719,16 @@ public sealed partial class PlayerViewModel
         }
         else if (e.PropertyName == nameof(Player.PlaybackState))
         {
-            // 状态变成暂停/停止、并且就停在片尾，这时才算"播完了"，切结束页.
+            // 状态变成暂停/空闲、并且就停在片尾，这时切结束页.
+            // 注意：不要在这里用"状态回到 Playing 就退出结束状态"——实测片尾时 mpv 仍会上报
+            // Playing，那条规则会把刚出现的结束页立刻清掉（上一版结束页不出现的原因）。
+            // 退出结束状态只走位置判断（往回拖超过 2 秒）或重新加载.
             if (!IsLive
                 && Player.Duration > 5
                 && Math.Abs(Player.Position - Player.Duration) < 1
                 && Player.PlaybackState is MpvPlayerState.Paused or MpvPlayerState.Idle)
             {
                 MarkPlaybackEnded();
-            }
-            else if (Player.PlaybackState == MpvPlayerState.Playing)
-            {
-                // 重新开始播放（重播、跳回前面、切集）就退出结束状态.
-                ClearPlaybackEnded();
             }
         }
         else if (e.PropertyName == nameof(Player.Duration))
