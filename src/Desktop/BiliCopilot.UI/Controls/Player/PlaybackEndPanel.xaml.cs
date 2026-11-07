@@ -11,11 +11,12 @@ namespace BiliCopilot.UI.Controls.Player;
 public sealed partial class PlaybackEndPanel : PlayerControlBase
 {
     /// <summary>
-    /// 宽度低于这个值就把按钮组换到第二行（DIP）.
+    /// 兜底阈值（DIP）：还没量到实际所需宽度时用它.
     /// </summary>
-    private const double NarrowThreshold = 1000d;
+    private const double FallbackNarrowThreshold = 760d;
 
     private bool _isNarrowLayout;
+    private double _requiredWidth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PlaybackEndPanel"/> class.
@@ -31,12 +32,24 @@ public sealed partial class PlaybackEndPanel : PlayerControlBase
 
     /// <summary>
     /// 宽的时候 UP 信息与按钮并排、按钮靠右；窄的时候按钮落到第二行靠左.
-    /// 之前用 AdaptiveTrigger 没生效（窄窗口下按钮溢出被裁掉），改成按实际宽度直接切布局.
+    /// 阈值不用写死的数字：先在宽态下量一次"UP 信息 + 按钮组 + 间距"需要多宽，
+    /// 之后按这个实测值判断，避免窗口还够用就提前换行.
     /// </summary>
     /// <param name="width">当前宽度.</param>
     private void ApplyResponsiveLayout(double width)
     {
-        var narrow = width < NarrowThreshold;
+        if (!_isNarrowLayout && _requiredWidth <= 0)
+        {
+            var required = EndUpInfo.ActualWidth + EndActions.ActualWidth + EndHeader.ColumnSpacing;
+            if (required > 0)
+            {
+                // 留 16 DIP 余量，避免刚好卡在边界上来回抖.
+                _requiredWidth = required + 16;
+            }
+        }
+
+        var threshold = _requiredWidth > 0 ? _requiredWidth : FallbackNarrowThreshold;
+        var narrow = width < threshold;
         if (narrow == _isNarrowLayout)
         {
             return;
