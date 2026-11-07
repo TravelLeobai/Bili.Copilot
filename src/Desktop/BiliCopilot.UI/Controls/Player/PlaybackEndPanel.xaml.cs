@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.Controls.Core;
 using Microsoft.UI.Xaml;
+using Richasy.WinUIKernel.Share.Base;
 
 namespace BiliCopilot.UI.Controls.Player;
 
@@ -25,6 +26,32 @@ public sealed partial class PlaybackEndPanel : PlayerControlBase
     {
         InitializeComponent();
         SizeChanged += OnPanelSizeChanged;
+    }
+
+    /// <summary>
+    /// 关注 / 取消关注：走连接器的开关命令，结束后按最终状态给提示.
+    /// 命令内部吞掉异常，所以用"状态有没有变"判断成败，而不是只看异常.
+    /// </summary>
+    private async void OnFollowClick(object sender, RoutedEventArgs e)
+    {
+        var viewModel = ViewModel;
+        var connector = viewModel?.EndConnector;
+        if (viewModel is null || connector is null)
+        {
+            return;
+        }
+
+        var before = connector.IsFollow;
+        await connector.ToggleFollowCommand.ExecuteAsync(default);
+        var after = connector.IsFollow;
+
+        if (after == before)
+        {
+            viewModel.Window?.ShowTip("关注操作失败，请稍后再试", InfoType.Error);
+            return;
+        }
+
+        viewModel.Window?.ShowTip(after ? "已关注" : "已取消关注", InfoType.Success);
     }
 
     private void OnPanelSizeChanged(object sender, SizeChangedEventArgs e)

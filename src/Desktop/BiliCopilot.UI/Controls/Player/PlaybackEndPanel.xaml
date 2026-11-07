@@ -35,7 +35,7 @@
                 <Button
                     Padding="14,6"
                     VerticalAlignment="Center"
-                    Command="{x:Bind ToggleFollowCommand, Mode=OneWay}">
+                    Click="OnFollowClick">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <ic:SymbolIcon
                             FontSize="12"
@@ -205,5 +205,6 @@
             Value="{x:Bind ViewModel.Player.Position, Mode=OneWay}" />
     </Grid>
 </core:PlayerControlBase>
+
 
 
