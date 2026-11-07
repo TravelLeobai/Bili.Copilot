@@ -6,6 +6,7 @@
     xmlns:components="using:BiliCopilot.UI.Controls.Components"
     xmlns:core="using:BiliCopilot.UI.Controls.Core"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ic="using:FluentIcons.WinUI"
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -23,7 +24,7 @@
                 HorizontalAlignment="Center"
                 Spacing="30">
 
-                <!--  UP 信息 / 关注 / 充电  -->
+                <!--  UP 信息 / 关注  -->
                 <StackPanel Orientation="Horizontal" Spacing="18">
                     <Border
                         Width="64"
@@ -45,99 +46,67 @@
                         Command="{x:Bind ViewModel.EndFollowCommand, Mode=OneWay}">
                         <TextBlock FontSize="13" Text="关注" />
                     </Button>
-                    <Button
-                        Padding="16,6"
-                        VerticalAlignment="Center"
-                        BorderBrush="#66FFFFFF"
-                        Command="{x:Bind ViewModel.EndOpenUserSpaceCommand, Mode=OneWay}">
-                        <TextBlock FontSize="13" Text="充电" />
-                    </Button>
                 </StackPanel>
 
-                <!--  重播 + 互动  -->
+                <!--  重播 / 点赞 / 投币 / 收藏 / 分享：圆形按钮一排，中间三个直接复用视频信息面板里的控件  -->
                 <StackPanel
                     HorizontalAlignment="Left"
                     Orientation="Horizontal"
-                    Spacing="40">
-                    <Button
-                        Padding="20,8"
-                        Background="Transparent"
-                        BorderBrush="#55FFFFFF"
-                        Command="{x:Bind ViewModel.ReplayFromEndCommand, Mode=OneWay}">
+                    Spacing="28">
+                    <!--  重播：照点赞按钮的样子做的圆形按钮  -->
+                    <StackPanel Spacing="8">
+                        <Button
+                            Width="48"
+                            Height="48"
+                            Padding="0"
+                            HorizontalAlignment="Center"
+                            Command="{x:Bind ViewModel.ReplayFromEndCommand, Mode=OneWay}"
+                            CornerRadius="24"
+                            ToolTipService.ToolTip="重播">
+                            <ic:SymbolIcon FontSize="16" Symbol="ArrowSync" />
+                        </Button>
                         <TextBlock
-                            FontSize="16"
-                            FontWeight="SemiBold"
+                            HorizontalAlignment="Center"
+                            FontSize="12"
+                            Opacity="0.8"
                             Text="重播" />
-                    </Button>
-                    <Rectangle
-                        Width="1"
-                        Height="34"
-                        VerticalAlignment="Center"
-                        Fill="#33FFFFFF" />
-                    <Button
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Command="{x:Bind ViewModel.EndLikeCommand, Mode=OneWay}">
-                        <StackPanel Spacing="2">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="13"
-                                Text="好评" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="12"
-                                Opacity="0.75"
-                                Text="{x:Bind ViewModel.EndLikeText, Mode=OneWay}" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Command="{x:Bind ViewModel.CoinFromEndCommand, Mode=OneWay}">
-                        <StackPanel Spacing="2">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="13"
-                                Text="投币" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="12"
-                                Opacity="0.75"
-                                Text="{x:Bind ViewModel.EndCoinText, Mode=OneWay}" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Command="{x:Bind ViewModel.EndFavoriteCommand, Mode=OneWay}">
-                        <StackPanel Spacing="2">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="13"
-                                Text="收藏" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="12"
-                                Opacity="0.75"
-                                Text="{x:Bind ViewModel.EndFavoriteText, Mode=OneWay}" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Command="{x:Bind ViewModel.EndShareCommand, Mode=OneWay}">
-                        <StackPanel Spacing="2">
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="13"
-                                Text="分享" />
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                FontSize="12"
-                                Opacity="0.75"
-                                Text=" " />
-                        </StackPanel>
-                    </Button>
+                    </StackPanel>
+
+                    <local:LikeButton
+                        Command="{x:Bind ViewModel.EndLikeCommand, Mode=OneWay}"
+                        IsLiked="{x:Bind ViewModel.EndIsLiked, Mode=OneWay}"
+                        Tip="{x:Bind ViewModel.EndLikeText, Mode=OneWay}"
+                        TripleCommand="{x:Bind ViewModel.EndTripleCommand, Mode=OneWay}" />
+                    <local:CoinButton
+                        AlsoLike="{x:Bind ViewModel.EndCoinAlsoLike, Mode=OneWay}"
+                        Command="{x:Bind ViewModel.EndCoinCommandRaw, Mode=OneWay}"
+                        IsCoined="{x:Bind ViewModel.EndIsCoined, Mode=OneWay}"
+                        Tip="{x:Bind ViewModel.EndCoinText, Mode=OneWay}" />
+                    <local:FavoriteButton
+                        Command="{x:Bind ViewModel.EndFavoriteCommand, Mode=OneWay}"
+                        InitializeCommand="{x:Bind ViewModel.EndInitFavoritesCommand, Mode=OneWay}"
+                        IsFavorited="{x:Bind ViewModel.EndIsFavorited, Mode=OneWay}"
+                        ItemsSource="{x:Bind ViewModel.EndFavoriteFolders, Mode=OneWay}"
+                        Tip="{x:Bind ViewModel.EndFavoriteText, Mode=OneWay}" />
+
+                    <!--  分享：照着上面三个的形状做的圆形按钮  -->
+                    <StackPanel Spacing="8">
+                        <Button
+                            Width="48"
+                            Height="48"
+                            Padding="0"
+                            HorizontalAlignment="Center"
+                            Command="{x:Bind ViewModel.EndShareCommand, Mode=OneWay}"
+                            CornerRadius="24"
+                            ToolTipService.ToolTip="分享">
+                            <ic:SymbolIcon FontSize="16" Symbol="Share" />
+                        </Button>
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            FontSize="12"
+                            Opacity="0.8"
+                            Text="分享" />
+                    </StackPanel>
                 </StackPanel>
 
                 <!--  相关推荐：沿用播放器推荐分区那套现成卡片  -->

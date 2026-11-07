@@ -2,7 +2,10 @@
 
 using System.Collections.ObjectModel;
 using BiliCopilot.UI.ViewModels.Components;
+using Richasy.BiliKernel.Bili.Media;
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.ViewModels.Items;
+using Microsoft.Extensions.Logging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -99,7 +102,32 @@ public sealed partial class PlayerViewModel
     public IRelayCommand? EndShareCommand => EndConnector?.ShareVideoUrlCommand;
 
     /// <summary>
-    /// 打开 UP 主空间（结束页的"充电"按钮走这里）.
+    /// 投币命令（CoinButton 会用参数 1/2 调用）.
+    /// </summary>
+    public IRelayCommand<int>? EndCoinCommandRaw => EndConnector?.CoinCommand;
+
+    /// <summary>
+    /// 一键三连命令.
+    /// </summary>
+    public IAsyncRelayCommand? EndTripleCommand => EndConnector?.TripleCommand;
+
+    /// <summary>
+    /// 收藏夹列表（FavoriteButton 用）.
+    /// </summary>
+    public object? EndFavoriteFolders => EndConnector?.FavoriteFolders;
+
+    /// <summary>
+    /// 初始化收藏夹命令（FavoriteButton 用）.
+    /// </summary>
+    public IAsyncRelayCommand? EndInitFavoritesCommand => EndConnector?.InitializeFavoritesCommand;
+
+    /// <summary>
+    /// 投币时是否同时点赞.
+    /// </summary>
+    public bool EndCoinAlsoLike => EndConnector?.IsCoinAlsoLike ?? false;
+
+    /// <summary>
+    /// 打开 UP 主空间.
     /// </summary>
     public IRelayCommand? EndOpenUserSpaceCommand => EndConnector?.OpenUserSpaceCommand;
 
@@ -122,7 +150,7 @@ public sealed partial class PlayerViewModel
         }
 
         IsPlaybackEnded = true;
-        LoadEndRecommendations();
+        _ = LoadEndRecommendationsAsync();
         RaiseEndScreenProperties();
     }
 
@@ -166,12 +194,18 @@ public sealed partial class PlayerViewModel
         OnPropertyChanged(nameof(EndFavoriteCommand));
         OnPropertyChanged(nameof(EndShareCommand));
         OnPropertyChanged(nameof(EndOpenUserSpaceCommand));
+        OnPropertyChanged(nameof(EndCoinCommandRaw));
+        OnPropertyChanged(nameof(EndTripleCommand));
+        OnPropertyChanged(nameof(EndFavoriteFolders));
+        OnPropertyChanged(nameof(EndInitFavoritesCommand));
+        OnPropertyChanged(nameof(EndCoinAlsoLike));
     }
 
     /// <summary>
-    /// 相关推荐直接取播放器里已有的推荐分区，卡片样式也用现成的那套.
+    /// 相关推荐：优先用播放器自带的推荐分区（原版就是这个来源），
+    /// 没有就回退到 BiliKernel 的通用推荐流.
     /// </summary>
-    private void LoadEndRecommendations()
+    private async Task LoadEndRecommendationsAsync()
     {
         if (EndRecommendations.Count > 0)
         {
@@ -181,15 +215,45 @@ public sealed partial class PlayerViewModel
         var section = EndConnector?.Sections?
             .OfType<VideoPlayerRecommendSectionDetailViewModel>()
             .FirstOrDefault();
-        if (section?.Items is not { Count: > 0 } items)
+        if (section?.Items is { Count: > 0 } items)
+        {
+            foreach (var item in items.Take(10))
+            {
+                EndRecommendations.Add(item);
+            }
+
+            return;
+        }
+
+        try
+        {
+            var service = this.Get<IVideoDiscoveryService>();
+            var (videos, _) = await service.GetRecommendVideoListAsync(0);
+            if (videos is null)
+            {
+                return;
+            }
+
+            foreach (var video in videos.Take(10))
+            {
+                EndRecommendations.Add(new VideoItemViewModel(video, VideoCardStyle.PlayerRecommend, playAction: PlayFromEnd));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "加载结束页推荐视频失败");
+        }
+    }
+
+    private void PlayFromEnd(VideoItemViewModel vm)
+    {
+        var connector = EndConnector;
+        if (connector is null)
         {
             return;
         }
 
-        foreach (var item in items.Take(10))
-        {
-            EndRecommendations.Add(item);
-        }
+        InitializeCommand.Execute(new UI.Models.MediaSnapshot(vm.Data, connector.IsPrivatePlay));
     }
 
     private static string FormatEndCount(double value)
@@ -197,6 +261,9 @@ public sealed partial class PlayerViewModel
             ? $"{value / 10000:F1}万"
             : Math.Round(value).ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
 }
+
+
+
 
 
 
