@@ -137,7 +137,10 @@ public sealed partial class PlayerViewModel
     [RelayCommand]
     private async Task ReplayFromEndAsync() => await ReloadAtAsync(0);
 
-    private VideoConnectorViewModel? EndConnector => Connector as VideoConnectorViewModel;
+    /// <summary>
+    /// 结束页用到的视频连接器（互动按钮直接绑它，保证收藏夹等异步数据能实时更新）.
+    /// </summary>
+    public VideoConnectorViewModel? EndConnector => Connector as VideoConnectorViewModel;
 
     /// <summary>
     /// 标记进入结束状态，并准备推荐数据.
@@ -261,6 +264,7 @@ public sealed partial class PlayerViewModel
             ? $"{value / 10000:F1}万"
             : Math.Round(value).ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
 }
+
 
 
 

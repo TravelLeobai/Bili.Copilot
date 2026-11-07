@@ -11,126 +11,142 @@
     xmlns:local="using:BiliCopilot.UI.Controls.Player"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:repeater="using:Richasy.WinUIKernel.Share.Base.Repeater"
+    xmlns:vm="using:BiliCopilot.UI.ViewModels.Core"
     mc:Ignorable="d">
+
+    <core:PlayerControlBase.Resources>
+        <!--  三个互动按钮直接绑到连接器上，收藏夹列表这类异步数据才能跟着刷新  -->
+        <DataTemplate x:Key="EndOperationsTemplate" x:DataType="vm:VideoConnectorViewModel">
+            <StackPanel Orientation="Horizontal" Spacing="28">
+                <local:LikeButton
+                    Command="{x:Bind ToggleLikeCommand, Mode=OneWay}"
+                    IsLiked="{x:Bind IsLiked, Mode=OneWay}"
+                    Tip="{x:Bind LikeCount, Mode=OneWay, Converter={StaticResource CountConverter}}"
+                    TripleCommand="{x:Bind TripleCommand, Mode=OneWay}" />
+                <local:CoinButton
+                    AlsoLike="{x:Bind IsCoinAlsoLike, Mode=TwoWay}"
+                    Command="{x:Bind CoinCommand, Mode=OneWay}"
+                    IsCoined="{x:Bind IsCoined, Mode=OneWay}"
+                    Tip="{x:Bind CoinCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+                <local:FavoriteButton
+                    Command="{x:Bind FavoriteCommand, Mode=OneWay}"
+                    InitializeCommand="{x:Bind InitializeFavoritesCommand, Mode=OneWay}"
+                    IsFavorited="{x:Bind IsFavorited, Mode=OneWay}"
+                    ItemsSource="{x:Bind FavoriteFolders, Mode=OneWay}"
+                    Tip="{x:Bind FavoriteCount, Mode=OneWay, Converter={StaticResource CountConverter}}" />
+            </StackPanel>
+        </DataTemplate>
+    </core:PlayerControlBase.Resources>
 
     <!--  播放结束页：暗色遮罩 + UP 信息 + 重播与互动 + 相关推荐  -->
     <Grid Background="#E6101010" RequestedTheme="Dark">
         <ScrollViewer
-            HorizontalContentAlignment="Center"
+            HorizontalScrollMode="Disabled"
             VerticalScrollBarVisibility="Auto">
-            <StackPanel
-                Width="1100"
-                Margin="0,32,0,40"
-                HorizontalAlignment="Center"
-                Spacing="30">
-
-                <!--  UP 信息 / 关注  -->
-                <StackPanel Orientation="Horizontal" Spacing="18">
-                    <Border
-                        Width="64"
-                        Height="64"
-                        Background="#33FFFFFF"
-                        CornerRadius="32">
-                        <Image
-                            Source="{x:Bind ViewModel.EndUpAvatar, Mode=OneWay, Converter={StaticResource BitmapConverter}}"
-                            Stretch="UniformToFill" />
-                    </Border>
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="20"
-                        FontWeight="SemiBold"
-                        Text="{x:Bind ViewModel.EndUpName, Mode=OneWay}" />
-                    <Button
-                        Padding="14,6"
-                        VerticalAlignment="Center"
-                        Command="{x:Bind ViewModel.EndFollowCommand, Mode=OneWay}">
-                        <TextBlock FontSize="13" Text="关注" />
-                    </Button>
-                </StackPanel>
-
-                <!--  重播 / 点赞 / 投币 / 收藏 / 分享：圆形按钮一排，中间三个直接复用视频信息面板里的控件  -->
+            <Grid Padding="48,32,48,40">
                 <StackPanel
-                    HorizontalAlignment="Left"
-                    Orientation="Horizontal"
-                    Spacing="28">
-                    <!--  重播：照点赞按钮的样子做的圆形按钮  -->
-                    <StackPanel Spacing="8">
-                        <Button
-                            Width="48"
-                            Height="48"
-                            Padding="0"
-                            HorizontalAlignment="Center"
-                            Command="{x:Bind ViewModel.ReplayFromEndCommand, Mode=OneWay}"
-                            CornerRadius="24"
-                            ToolTipService.ToolTip="重播">
-                            <ic:SymbolIcon FontSize="16" Symbol="ArrowSync" />
-                        </Button>
+                    MaxWidth="1100"
+                    HorizontalAlignment="Center"
+                    Spacing="30">
+
+                    <!--  UP 信息 / 关注  -->
+                    <StackPanel Orientation="Horizontal" Spacing="18">
+                        <Border
+                            Width="64"
+                            Height="64"
+                            Background="#33FFFFFF"
+                            CornerRadius="32">
+                            <Image
+                                Source="{x:Bind ViewModel.EndUpAvatar, Mode=OneWay, Converter={StaticResource BitmapConverter}}"
+                                Stretch="UniformToFill" />
+                        </Border>
                         <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="12"
-                            Opacity="0.8"
-                            Text="重播" />
+                            VerticalAlignment="Center"
+                            FontSize="20"
+                            FontWeight="SemiBold"
+                            Text="{x:Bind ViewModel.EndUpName, Mode=OneWay}" />
+                        <Button
+                            Padding="14,6"
+                            VerticalAlignment="Center"
+                            Command="{x:Bind ViewModel.EndFollowCommand, Mode=OneWay}">
+                            <TextBlock FontSize="13" Text="关注" />
+                        </Button>
                     </StackPanel>
 
-                    <local:LikeButton
-                        Command="{x:Bind ViewModel.EndLikeCommand, Mode=OneWay}"
-                        IsLiked="{x:Bind ViewModel.EndIsLiked, Mode=OneWay}"
-                        Tip="{x:Bind ViewModel.EndLikeText, Mode=OneWay}"
-                        TripleCommand="{x:Bind ViewModel.EndTripleCommand, Mode=OneWay}" />
-                    <local:CoinButton
-                        AlsoLike="{x:Bind ViewModel.EndCoinAlsoLike, Mode=OneWay}"
-                        Command="{x:Bind ViewModel.EndCoinCommandRaw, Mode=OneWay}"
-                        IsCoined="{x:Bind ViewModel.EndIsCoined, Mode=OneWay}"
-                        Tip="{x:Bind ViewModel.EndCoinText, Mode=OneWay}" />
-                    <local:FavoriteButton
-                        Command="{x:Bind ViewModel.EndFavoriteCommand, Mode=OneWay}"
-                        InitializeCommand="{x:Bind ViewModel.EndInitFavoritesCommand, Mode=OneWay}"
-                        IsFavorited="{x:Bind ViewModel.EndIsFavorited, Mode=OneWay}"
-                        ItemsSource="{x:Bind ViewModel.EndFavoriteFolders, Mode=OneWay}"
-                        Tip="{x:Bind ViewModel.EndFavoriteText, Mode=OneWay}" />
+                    <!--  重播 / 点赞 / 投币 / 收藏 / 分享：整排靠右，分享的右缘和下面卡片右缘对齐  -->
+                    <StackPanel
+                        HorizontalAlignment="Right"
+                        Orientation="Horizontal"
+                        Spacing="28">
+                        <StackPanel Spacing="8">
+                            <Button
+                                Width="48"
+                                Height="48"
+                                Padding="0"
+                                HorizontalAlignment="Center"
+                                Command="{x:Bind ViewModel.ReplayFromEndCommand, Mode=OneWay}"
+                                CornerRadius="24"
+                                ToolTipService.ToolTip="重播">
+                                <ic:SymbolIcon FontSize="16" Symbol="ArrowSync" />
+                            </Button>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="12"
+                                Opacity="0.8"
+                                Text="重播" />
+                        </StackPanel>
 
-                    <!--  分享：照着上面三个的形状做的圆形按钮  -->
-                    <StackPanel Spacing="8">
-                        <Button
-                            Width="48"
-                            Height="48"
-                            Padding="0"
-                            HorizontalAlignment="Center"
-                            Command="{x:Bind ViewModel.EndShareCommand, Mode=OneWay}"
-                            CornerRadius="24"
-                            ToolTipService.ToolTip="分享">
-                            <ic:SymbolIcon FontSize="16" Symbol="Share" />
-                        </Button>
+                        <ContentControl
+                            HorizontalContentAlignment="Left"
+                            VerticalContentAlignment="Center"
+                            Content="{x:Bind ViewModel.EndConnector, Mode=OneWay}"
+                            ContentTemplate="{StaticResource EndOperationsTemplate}"
+                            IsTabStop="False" />
+
+                        <StackPanel Spacing="8">
+                            <Button
+                                Width="48"
+                                Height="48"
+                                Padding="0"
+                                HorizontalAlignment="Center"
+                                Command="{x:Bind ViewModel.EndShareCommand, Mode=OneWay}"
+                                CornerRadius="24"
+                                ToolTipService.ToolTip="分享">
+                                <ic:SymbolIcon FontSize="16" Symbol="Share" />
+                            </Button>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="12"
+                                Opacity="0.8"
+                                Text="分享" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!--  相关推荐：最多三列，随窗口宽度在 1~3 列之间变化  -->
+                    <StackPanel Spacing="14">
                         <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="12"
-                            Opacity="0.8"
-                            Text="分享" />
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Text="接着看" />
+                        <repeater:AppRepeater ItemsSource="{x:Bind ViewModel.EndRecommendations, Mode=OneWay}">
+                            <repeater:AppRepeater.ItemTemplate>
+                                <DataTemplate x:DataType="items:VideoItemViewModel">
+                                    <components:VideoCardControl Style="{StaticResource PlayerRecommendVideoCardStyle}" ViewModel="{x:Bind}" />
+                                </DataTemplate>
+                            </repeater:AppRepeater.ItemTemplate>
+                            <repeater:AppRepeater.Layout>
+                                <UniformGridLayout
+                                    ItemsStretch="Fill"
+                                    MaximumRowsOrColumns="3"
+                                    MinColumnSpacing="16"
+                                    MinItemWidth="300"
+                                    MinRowSpacing="16"
+                                    Orientation="Horizontal" />
+                            </repeater:AppRepeater.Layout>
+                        </repeater:AppRepeater>
                     </StackPanel>
                 </StackPanel>
-
-                <!--  相关推荐：沿用播放器推荐分区那套现成卡片  -->
-                <StackPanel Spacing="14">
-                    <TextBlock
-                        FontSize="16"
-                        FontWeight="SemiBold"
-                        Text="接着看" />
-                    <repeater:AppRepeater ItemsSource="{x:Bind ViewModel.EndRecommendations, Mode=OneWay}">
-                        <repeater:AppRepeater.ItemTemplate>
-                            <DataTemplate x:DataType="items:VideoItemViewModel">
-                                <components:VideoCardControl Style="{StaticResource PlayerRecommendVideoCardStyle}" ViewModel="{x:Bind}" />
-                            </DataTemplate>
-                        </repeater:AppRepeater.ItemTemplate>
-                        <repeater:AppRepeater.Layout>
-                            <UniformGridLayout
-                                ItemsStretch="Fill"
-                                MinColumnSpacing="12"
-                                MinItemWidth="230"
-                                MinRowSpacing="12" />
-                        </repeater:AppRepeater.Layout>
-                    </repeater:AppRepeater>
-                </StackPanel>
-            </StackPanel>
+            </Grid>
         </ScrollViewer>
 
         <!--  底部只留一根不可拖动的进度条  -->
