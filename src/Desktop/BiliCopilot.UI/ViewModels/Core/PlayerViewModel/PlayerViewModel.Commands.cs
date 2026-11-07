@@ -254,9 +254,13 @@ public sealed partial class PlayerViewModel
         {
             await ApplyPauseAsync();
         }
-        else if (Player.IsStopped)
+        else if (Player.IsStopped || IsPlayerAtEnd())
         {
-            await Player.ReplayAsync();
+            // 播完后 mpv 不一定是 Stopped：实测停在 44/44 秒时状态是 Paused，
+            // 于是落进 Resume 分支——在片尾 Resume 等于什么都不做，画面就停在最后一帧。
+            // 这里把"已经到片尾"也当成结束，整条链路重新加载后从头播.
+            logger.LogInformation("播放已结束（位置 {Position:F1}/{Duration:F1}），重新加载媒体后从头播放", Player.Position, Player.Duration);
+            await ReloadAtAsync(0);
         }
         else
         {

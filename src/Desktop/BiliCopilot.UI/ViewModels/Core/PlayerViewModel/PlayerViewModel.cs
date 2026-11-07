@@ -230,6 +230,15 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
         else
         {
+            // 重载时必须先把上一个播放器放掉：MpvPlayer 共用同一个 mpv client，
+            // 旧实例留着会和新实例抢同一路视频输出，表现就是"有声音、画面不动".
+            if (Player is not null)
+            {
+                Player.PropertyChanged -= OnPlayerPropertyChanged;
+                await Player.DisposeAsync();
+                Player = null;
+            }
+
             Player = new PlayerSurface(new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger));
             Player.PropertyChanged += OnPlayerPropertyChanged;
             Player.Mpv!.UpdateResolvers(_sourceResolver, _historyResolver);
@@ -376,12 +385,17 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         var selected = Sources.FirstOrDefault(s => s.IsSelected);
         SelectedSource = selected;
+
+        // 原实现只是 Player.ReplayAsync(Player.Position)：那是把"已经加载的旧媒体"原地重播一遍，
+        // 解析器没有重跑、新清晰度的地址根本没取，所以切了等于没切；再加上重播后视频输出没接回去，
+        // 就成了"画面静止、只有声音".
+        // 正确做法是按新的 PreferQuality 重新走一遍加载，再跳回原位置.
         _continuePosition = Player?.Position;
         if (_sourceResolver is VideoMediaSourceResolver videoResolver)
         {
             _snapshot.PreferQuality = selected.Data.Quality;
             videoResolver.ResetSnapshot(_snapshot);
-            await Player.ReplayAsync(Player.Position);
+            await ReloadAtAsync(_continuePosition ?? 0);
         }
 
         await Task.CompletedTask;
@@ -1116,4 +1130,5 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
