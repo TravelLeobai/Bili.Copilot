@@ -88,6 +88,14 @@
                 </MenuFlyoutItem.Icon>
             </MenuFlyoutItem>
             <MenuFlyoutItem
+                Command="{x:Bind ViewModel.ToggleStatisticsCommand, Mode=OneWay}"
+                Style="{StaticResource ContextMenuFlyoutItemStyle}"
+                Text="属性">
+                <MenuFlyoutItem.Icon>
+                    <ic:SymbolIcon Symbol="Info" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem
                 Command="{x:Bind ViewModel.SendDanmakuCommand, Mode=OneWay}"
                 Style="{StaticResource ContextMenuFlyoutItemStyle}"
                 Text="{ext:Locale Name=SendDanmaku}">

@@ -183,6 +183,80 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         _initTask.TrySetResult(true);
     }
 
+    /// <summary>
+    /// 生成统计信息浮层要显示的字段（点播视频）.
+    /// 数据都来自 dash 段本身：MimeType / Codecs / 宽高 / 带宽 / 地址都能直接读到.
+    /// </summary>
+    internal IReadOnlyList<PlayerStatisticItem> BuildStatistics()
+    {
+        var items = new List<PlayerStatisticItem>();
+        if (_playbackInfo is null)
+        {
+            items.Add(new("状态", "还没拿到播放信息"));
+            return items;
+        }
+
+        var videos = _playbackInfo.Videos?.ToList() ?? [];
+        var audios = _playbackInfo.Audios?.ToList() ?? [];
+        var format = GetCurrentFormat();
+        var video = videos.FirstOrDefault(p => format is not null && p.Id == format.Quality.ToString())
+            ?? videos.OrderByDescending(p => SafeInt(p.Id)).FirstOrDefault();
+        var audio = audios.OrderByDescending(p => SafeInt(p.Id)).FirstOrDefault();
+
+        items.Add(new(
+            "Mime Type",
+            $"{video?.MimeType}; codecs=\"{video?.Codecs}\", {audio?.MimeType}; codecs=\"{audio?.Codecs}\""));
+        items.Add(new("播放内核", "mpv"));
+        if (video is not null)
+        {
+            items.Add(new("分辨率", $"{video.Width} × {video.Height}"));
+            items.Add(new("视频码率", $"{video.Bandwidth / 1000} Kbps [{DescribeCodec(video.Codecs)}]"));
+        }
+
+        if (audio is not null)
+        {
+            items.Add(new("音频码率", $"{audio.Bandwidth / 1000} Kbps [{DescribeCodec(audio.Codecs)}]"));
+        }
+
+        items.Add(new("分段", $"视频 {videos.Count} 段 / 音频 {audios.Count} 段"));
+        items.Add(new("视频宿主机", ReadHost(video?.BaseUrl)));
+        items.Add(new("音频宿主机", ReadHost(audio?.BaseUrl)));
+        items.Add(new("画质", format is null ? "未知" : $"qn={format.Quality}"));
+        return items;
+    }
+
+    private static int SafeInt(string? value)
+        => int.TryParse(value, out var result) ? result : 0;
+
+    private static string DescribeCodec(string? codecs)
+    {
+        if (string.IsNullOrEmpty(codecs))
+        {
+            return "未知";
+        }
+
+        var text = codecs.ToLowerInvariant();
+        if (text.Contains("hev") || text.Contains("hvc") || text.Contains("h265"))
+        {
+            return "HEVC";
+        }
+
+        if (text.Contains("av01") || text.Contains("av1"))
+        {
+            return "AV1";
+        }
+
+        if (text.Contains("avc") || text.Contains("h264"))
+        {
+            return "AVC";
+        }
+
+        return text.Contains("mp4a") ? "AAC" : codecs;
+    }
+
+    private static string ReadHost(string? url)
+        => Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : "—";
+
     private async Task<(string? video, string? audio)> GetPlayUrlsAsync()
     {
         var videoSegments = _playbackInfo!.Videos;

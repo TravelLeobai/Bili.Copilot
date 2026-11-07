@@ -20,6 +20,9 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     private bool _isInTransportControls;
     private bool _isInTitleBar;
     private Point _lastPointerPosition;
+    private bool _isDraggingStatistics;
+    private Point _statisticsDragStart;
+    private Point _statisticsOffsetStart;
 
     public PlayerOverlay()
     {
@@ -383,4 +386,47 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     /// <returns>可见性.</returns>
     public static Visibility GetAdSkipVisibility(bool isLive)
         => isLive ? Visibility.Collapsed : Visibility.Visible;
+
+    private void OnCloseStatisticsClick(object sender, RoutedEventArgs e)
+        => ViewModel?.CloseStatisticsCommand.Execute(default);
+
+    private void OnStatisticsHeaderPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _isDraggingStatistics = true;
+        _statisticsDragStart = e.GetCurrentPoint(StatisticsCard).Position;
+        _statisticsOffsetStart = new Point(StatisticsTransform.X, StatisticsTransform.Y);
+        StatisticsHeader.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void OnStatisticsHeaderPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isDraggingStatistics)
+        {
+            return;
+        }
+
+        var current = e.GetCurrentPoint(StatisticsCard).Position;
+        var targetX = _statisticsOffsetStart.X + (current.X - _statisticsDragStart.X);
+        var targetY = _statisticsOffsetStart.Y + (current.Y - _statisticsDragStart.Y);
+
+        // 限制在播放器可视范围内，别拖出画面找不回来.
+        var maxX = Math.Max(0, ActualWidth - StatisticsCard.ActualWidth - 48);
+        var maxY = Math.Max(0, ActualHeight - StatisticsCard.ActualHeight - 48);
+        StatisticsTransform.X = Math.Clamp(targetX, 0, maxX);
+        StatisticsTransform.Y = Math.Clamp(targetY, 0, maxY);
+        e.Handled = true;
+    }
+
+    private void OnStatisticsHeaderPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isDraggingStatistics)
+        {
+            return;
+        }
+
+        _isDraggingStatistics = false;
+        StatisticsHeader.ReleasePointerCapture(e.Pointer);
+        e.Handled = true;
+    }
 }

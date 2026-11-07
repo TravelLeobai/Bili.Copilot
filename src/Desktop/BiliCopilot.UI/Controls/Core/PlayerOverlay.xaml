@@ -14,6 +14,7 @@
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
     xmlns:local="using:BiliCopilot.UI.Controls.Core"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:BiliCopilot.UI.Models"
     xmlns:player="using:BiliCopilot.UI.Controls.Player"
     mc:Ignorable="d">
 
@@ -797,6 +798,88 @@
             VerticalAlignment="Stretch"
             ViewModel="{x:Bind ViewModel, Mode=OneWay}"
             Visibility="{x:Bind ViewModel.IsLive, Mode=OneWay}" />
+
+        <!--  统计信息浮层：右键菜单「属性」打开，可拖动到画面任意角落  -->
+        <Grid
+            x:Name="StatisticsLayer"
+            Visibility="{x:Bind ViewModel.IsStatisticsVisible, Mode=OneWay}">
+            <Border
+                x:Name="StatisticsCard"
+                Width="520"
+                Margin="24"
+                Padding="0,0,0,10"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Opacity="0.92">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="StatisticsTransform" />
+                </Border.RenderTransform>
+                <Grid RowSpacing="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid
+                        x:Name="StatisticsHeader"
+                        Padding="14,8,8,8"
+                        Background="Transparent"
+                        PointerMoved="OnStatisticsHeaderPointerMoved"
+                        PointerPressed="OnStatisticsHeaderPointerPressed"
+                        PointerReleased="OnStatisticsHeaderPointerReleased">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Text="统计信息" />
+                        <Button
+                            Grid.Column="1"
+                            Width="32"
+                            Height="28"
+                            Padding="0"
+                            AutomationProperties.Name="关闭统计信息"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="OnCloseStatisticsClick"
+                            ToolTipService.ToolTip="关闭">
+                            <ic:SymbolIcon Symbol="Dismiss" />
+                        </Button>
+                    </Grid>
+                    <ItemsControl
+                        Grid.Row="1"
+                        Margin="14,0,14,0"
+                        ItemsSource="{x:Bind ViewModel.StatisticsLines, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:PlayerStatisticItem">
+                                <Grid Margin="0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Opacity="0.85"
+                                        Text="{x:Bind Label}" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        FontSize="12"
+                                        Text="{x:Bind Value}"
+                                        TextWrapping="Wrap" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </Border>
+        </Grid>
         <VisualStateManager.VisualStateGroups>
             <VisualStateGroup>
                 <VisualState x:Name="DefaultState" />
