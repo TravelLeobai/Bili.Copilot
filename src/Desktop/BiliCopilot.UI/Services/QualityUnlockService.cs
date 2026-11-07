@@ -81,9 +81,18 @@ internal static class QualityUnlockService
                 return DefaultHomePage;
             }
 
+            // hd2a.page.gd 已经不作数了，老配置里存着它就自动迁到新主页，
+            // 否则每次同步都先卡在死域名上.
+            var trimmed = value.TrimEnd('/');
+            if (trimmed.Equals("https://hd2a.page.gd", StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("http://hd2a.page.gd", StringComparison.OrdinalIgnoreCase))
+            {
+                return DefaultHomePage;
+            }
+
             // 不要自作聪明把 http 升级成 https：mxd.indevs.in 只有 http 能用，
             // 走 https 会卡在 TLS 握手直到超时，整条解锁链路被判失败、回退常规地址.
-            return value.TrimEnd('/');
+            return trimmed;
         }
     }
 
@@ -109,28 +118,47 @@ internal static class QualityUnlockService
         var homePage = HomePage;
 
         // 1) 脚本启动时会读这个文件，返回 {"home":"http://..."} 表示服务器搬到了哪.
-        try
+        // 老配置里存的可能还是已经作废的 hd2a.page.gd，所以这里多准备几个候选地址：
+        // 当前主页 → 解析服务器下的新路径 → 解析服务器根目录.
+        foreach (var homeTxt in new[]
+                 {
+                     $"{homePage}/assets/home.txt",
+                     $"{Server}/hd2a/assets/home.txt",
+                     $"{Server}/assets/home.txt",
+                 })
         {
-            using var request = CreateRequest($"{homePage}/assets/home.txt");
-            using var response = await Client.SendAsync(request).ConfigureAwait(false);
-            if (response.IsSuccessStatusCode)
+            if (!string.IsNullOrEmpty(result.Server))
             {
-                var text = (await response.Content.ReadAsStringAsync().ConfigureAwait(false)).Trim();
-                if (text.StartsWith('{'))
+                break;
+            }
+
+            try
+            {
+                using var request = CreateRequest(homeTxt);
+                using var response = await Client.SendAsync(request).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
                 {
-                    using var document = JsonDocument.Parse(text);
-                    if (document.RootElement.TryGetProperty("home", out var home)
-                        && home.GetString() is { Length: > 0 } server)
-                    {
-                        result.Server = server;
-                        result.Source = "assets/home.txt";
-                    }
+                    continue;
+                }
+
+                var text = (await response.Content.ReadAsStringAsync().ConfigureAwait(false)).Trim();
+                if (!text.StartsWith('{'))
+                {
+                    continue;
+                }
+
+                using var document = JsonDocument.Parse(text);
+                if (document.RootElement.TryGetProperty("home", out var home)
+                    && home.GetString() is { Length: > 0 } server)
+                {
+                    result.Server = server;
+                    result.Source = homeTxt;
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            logger?.LogDebug(ex, "读取 assets/home.txt 失败");
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "读取 home.txt 失败：{Url}", homeTxt);
+            }
         }
 
         // 2) 抓上游用户脚本，解析 box.home 字段.
@@ -138,7 +166,13 @@ internal static class QualityUnlockService
         {
             try
             {
-                var script = await TryFetchScriptAsync(DefaultScriptUrl).ConfigureAwait(false);
+                // 脚本地址也跟着换过位置：先试 {Server}/hd2a/assets/…，再试旧路径.
+                var script = await TryFetchScriptAsync($"{Server}/hd2a/assets/min.baidu.user.js").ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(script))
+                {
+                    script = await TryFetchScriptAsync(DefaultScriptUrl).ConfigureAwait(false);
+                }
+
                 if (string.IsNullOrWhiteSpace(script))
                 {
                     script = await TryFetchScriptAsync($"{homePage}/assets/tampermonkey.user.js").ConfigureAwait(false);
