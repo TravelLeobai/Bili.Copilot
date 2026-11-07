@@ -13,6 +13,7 @@ namespace BiliCopilot.UI.Controls.Components;
 public sealed partial class AppSearchBox : AppSearchBoxBase
 {
     private string _prefilledText = string.Empty;
+    private bool _suppressSuggestions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppSearchBox"/> class.
@@ -29,15 +30,25 @@ public sealed partial class AppSearchBox : AppSearchBoxBase
     {
         var text = keyword ?? string.Empty;
         _prefilledText = text;
+        _suppressSuggestions = true;
         ViewModel.Keyword = text;
         Box.Text = text;
 
-        // 预填不该把建议列表也弹出来，收起它.
+        // 预填不该把建议列表也弹出来：清掉残留建议 + 抑制期内再强制收一次.
+        ViewModel.Suggestion.Clear();
         Box.IsSuggestionListOpen = false;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            ViewModel.Suggestion.Clear();
+            Box.IsSuggestionListOpen = false;
+        });
     }
 
     private void OnBoxPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
+        // 用户开始自己操作了，放开建议.
+        _suppressSuggestions = false;
+
         // 只有"还是上次预填的那个词"才清空：用户自己输入的过程中点击不该被抹掉.
         if (!string.IsNullOrEmpty(_prefilledText) && string.Equals(Box.Text, _prefilledText, StringComparison.Ordinal))
         {
@@ -53,6 +64,13 @@ public sealed partial class AppSearchBox : AppSearchBoxBase
 
     private void OnKeywordChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
+        if (_suppressSuggestions)
+        {
+            // 预填阶段不拉建议，也不让列表弹出来.
+            Box.IsSuggestionListOpen = false;
+            return;
+        }
+
         if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
         {
             ViewModel.ReloadSuggestionsCommand.Execute(default);
@@ -97,7 +115,14 @@ public sealed partial class AppSearchBox : AppSearchBoxBase
         }
 
         ViewModel.TryCancelSuggestCommand.Execute(default);
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ViewModel.Suggestion.Clear);
+
+        // 建议浮层是 Popup，跳到结果页后它还会浮在最上层，提交时就要收掉.
+        Box.IsSuggestionListOpen = false;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            Box.IsSuggestionListOpen = false;
+            ViewModel.Suggestion.Clear();
+        });
     }
 }
 
@@ -111,5 +136,6 @@ public abstract class AppSearchBoxBase : LayoutUserControlBase<SearchBoxViewMode
     /// </summary>
     protected AppSearchBoxBase() => ViewModel = this.Get<SearchBoxViewModel>();
 }
+
 
 

@@ -1,21 +1,31 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Reactor;
 using BiliCopilot.UI.ViewModels.View;
+using Microsoft.UI.Reactor.Hosting;
 using Richasy.WinUIKernel.Share.Base;
 
 namespace BiliCopilot.UI.Pages.Overlay;
 
 /// <summary>
-/// 搜索页面.
+/// 搜索结果页面.
+/// 顶栏与分区栏由 Reactor 的 <see cref="SearchShell"/> 渲染.
 /// </summary>
 public sealed partial class SearchPage : SearchPageBase, IParameterPage
 {
+    private readonly ReactorHostControl _host;
     private string _keyword = string.Empty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SearchPage"/> class.
     /// </summary>
-    public SearchPage() => InitializeComponent();
+    public SearchPage()
+    {
+        InitializeComponent();
+        _host = new ReactorHostControl();
+        RootGrid.Children.Add(_host);
+        _host.Mount(new SearchShell(ViewModel));
+    }
 
     public void SetParameter(object? parameter)
     {
