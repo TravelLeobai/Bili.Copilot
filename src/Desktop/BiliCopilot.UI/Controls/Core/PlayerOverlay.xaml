@@ -852,18 +852,18 @@
                             Background="#22FFFFFF"
                             BorderBrush="#33FFFFFF"
                             BorderThickness="1"
-                            CornerRadius="8">
+                            CornerRadius="4">
                             <Button
-                                Width="32"
+                                Width="28"
                                 Height="28"
                                 Padding="0"
                                 AutomationProperties.Name="关闭统计信息"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Click="OnCloseStatisticsClick"
-                                CornerRadius="8"
+                                CornerRadius="4"
                                 ToolTipService.ToolTip="关闭">
-                                <ic:SymbolIcon Symbol="Dismiss" />
+                                <ic:SymbolIcon FontSize="10" Symbol="Dismiss" />
                             </Button>
                         </Border>
                     </Grid>
