@@ -90,7 +90,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         ResetEndScreen();
         _sponsorSegments = Array.Empty<SponsorSegment>();
         _lastSponsorSkipPosition = -1;
-        _ = LoadSponsorBlockAsync(snapshot);
+
+        // 注意：空降检查不能在这里启动——那时 _sourceResolver 还是 null，
+        // 音频识别会直接以"没有播放源"跳过（AI 声音跳过永远跑不起来）。
+        // 挪到下面解析器创建完之后再启动.
         _watchTracker = new PlaybackWatchTracker();
         _watchRecorded = false;
         ErrorMessage = default;
@@ -187,6 +190,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
 
         _sourceResolver.WindowHandle = Window!.Handle;
+
+        // 解析器就绪后再跑空降检查：音频识别要用它取音轨地址.
+        if (snapshot.Type == BiliMediaType.Video)
+        {
+            _ = LoadSponsorBlockAsync(snapshot);
+        }
 
         if (_historyResolver != null && Player != null)
         {
@@ -461,13 +470,32 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _isSponsorLoading = true;
         try
         {
+            // 检查过程写进左下角药丸：先报下在查哪个视频、几路来源.
+            var sourceNames = new List<string> { "SponsorBlock" };
+            if (AdCloudService.IsEnabled)
+            {
+                sourceNames.Add("云端库");
+            }
+
+            if (BiliJumpService.IsEnabled)
+            {
+                sourceNames.Add("Bilijump");
+            }
+
+            if (AiAdAnalyzer.IsEnabled)
+            {
+                sourceNames.Add("AI");
+            }
+
+            PushAdSkipLog($"空降：检查 {videoId}（{string.Join(" + ", sourceNames)}）", TimeSpan.FromSeconds(12));
             logger.LogInformation(
-                "空降助手设置：开关={Enabled} 手动={Manual} 最短={Min:F0}s 服务器={Server} AI={Ai} 云端={Cloud}",
+                "空降助手设置：开关={Enabled} 手动={Manual} 最短={Min:F0}s 服务器={Server} AI={Ai} 音频={Audio} 云端={Cloud}",
                 SettingsToolkit.ReadLocalSetting(SettingNames.EnableSponsorBlock, true),
                 SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false),
                 SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockMinDuration, 3d),
                 SponsorBlockService.CurrentServer,
                 AiAdAnalyzer.IsEnabled,
+                AiAdAnalyzer.IsAudioEnabled,
                 AdCloudService.IsEnabled);
 
             // 四路来源并行查：SponsorBlock（可换镜像）、云端广告库、Bilijump 数据库、AI 识别.
@@ -489,6 +517,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             var sponsorSegments = await sponsorTask;
             segments.AddRange(sponsorSegments);
             logger.LogInformation("片段来源 sponsorblock：{Count} 段（视频 {VideoId}，服务器 {Server}）", sponsorSegments.Count, videoId, SponsorBlockService.CurrentServer);
+            PushAdSkipLog($"来源 SponsorBlock（{SponsorBlockService.CurrentServer}）：{sponsorSegments.Count} 段", TimeSpan.FromSeconds(10));
             foreach (var item in sponsorSegments)
             {
                 logger.LogInformation("  片段 {Start:F1}-{End:F1}s {Category}({Action})", item.Start, item.End, item.CategoryName, item.ActionType);
@@ -499,10 +528,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 var cloudSegments = await cloudTask;
                 segments.AddRange(cloudSegments);
                 logger.LogInformation("片段来源 云端广告库：{Count} 段", cloudSegments.Count);
+                PushAdSkipLog($"来源 云端广告库：{cloudSegments.Count} 段", TimeSpan.FromSeconds(10));
             }
             else
             {
                 logger.LogInformation("云端广告库未启用，跳过该来源");
+                PushAdSkipLog("来源 云端广告库：未启用，跳过", TimeSpan.FromSeconds(10));
             }
 
             if (BiliJumpService.IsEnabled)
@@ -510,6 +541,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 var bilijumpSegments = await bilijumpTask;
                 segments.AddRange(bilijumpSegments);
                 logger.LogInformation("片段来源 Bilijump 云端库：{Count} 段", bilijumpSegments.Count);
+                PushAdSkipLog($"来源 Bilijump 云端库：{bilijumpSegments.Count} 段", TimeSpan.FromSeconds(10));
                 foreach (var item in bilijumpSegments)
                 {
                     logger.LogInformation("  Bilijump {Start:F1}-{End:F1}s 广告主={Note}", item.Start, item.End, string.IsNullOrEmpty(item.Note) ? "未标注" : item.Note);
@@ -518,6 +550,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             else
             {
                 logger.LogInformation("Bilijump 云端库未启用，跳过该来源");
+                PushAdSkipLog("来源 Bilijump：未启用，跳过", TimeSpan.FromSeconds(10));
             }
 
             if (AiAdAnalyzer.IsEnabled)
@@ -525,15 +558,18 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 var aiSegments = await aiTask;
                 segments.AddRange(aiSegments);
                 logger.LogInformation("片段来源 AI 识别：{Count} 段（音频分析 {Audio}）", aiSegments.Count, AiAdAnalyzer.IsAudioEnabled ? "开" : "关");
+                PushAdSkipLog($"来源 AI 识别：{aiSegments.Count} 段（模型 {AiAdAnalyzer.CurrentSubtitleModel}）", TimeSpan.FromSeconds(10));
             }
             else
             {
                 logger.LogInformation("AI 识别未启用，跳过该来源");
+                PushAdSkipLog("来源 AI 识别：未启用，跳过", TimeSpan.FromSeconds(10));
             }
 
             var testRanges = ReadSegmentRangeTest();
             _sponsorSegments = testRanges.Count > 0 ? testRanges : MergeSegments(segments);
             logger.LogInformation("跳过片段检查完成：{Count} 段", _sponsorSegments.Count);
+            PushAdSkipLog($"检查完成：共 {_sponsorSegments.Count} 段", TimeSpan.FromSeconds(8));
             if (_sponsorSegments.Count > 0)
             {
                 logger.LogInformation("共找到 {Count} 段可跳过片段（来源：{Sources}）", _sponsorSegments.Count,
@@ -600,12 +636,20 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private async Task<IReadOnlyList<SponsorSegment>> AnalyzeAdsWithAiAsync(string videoId, MediaSnapshot snapshot)
     {
+        var stageLife = TimeSpan.FromSeconds(12);
+
         // 自检：LocalState 下放 adskip-ai-test.txt，内容当作字幕直接喂给 AI，用来验证识别流程.
         var subtitleText = ReadAiTestSubtitle() ?? await GetSubtitleTextAsync(snapshot);
         if (!string.IsNullOrWhiteSpace(subtitleText))
         {
             logger.LogInformation("字幕识别素材：{Length} 字", subtitleText.Length);
-            var result = await AiAdAnalyzer.AnalyzeSubtitleAsync(subtitleText, logger);
+            PushAdSkipLog(
+                $"字幕素材：{subtitleText.Length} 字 → {AiAdAnalyzer.CurrentSubtitleModel}",
+                stageLife);
+            var result = await AiAdAnalyzer.AnalyzeSubtitleAsync(
+                subtitleText,
+                logger,
+                text => PushAdSkipLog(text, stageLife));
             logger.LogInformation("AI 字幕识别结果：{Count} 段", result.Count);
             if (result.Count > 0)
             {
@@ -615,17 +659,20 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         else
         {
             logger.LogInformation("没有可用字幕，准备走音频识别");
+            PushAdSkipLog("字幕素材：没有字幕，改走音频识别", stageLife);
         }
 
         if (!AiAdAnalyzer.IsAudioEnabled || _sourceResolver is null)
         {
             logger.LogInformation("音频识别未启用或没有播放源，跳过");
+            PushAdSkipLog("音频识别：未启用或没有播放源，跳过", TimeSpan.FromSeconds(10));
             return Array.Empty<SponsorSegment>();
         }
 
         if (!AiAdAnalyzer.HasDashScopeKey)
         {
             logger.LogInformation("未配置阿里云 DashScope Key，音频识别跳过（无字幕时 AI 跳过不可用）");
+            PushAdSkipLog("音频识别：没配 DashScope Key，跳过", TimeSpan.FromSeconds(10));
             return Array.Empty<SponsorSegment>();
         }
 
@@ -636,15 +683,22 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             if (string.IsNullOrEmpty(audioUrl))
             {
                 logger.LogInformation("没有音轨地址，音频识别跳过");
+                PushAdSkipLog("音频识别：拿不到音轨地址，跳过", TimeSpan.FromSeconds(10));
                 return Array.Empty<SponsorSegment>();
             }
 
             var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
-            return await AiAdAnalyzer.AnalyzeAudioAsync(audioUrl, cookie, logger);
+            PushAdSkipLog($"音频识别：{AiAdAnalyzer.CurrentAudioModel} 转写 → 大模型", TimeSpan.FromSeconds(12));
+            return await AiAdAnalyzer.AnalyzeAudioAsync(
+                audioUrl,
+                cookie,
+                logger,
+                text => PushAdSkipLog(text, TimeSpan.FromSeconds(12)));
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "音频广告识别失败");
+            PushAdSkipLog($"音频识别失败：{ex.Message}", TimeSpan.FromSeconds(10));
             return Array.Empty<SponsorSegment>();
         }
     }
@@ -1147,6 +1201,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
+
+
 
 
 

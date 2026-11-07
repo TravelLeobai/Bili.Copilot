@@ -51,6 +51,18 @@ public static class AiAdAnalyzer
         => SettingsToolkit.ReadLocalSetting(SettingNames.AudioAdEnabled, false);
 
     /// <summary>
+    /// 字幕识别用的模型名（给界面上的过程日志用）.
+    /// </summary>
+    public static string CurrentSubtitleModel
+        => SettingsToolkit.ReadLocalSetting(SettingNames.AiAdModel, DefaultModel);
+
+    /// <summary>
+    /// 音频转写用的模型名.
+    /// </summary>
+    public static string CurrentAudioModel
+        => SettingsToolkit.ReadLocalSetting(SettingNames.DashScopeModel, "paraformer-v2");
+
+    /// <summary>
     /// 是否配置了阿里云 DashScope Key（没配就跳过音频识别，别发无效请求）.
     /// </summary>
     public static bool HasDashScopeKey
@@ -61,7 +73,8 @@ public static class AiAdAnalyzer
     /// </summary>
     /// <param name="subtitleText">字幕文本（含时间轴）.</param>
     /// <param name="logger">日志.</param>
-    public static async Task<IReadOnlyList<SponsorSegment>> AnalyzeSubtitleAsync(string subtitleText, ILogger? logger = null)
+    /// <param name="onStage">过程回调，用来把每步写进界面日志.</param>
+    public static async Task<IReadOnlyList<SponsorSegment>> AnalyzeSubtitleAsync(string subtitleText, ILogger? logger = null, Action<string>? onStage = null)
     {
         if (!IsEnabled || string.IsNullOrWhiteSpace(subtitleText))
         {
@@ -82,6 +95,7 @@ public static class AiAdAnalyzer
         }
 
         logger?.LogInformation("AI 广告识别请求：{Endpoint} 模型 {Model}", endpoint, model);
+        onStage?.Invoke($"AI 字幕：发送 {subtitleText.Length} 字 → {model}");
 
         // 字幕过长时截断，避免超出上下文.
         const int maxLength = 48000;
@@ -111,10 +125,13 @@ public static class AiAdAnalyzer
             if (!response.IsSuccessStatusCode)
             {
                 logger?.LogWarning("AI 广告识别失败：{Status} {Body}", (int)response.StatusCode, content.Length > 200 ? content[..200] : content);
+                onStage?.Invoke($"AI 字幕：请求失败 {(int)response.StatusCode}");
                 return Array.Empty<SponsorSegment>();
             }
 
-            return ParseAds(content, logger);
+            var ads = ParseAds(content, logger);
+            onStage?.Invoke($"AI 字幕：{model} 返回 {ads.Count} 段");
+            return ads;
         }
         catch (Exception ex)
         {
@@ -129,7 +146,8 @@ public static class AiAdAnalyzer
     /// <param name="audioUrl">音频地址（DASH 音轨）.</param>
     /// <param name="cookie">B 站 Cookie.</param>
     /// <param name="logger">日志.</param>
-    public static async Task<IReadOnlyList<SponsorSegment>> AnalyzeAudioAsync(string audioUrl, string cookie, ILogger? logger = null)
+    /// <param name="onStage">过程回调，用来把每步写进界面日志.</param>
+    public static async Task<IReadOnlyList<SponsorSegment>> AnalyzeAudioAsync(string audioUrl, string cookie, ILogger? logger = null, Action<string>? onStage = null)
     {
         if (!IsEnabled || !IsAudioEnabled || string.IsNullOrWhiteSpace(audioUrl))
         {
@@ -146,25 +164,32 @@ public static class AiAdAnalyzer
 
         try
         {
-            // 先让 DashScope 自己去拉 B 站音频地址：转写接口本来就收 file_urls，
-            // 这样能绕开 OSS 上传（那边一直回 MalformedPOSTRequest）.
-            var transcript = await TranscribeAsync(audioUrl, dashScopeKey, dashScopeModel, logger);
-            if (string.IsNullOrWhiteSpace(transcript))
+            // 先上传再转写：B 站 CDN 要 Referer，让 DashScope 直拉永远 FILE_403，
+            // 白等一轮还留一个失败任务，所以上传放前面，直拉只当兜底.
+            string? transcript = null;
+            onStage?.Invoke("音频：上传到临时存储");
+            var fileUrl = await UploadToDashScopeAsync(audioUrl, cookie, dashScopeKey, dashScopeModel, logger);
+            if (!string.IsNullOrEmpty(fileUrl))
             {
-                // 拉不到（B 站 CDN 要 Referer 之类）就退回上传，再转写一次.
-                logger?.LogInformation("DashScope 直接拉音频没拿到转写结果，改走上传");
-                var fileUrl = await UploadToDashScopeAsync(audioUrl, cookie, dashScopeKey, dashScopeModel, logger);
-                if (string.IsNullOrEmpty(fileUrl))
-                {
-                    return Array.Empty<SponsorSegment>();
-                }
-
+                onStage?.Invoke("音频：上传完成，提交转写任务");
                 transcript = await TranscribeAsync(fileUrl, dashScopeKey, dashScopeModel, logger);
             }
 
-            return string.IsNullOrWhiteSpace(transcript)
-                ? Array.Empty<SponsorSegment>()
-                : await AnalyzeSubtitleAsync(transcript, logger);
+            if (string.IsNullOrWhiteSpace(transcript))
+            {
+                logger?.LogInformation("上传通道没拿到转写结果，改让 DashScope 直拉音频");
+                onStage?.Invoke("音频：上传通道没结果，试直拉音轨");
+                transcript = await TranscribeAsync(audioUrl, dashScopeKey, dashScopeModel, logger);
+            }
+
+            if (string.IsNullOrWhiteSpace(transcript))
+            {
+                onStage?.Invoke("音频：转写没拿到文本，音频识别放弃");
+                return Array.Empty<SponsorSegment>();
+            }
+
+            onStage?.Invoke($"音频：转写得到 {transcript.Length} 字，交给 {CurrentSubtitleModel}");
+            return await AnalyzeSubtitleAsync(transcript, logger, onStage);
         }
         catch (Exception ex)
         {
@@ -271,24 +296,50 @@ public static class AiAdAnalyzer
             return null;
         }
 
-        var key = $"{uploadDir}/{Guid.NewGuid():N}.m4a";
-        var form = new MultipartFormDataContent
+        // policy 里给的 host 有时不带协议，带上再发，否则 HttpClient 会当成相对地址.
+        if (!uploadHost.StartsWith("http", StringComparison.OrdinalIgnoreCase))
         {
-            { new StringContent(policy.GetProperty("oss_access_key_id").GetString() ?? string.Empty), "OSSAccessKeyId" },
-            { new StringContent(policy.GetProperty("signature").GetString() ?? string.Empty), "Signature" },
-            { new StringContent(policy.GetProperty("policy").GetString() ?? string.Empty), "policy" },
-            { new StringContent(policy.GetProperty("x_oss_object_acl").GetString() ?? "private"), "x-oss-object-acl" },
-            { new StringContent(policy.GetProperty("x_oss_forbid_overwrite").GetString() ?? "true"), "x-oss-forbid-overwrite" },
-            { new StringContent(key), "key" },
-            { new StringContent("200"), "success_action_status" },
-        };
+            uploadHost = "https://" + uploadHost;
+        }
 
-        // 文件段不要自己指定 Content-Type：DashScope 的上传策略里对 content-type 有条件，
-        // 写死 audio/mp4 会被 OSS 判 400（实测就是这条）。让它按默认的 application/octet-stream 走.
-        var fileContent = new ByteArrayContent(audioBytes);
-        form.Add(fileContent, "file", Path.GetFileName(key));
+        uploadHost = uploadHost.TrimEnd('/') + "/";
 
-        using var uploadResponse = await Client.PostAsync(uploadHost, form);
+        var key = $"{uploadDir}/{Guid.NewGuid():N}.m4a";
+        var fileName = Path.GetFileName(key);
+
+        // 自己拼 multipart：.NET 的 MultipartFormDataContent 会在 Content-Type 里给 boundary
+        // 加引号，OSS 直接判 MalformedPOSTRequest（实测 400）。这里手写请求体，
+        // boundary 不加引号，字段顺序按 OSS PostObject 的惯例把 file 放最后.
+        var boundary = "----BiliCopilot" + Guid.NewGuid().ToString("N");
+        using var bodyStream = new MemoryStream();
+
+        async Task WriteFieldAsync(string name, string value)
+        {
+            var head = $"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n";
+            await bodyStream.WriteAsync(Encoding.UTF8.GetBytes(head));
+        }
+
+        await WriteFieldAsync("OSSAccessKeyId", policy.GetProperty("oss_access_key_id").GetString() ?? string.Empty);
+        await WriteFieldAsync("Signature", policy.GetProperty("signature").GetString() ?? string.Empty);
+        await WriteFieldAsync("policy", policy.GetProperty("policy").GetString() ?? string.Empty);
+        await WriteFieldAsync("x-oss-object-acl", GetPolicyString(policy, "x_oss_object_acl", "private"));
+        await WriteFieldAsync("x-oss-forbid-overwrite", GetPolicyString(policy, "x_oss_forbid_overwrite", "true"));
+        await WriteFieldAsync("key", key);
+        await WriteFieldAsync("success_action_status", "200");
+
+        var fileHead = $"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{fileName}\"\r\nContent-Type: application/octet-stream\r\n\r\n";
+        await bodyStream.WriteAsync(Encoding.UTF8.GetBytes(fileHead));
+        await bodyStream.WriteAsync(audioBytes);
+        await bodyStream.WriteAsync(Encoding.UTF8.GetBytes($"\r\n--{boundary}--\r\n"));
+
+        using var uploadContent = new ByteArrayContent(bodyStream.ToArray());
+        uploadContent.Headers.TryAddWithoutValidation("Content-Type", $"multipart/form-data; boundary={boundary}");
+
+        logger?.LogInformation(
+            "上传音频到临时存储：{Host} 大小 {Size:F1} MB",
+            uploadHost,
+            audioBytes.Length / 1024d / 1024d);
+        using var uploadResponse = await Client.PostAsync(uploadHost, uploadContent);
         if (!uploadResponse.IsSuccessStatusCode)
         {
             // OSS 的 400 会带 XML（Code/Message），不看正文根本不知道哪条策略没过.
@@ -303,6 +354,11 @@ public static class AiAdAnalyzer
         return $"oss://{key}";
     }
 
+    private static string GetPolicyString(JsonElement policy, string name, string fallback)
+        => policy.TryGetProperty(name, out var node) && node.ValueKind == JsonValueKind.String
+            ? node.GetString() ?? fallback
+            : fallback;
+
     private static async Task<string?> TranscribeAsync(string fileUrl, string apiKey, string model, ILogger? logger)
     {
         var submitPayload = BuildTranscriptionPayload(model, fileUrl);
@@ -310,13 +366,17 @@ public static class AiAdAnalyzer
         using var submitRequest = new HttpRequestMessage(HttpMethod.Post, $"{DashScopeBase}/api/v1/services/audio/asr/transcription");
         submitRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         submitRequest.Headers.TryAddWithoutValidation("X-DashScope-Async", "enable");
+
+        // 用上传拿到的 oss:// 临时文件时，DashScope 必须靠这个头才会按临时存储去取，
+        // 不带就是 SERVER_ERROR / FILE_403（实测）。
+        submitRequest.Headers.TryAddWithoutValidation("X-DashScope-OssResourceResolve", "enable");
         submitRequest.Content = new StringContent(submitPayload, Encoding.UTF8, "application/json");
 
         using var submitResponse = await Client.SendAsync(submitRequest);
         var submitBody = await submitResponse.Content.ReadAsStringAsync();
         if (!submitResponse.IsSuccessStatusCode)
         {
-            logger?.LogWarning("提交音频转写任务失败：{Status} {Body}", (int)submitResponse.StatusCode, submitBody.Length > 160 ? submitBody[..160] : submitBody);
+            logger?.LogWarning("提交音频转写任务失败：{Status} {Body}", (int)submitResponse.StatusCode, submitBody.Length > 400 ? submitBody[..400] : submitBody);
             return null;
         }
 
@@ -324,6 +384,8 @@ public static class AiAdAnalyzer
         if (!submitDocument.RootElement.TryGetProperty("output", out var output)
             || !output.TryGetProperty("task_id", out var taskIdNode))
         {
+            // 2xx 但没 task_id：DashScope 会把原因写在 body 里（code / message / request_id）.
+            logger?.LogWarning("提交音频转写任务没有返回 task_id：{Body}", submitBody.Length > 400 ? submitBody[..400] : submitBody);
             return null;
         }
 
@@ -355,6 +417,9 @@ public static class AiAdAnalyzer
             var status = statusNode.GetString();
             if (string.Equals(status, "FAILED", StringComparison.OrdinalIgnoreCase))
             {
+                logger?.LogWarning(
+                    "音频转写任务失败：{Body}",
+                    statusDocument.RootElement.GetRawText() is { Length: > 600 } raw ? raw[..600] : statusDocument.RootElement.GetRawText());
                 return null;
             }
 
@@ -367,6 +432,9 @@ public static class AiAdAnalyzer
                 || results.ValueKind != JsonValueKind.Array
                 || results.GetArrayLength() == 0)
             {
+                logger?.LogWarning(
+                    "音频转写任务成功但没有 results：{Body}",
+                    statusDocument.RootElement.GetRawText() is { Length: > 600 } raw ? raw[..600] : statusDocument.RootElement.GetRawText());
                 return null;
             }
 
@@ -375,16 +443,27 @@ public static class AiAdAnalyzer
                 : null;
             if (string.IsNullOrEmpty(transcriptionUrl))
             {
+                logger?.LogWarning("音频转写结果里没有 transcription_url：{Body}", results[0].GetRawText());
                 return null;
             }
 
             using var transcriptResponse = await Client.GetAsync(transcriptionUrl);
             if (!transcriptResponse.IsSuccessStatusCode)
             {
+                logger?.LogWarning("下载转写结果失败：{Status}", (int)transcriptResponse.StatusCode);
                 return null;
             }
 
-            return ParseTranscript(await transcriptResponse.Content.ReadAsStringAsync());
+            var transcriptBody = await transcriptResponse.Content.ReadAsStringAsync();
+            var parsed = ParseTranscript(transcriptBody);
+            if (string.IsNullOrWhiteSpace(parsed))
+            {
+                logger?.LogWarning(
+                    "转写结果解析为空：{Body}",
+                    transcriptBody.Length > 400 ? transcriptBody[..400] : transcriptBody);
+            }
+
+            return parsed;
         }
 
         logger?.LogWarning("音频转写超时");
@@ -582,5 +661,9 @@ public static class AiAdAnalyzer
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 }
+
+
+
+
 
 

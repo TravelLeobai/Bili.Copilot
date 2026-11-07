@@ -31,10 +31,11 @@ public sealed partial class PlayerViewModel
             : TimeSpan.FromSeconds(Math.Max(0, seconds)).ToString(@"m\:ss");
 
     /// <summary>
-    /// 追加一条日志，两秒后自动移除.
+    /// 追加一条日志，默认两秒后自动移除.
     /// </summary>
     /// <param name="text">日志文本.</param>
-    internal void PushAdSkipLog(string text)
+    /// <param name="life">存活时间，检查过程的分步日志传长一点.</param>
+    internal void PushAdSkipLog(string text, TimeSpan? life = null)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -43,11 +44,11 @@ public sealed partial class PlayerViewModel
 
         queue.TryEnqueue(() =>
         {
-            AdSkipLogs.Add(new AdSkipLogItem(text));
+            AdSkipLogs.Add(new AdSkipLogItem(text, life));
             logger.LogInformation("跳过日志：{Text}（当前 {Count} 条）", text, AdSkipLogs.Count);
 
-            // 正常最多堆 4 条，多出来的直接丢掉，别把左下角铺满.
-            while (AdSkipLogs.Count > 4)
+            // 正常最多堆 8 条：检查过程要一次写好几步，2 秒一条的话根本读不完.
+            while (AdSkipLogs.Count > 8)
             {
                 AdSkipLogs.RemoveAt(0);
             }
@@ -67,7 +68,7 @@ public sealed partial class PlayerViewModel
                 var now = DateTimeOffset.Now;
                 for (var i = AdSkipLogs.Count - 1; i >= 0; i--)
                 {
-                    if (now - AdSkipLogs[i].CreatedAt >= TimeSpan.FromSeconds(2))
+                    if (now - AdSkipLogs[i].CreatedAt >= AdSkipLogs[i].Life)
                     {
                         AdSkipLogs.RemoveAt(i);
                     }
