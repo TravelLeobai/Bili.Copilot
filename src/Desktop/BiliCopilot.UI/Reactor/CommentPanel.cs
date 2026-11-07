@@ -296,9 +296,11 @@ public sealed class CommentPanel : Component
             ? Border(
                 TextBlock("置顶")
                     .FontSize(10)
+                    .TextAlignment(TextAlignment.Center)
+                    .VAlign(VerticalAlignment.Center)
                     .Foreground(ResolveBrush("AccentTextFillColorPrimaryBrush", Microsoft.UI.Colors.SkyBlue)))
                 .CornerRadius(ControlCornerRadiusValue)
-                .Padding(2)
+                .Padding(6, 1, 6, 2)
                 .Margin(0, 12, 0, 0)
                 .WithBorder(ThemeBrush("AccentFillColorDefaultBrush"), 1)
             : (Element)TextBlock(string.Empty);
