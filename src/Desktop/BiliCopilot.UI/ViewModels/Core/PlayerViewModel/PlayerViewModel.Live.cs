@@ -13,6 +13,7 @@ using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Bili.User;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.User;
+using Richasy.WinUIKernel.Share.Base;
 
 namespace BiliCopilot.UI.ViewModels.Core;
 
@@ -562,6 +563,14 @@ public sealed partial class PlayerViewModel
         };
     }
 
+    /// <summary>
+    /// 在播放窗口弹一条提示（直播面板的交互反馈用，比如表情发不出去）.
+    /// </summary>
+    /// <param name="message">提示文本.</param>
+    /// <param name="isError">是否错误提示.</param>
+    internal void ShowPlayerTip(string message, bool isError = false)
+        => Window?.ShowTip(message, isError ? InfoType.Error : InfoType.Warning);
+
     [RelayCommand]
     private async Task SendLiveDanmakuAsync()
     {
@@ -845,5 +854,6 @@ public sealed partial class PlayerViewModel
         }
     }
 }
+
 
 

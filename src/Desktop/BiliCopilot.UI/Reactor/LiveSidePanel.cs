@@ -1105,6 +1105,14 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         };
 
         var tooltip = emote.IsLocked ? $"{emote.Text}（未解锁）" : emote.Text;
+        var onlyForComment = string.IsNullOrEmpty(emote.Unique);
+        if (onlyForComment)
+        {
+            // 没有 emoticon_unique 的表情只能用于评论区：直播间接口认不出来，发出去也会失败.
+            tile.Opacity = 0.6;
+            tooltip += "（直播间发不出去）";
+        }
+
         Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(tile, tooltip);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, emote.Text);
 
@@ -1148,7 +1156,10 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             }
             else
             {
-                InsertEmoteToken(emote.Text);
+                // 没有 emoticon_unique 的表情发不进直播间（直播接口只认这个字段），
+                // 以前是把表情文字塞进输入框，结果用户按发送必然失败、框里还多一串 [xx]。
+                // 现在直接弹提示，不动输入框.
+                vm.ShowPlayerTip($"「{emote.Text}」只能在评论区使用，直播间发不出去");
             }
 
             flyout.Hide();
@@ -1159,18 +1170,6 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private sealed record EmoteCategory(string Name, List<StoredEmote> Emotes);
 
-    private void InsertEmoteToken(string token)
-    {
-        var box = _liveInputBox;
-        if (box is null)
-        {
-            return;
-        }
-
-        box.Text = string.IsNullOrEmpty(box.Text) ? token : box.Text + token;
-        box.SelectionStart = box.Text.Length;
-        _ = box.Focus(FocusState.Programmatic);
-    }
     private static string? NormalizeEmoteUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -1190,6 +1189,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             : null;
     }
 }
+
 
 
 
