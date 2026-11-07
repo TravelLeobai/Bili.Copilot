@@ -34,11 +34,14 @@ public sealed partial class AppSearchBox : AppSearchBoxBase
         ViewModel.Keyword = text;
         Box.Text = text;
 
-        // 预填不该把建议列表也弹出来：清掉残留建议 + 抑制期内再强制收一次.
+        // 预填不该把建议列表也弹出来：浮层是 Popup，会浮在分区栏上面把点击吃掉。
+        // 直接摘掉 ItemsSource（x:Bind 逐实例生效，搜索首页那个框不受影响）.
+        Box.ItemsSource = null;
         ViewModel.Suggestion.Clear();
         Box.IsSuggestionListOpen = false;
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
+            Box.ItemsSource = null;
             ViewModel.Suggestion.Clear();
             Box.IsSuggestionListOpen = false;
         });

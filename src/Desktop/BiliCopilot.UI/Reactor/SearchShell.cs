@@ -12,6 +12,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Richasy.WinUIKernel.Share.Toolkits;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -30,6 +31,7 @@ public sealed class SearchShell : Component
     private readonly Dictionary<SearchSectionType, FrameworkElement> _contentCache = [];
 
     private string _appliedKeyword = string.Empty;
+    private bool _popupCleanupDone;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SearchShell"/> class.
@@ -41,6 +43,7 @@ public sealed class SearchShell : Component
     public override Element Render()
     {
         var viewModel = UseObservableTree(_viewModel);
+        CloseLingeringSuggestions();
         var sections = viewModel.Sections ?? [];
         var selectedIndex = Math.Max(0, sections.IndexOf(viewModel.SelectedSection));
 
@@ -100,9 +103,11 @@ public sealed class SearchShell : Component
             .Select(section => new SelectorBarItemData(GetSectionName(section.SectionType)))
             .ToArray();
 
+        // 不传 selectedIndex：传了它就是受控模式，用户点击会被立刻改回原值、回调等于不生效
+        // （之前切分类没反应就是这个原因）。用 key 带上当前索引，程序化切换时重建一次即可.
         return SelectorBar(
                 items,
-                Optional<int>.Of(selectedIndex),
+                Optional<int>.Unset,
                 index =>
                 {
                     if (index >= 0 && index < sections.Count)
@@ -111,7 +116,7 @@ public sealed class SearchShell : Component
                     }
                 })
             .Padding(16, 0, 16, 0)
-            .WithKey("search-tabs");
+            .WithKey($"search-tabs-{viewModel.Keyword}");
     }
 
     private Element BuildRefreshButton(SearchPageViewModel viewModel)
@@ -143,10 +148,62 @@ public sealed class SearchShell : Component
                 var button = (Button)element;
                 var section = viewModel.SelectedSection;
                 button.Command = section?.RefreshCommand;
-                button.IsEnabled = section is not null && !section.IsEmpty;
+                // 分区结果为空时也允许刷新（之前按 IsEmpty 禁用，空分区就成了死按钮）.
+                button.IsEnabled = section is not null;
             })
             .VAlign(VerticalAlignment.Center)
             .WithKey("search-refresh");
+
+    /// <summary>
+    /// 搜索首页那个搜索框的建议浮层是 Popup，跳到结果页后仍浮在最上层，会挡住分区栏的点击.
+    /// 结果页首次渲染时把整棵树里所有 AutoSuggestBox 的建议列表关掉.
+    /// </summary>
+    private void CloseLingeringSuggestions()
+    {
+        if (_popupCleanupDone)
+        {
+            return;
+        }
+
+        _popupCleanupDone = true;
+        _searchBox.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            try
+            {
+                if (_searchBox.XamlRoot?.Content is not DependencyObject root)
+                {
+                    return;
+                }
+
+                foreach (var box in FindSuggestBoxes(root))
+                {
+                    box.IsSuggestionListOpen = false;
+                }
+            }
+            catch
+            {
+                // 关不掉也不影响其它功能.
+            }
+        });
+    }
+
+    private static IEnumerable<AutoSuggestBox> FindSuggestBoxes(DependencyObject node)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(node);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(node, i);
+            if (child is AutoSuggestBox box)
+            {
+                yield return box;
+            }
+
+            foreach (var nested in FindSuggestBoxes(child))
+            {
+                yield return nested;
+            }
+        }
+    }
 
     /// <summary>
     /// 关键词变化时把当前搜索词预填进顶栏搜索框；用户点一下就会清空，直接开新搜索.
@@ -181,7 +238,10 @@ public sealed class SearchShell : Component
             _contentCache[type] = control;
         }
 
-        return ViewLaterShell.Host(control, element => ApplySectionViewModel(element, section), viewModel);
+        // key 带上分区类型：换分区时必须把旧的内容控件换下去，
+        // 否则旧控件的卡片还挂在树上，看起来就是"切了没变化".
+        return ViewLaterShell.Host(control, element => ApplySectionViewModel(element, section), viewModel)
+            .WithKey($"search-content-{type}");
     }
 
     private static FrameworkElement CreateSectionControl(ISearchSectionDetailViewModel section)
@@ -229,4 +289,11 @@ public sealed class SearchShell : Component
             _ => type.ToString(),
         };
 }
+
+
+
+
+
+
+
 
