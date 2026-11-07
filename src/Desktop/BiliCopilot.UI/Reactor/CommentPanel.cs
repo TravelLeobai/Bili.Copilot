@@ -106,10 +106,10 @@ public sealed class CommentPanel : Component
                 index =>
                 {
                     var item = replyItems[index];
-                    var key = index == 0 ? "detail-main" : "reply-" + item.Data.Id;
+                    var key = index == 0 ? "detail-main" : $"reply-{index}-{item.Data.Id}";
                     return CreateCard(item, null, false, key, () => setVersion(++_version)).Margin(12, 4, 12, 4);
                 },
-                index => index == 0 ? "detail-main" : replyItems[index].Data.Id.ToString(),
+                index => index == 0 ? "detail-main" : $"reply-{index}-{replyItems[index].Data.Id}",
                 estimatedItemHeight: 132,
                 spacing: 0,
                 onVisibleRangeChanged: (_, last) =>
@@ -205,9 +205,12 @@ public sealed class CommentPanel : Component
             index =>
             {
                 var item = listItems[index];
-                return CreateCard(item.Data, item.ShowMore, true, "c-" + item.Data.Data.Id, Refresh).Margin(12, 4, 12, 4);
+
+                // key 里带上位置：置顶评论通常同时出现在 Comments 里，只按 rpid 做 key 会撞车，
+                // Reactor 会把同一个元素复用给两处，第一张卡片的按钮就失效了.
+                return CreateCard(item.Data, item.ShowMore, true, $"c-{index}-{item.Data.Data.Id}", Refresh).Margin(12, 4, 12, 4);
             },
-            index => listItems[index].Data.Data.Id.ToString(),
+            index => $"c-{index}-{listItems[index].Data.Data.Id}",
             estimatedItemHeight: 132,
             spacing: 0,
             onVisibleRangeChanged: (first, last) =>
@@ -310,9 +313,25 @@ public sealed class CommentPanel : Component
                 onClick: () => showMore.Execute(default))
             : (Element)TextBlock(string.Empty);
 
+        // 图标只有 12px，命中区太小，点在图标边缘会落到卡片上，看起来就是「点了没反应」，
+        // 所以命中区放大到 36×32；命令在创建时就绑一次，避免只靠 update 赋值时漏绑.
         var replyButton = new XamlHostElement(
-            () => CreateReplyButton(),
-            element => ((Button)element).Command = comment.MarkReplyTargetCommand)
+            () =>
+            {
+                var button = CreateReplyButton();
+                button.Width = 36;
+                button.Height = 32;
+                button.Command = comment.MarkReplyTargetCommand;
+                return button;
+            },
+            element =>
+            {
+                var button = (Button)element;
+                button.Width = 36;
+                button.Height = 32;
+                button.Command = comment.MarkReplyTargetCommand;
+            })
+            .Width(36)
             .Height(32);
 
         var actionRow = Grid(
@@ -358,11 +377,16 @@ public sealed class CommentPanel : Component
                     Content = new FluentIcons.WinUI.SymbolIcon
                     {
                         Symbol = FluentIcons.Common.Symbol.ArrowLeft,
-                        FontSize = 14,
+                        FontSize = 16,
                     },
-                    Padding = new Thickness(10, 6, 10, 6),
+                    Width = 40,
+                    Height = 40,
+                    Padding = new Thickness(0),
+                    CornerRadius = new CornerRadius(8),
                     HorizontalAlignment = HorizontalAlignment.Left,
                     VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    VerticalContentAlignment = VerticalAlignment.Center,
                 };
                 ToolTipService.SetToolTip(button, "返回上一级");
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "返回上一级");
