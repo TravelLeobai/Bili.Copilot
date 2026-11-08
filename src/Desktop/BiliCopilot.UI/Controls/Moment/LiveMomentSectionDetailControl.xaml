@@ -194,6 +194,7 @@
 
         <!--  卡片区：声明式 ItemsRepeater，列数随宽度自动增减（每行高度按最高卡片算，不会裁）  -->
         <ScrollViewer
+            x:Name="CardScroller"
             Grid.Row="1"
             Padding="16,12,16,16"
             HorizontalScrollBarVisibility="Disabled"
@@ -215,3 +216,4 @@
         </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>
+

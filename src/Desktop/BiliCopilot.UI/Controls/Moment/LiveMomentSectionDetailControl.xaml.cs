@@ -27,7 +27,21 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     {
         try
         {
-            // 只用来在日志里留一条痕迹，方便确认"这一段确实进来了".
+            // 首帧的滚动位置可能被焦点/首项对齐推到非 0，导致第一行卡片顶部被切掉.
+            // 排到下一个调度回合把偏移归零（只做一次，用户之后的滚动不动）.
+            this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () =>
+                {
+                    try
+                    {
+                        CardScroller?.ChangeView(null, 0, null, true);
+                    }
+                    catch
+                    {
+                    }
+                });
+
             var count = ViewModel?.Items.Count ?? 0;
             WriteCrashLog("LiveMomentSection.OnLoaded", null, $"items={count}");
         }

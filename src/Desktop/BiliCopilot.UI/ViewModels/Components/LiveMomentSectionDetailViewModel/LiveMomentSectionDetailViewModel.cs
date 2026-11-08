@@ -147,9 +147,10 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             _logger.LogInformation("直播分区：回放 {Count} 个", replays.Count);
             _allCards.AddRange(replays);
 
-            BuildUpers(_allCards);
-            SelectedUper ??= Upers.FirstOrDefault();
-            ApplyFilter();
+            // 增量追加：只把新卡片塞进列表、只把新作者塞进过滤栏，
+            // 整页（含已经渲染好的直播卡）不重建.
+            AppendUpers(replays);
+            AppendCards(replays);
             IsEmpty = _allCards.Count == 0;
         }
         catch (Exception ex)
@@ -170,8 +171,16 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     {
         Upers.Clear();
         Upers.Add(new LiveSectionUperViewModel(string.Empty, "全部", null, SelectUper));
+        AppendUpers(cards);
+    }
 
-        var seen = new HashSet<string>();
+    /// <summary>
+    /// 只把还没出现过的作者追加到过滤栏，不动已有的项（避免整条头像栏重建）.
+    /// </summary>
+    /// <param name="cards">新来的卡片.</param>
+    private void AppendUpers(IEnumerable<LiveSectionCardViewModel> cards)
+    {
+        var seen = Upers.Select(p => p.UserId).ToHashSet();
         foreach (var card in cards)
         {
             if (string.IsNullOrEmpty(card.AuthorId) || !seen.Add(card.AuthorId))
@@ -180,6 +189,26 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             }
 
             Upers.Add(new LiveSectionUperViewModel(card.AuthorId, card.AuthorName, card.Avatar, SelectUper));
+        }
+    }
+
+    /// <summary>
+    /// 把新到的卡片追加进列表：只在"没有按 UP 过滤、类型是全部"时才直接往后加，
+    /// 这样 ItemsRepeater 只会实例化新卡片，不会把整页推倒重来.
+    /// </summary>
+    /// <param name="cards">新卡片.</param>
+    private void AppendCards(IEnumerable<LiveSectionCardViewModel> cards)
+    {
+        if (SelectedUper is { IsTotal: false } || FilterType != LiveFilterType.All)
+        {
+            // 有过滤条件时，新卡片的可见性得整体重算，只能走完整过滤.
+            ApplyFilter();
+            return;
+        }
+
+        foreach (var card in cards)
+        {
+            Items.Add(card);
         }
     }
 
