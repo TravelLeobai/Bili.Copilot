@@ -183,14 +183,26 @@ public sealed partial class PlayerViewModel
             false);
 
     partial void OnIsLiveDanmakuLevelFilterEnabledChanged(bool value)
-        => Toolkits.SettingsToolkit.WriteLocalSetting(
+    {
+        Toolkits.SettingsToolkit.WriteLocalSetting(
             Models.Constants.SettingNames.LiveDanmakuLevelFilter,
             value);
+        OnPropertyChanged(nameof(IsLiveDanmakuFilterActive));
+    }
 
     partial void OnIsLiveDanmakuMedalFilterEnabledChanged(bool value)
-        => Toolkits.SettingsToolkit.WriteLocalSetting(
+    {
+        Toolkits.SettingsToolkit.WriteLocalSetting(
             Models.Constants.SettingNames.LiveDanmakuMedalFilter,
             value);
+        OnPropertyChanged(nameof(IsLiveDanmakuFilterActive));
+    }
+
+    /// <summary>
+    /// 是否至少开了其中一个弹幕过滤：底栏那颗过滤按钮靠它决定要不要高亮.
+    /// </summary>
+    public bool IsLiveDanmakuFilterActive
+        => IsLiveDanmakuLevelFilterEnabled || IsLiveDanmakuMedalFilterEnabled;
 
     /// <summary>
     /// 主播头像地址（统一成绝对地址，取不到为空串）.
@@ -886,6 +898,7 @@ public sealed partial class PlayerViewModel
         }
     }
 }
+
 
 
 
