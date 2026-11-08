@@ -210,8 +210,10 @@ public enum SettingNames
     IsReplyNotificationEnabled,
     LastReplyMessageKeys,
     LastLiveRoomIds,
+    LastMomentSectionType,
     LiveDanmakuMedalFilter,
 }
+
 
 
 

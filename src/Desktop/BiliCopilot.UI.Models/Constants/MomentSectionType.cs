@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 namespace BiliCopilot.UI.Models.Constants;
 
@@ -16,4 +16,10 @@ public enum MomentSectionType
     /// 综合动态.
     /// </summary>
     Comprehensive,
+
+    /// <summary>
+    /// 直播分区（关注 UP 主的直播与回放）.
+    /// </summary>
+    Live,
 }
+

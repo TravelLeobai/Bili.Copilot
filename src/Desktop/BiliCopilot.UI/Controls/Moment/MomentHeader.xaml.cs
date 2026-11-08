@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -42,6 +42,7 @@ public sealed partial class MomentHeader : MomentHeaderBase
         {
             MomentSectionType.Video => ResourceToolkit.GetLocalizedString(StringNames.Video),
             MomentSectionType.Comprehensive => ResourceToolkit.GetLocalizedString(StringNames.Comprehensive),
+            MomentSectionType.Live => ResourceToolkit.GetLocalizedString(StringNames.Live),
             _ => throw new ArgumentOutOfRangeException(nameof(type)),
         };
 
@@ -91,3 +92,4 @@ public abstract class MomentHeaderBase : LayoutUserControlBase<MomentPageViewMod
     /// </summary>
     protected MomentHeaderBase() => ViewModel = this.Get<MomentPageViewModel>();
 }
+

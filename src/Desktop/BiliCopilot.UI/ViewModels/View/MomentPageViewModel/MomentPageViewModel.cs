@@ -39,11 +39,16 @@ public sealed partial class MomentPageViewModel : ViewModelBase
         {
             new VideoMomentSectionDetailViewModel(_momentDiscoveryService),
             new ComprehensiveMomentSectionDetailViewModel(_momentDiscoveryService),
+            new LiveMomentSectionDetailViewModel(_momentDiscoveryService),
         };
 
+        // 记住上次停在哪一段：老设置只有"是不是视频"，用新键存完整的段类型.
+        var lastType = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LastMomentSectionType, -1);
         var isLastVideoSection = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LastMomentSectionIsVideo, true);
-        var section = isLastVideoSection ? Sections.First() : Sections.Last();
-        SelectSectionCommand.Execute(section);
+        var section = lastType >= 0
+            ? Sections.FirstOrDefault(p => (int)p.SectionType == lastType)
+            : isLastVideoSection ? Sections.First() : Sections.Last();
+        SelectSectionCommand.Execute(section ?? Sections.First());
         this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, () => Initialized?.Invoke(this, EventArgs.Empty));
     }
 
@@ -58,6 +63,7 @@ public sealed partial class MomentPageViewModel : ViewModelBase
         SelectedSection = section;
         var isVideo = section is VideoMomentSectionDetailViewModel;
         SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastMomentSectionIsVideo, isVideo);
+        SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastMomentSectionType, (int)section.SectionType);
         SelectedSection.InitializeCommand.Execute(default);
     }
 
@@ -81,3 +87,8 @@ public sealed partial class MomentPageViewModel : ViewModelBase
     public void SetVideoOpenedMarkStyle(Models.Constants.MomentVideoOpenedMarkStyle style)
         => Sections?.OfType<VideoMomentSectionDetailViewModel>().FirstOrDefault()?.SetOpenedMarkStyle(style);
 }
+
+
+
+
+

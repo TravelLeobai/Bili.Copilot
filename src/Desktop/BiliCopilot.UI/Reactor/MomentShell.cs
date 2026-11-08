@@ -21,6 +21,7 @@ public sealed class MomentShell : Component
     private readonly MomentHeader _header = new();
     private readonly VideoMomentSectionDetailControl _videoControl = new();
     private readonly ComprehensiveMomentSectionDetailControl _comprehensiveControl = new();
+    private readonly LiveMomentSectionDetailControl _liveControl = new();
     private readonly CommentOverlayPanel _commentPanel = new();
     private int _commentsOpenVersion;
 
@@ -43,6 +44,7 @@ public sealed class MomentShell : Component
         var vm = UseObservableTree(_viewModel);
         var section = vm.SelectedSection;
         var isVideo = section is VideoMomentSectionDetailViewModel;
+        var isLive = section is LiveMomentSectionDetailViewModel;
         if (section is VideoMomentSectionDetailViewModel videoSection)
         {
             _videoControl.ViewModel = videoSection;
@@ -50,6 +52,10 @@ public sealed class MomentShell : Component
         else if (section is ComprehensiveMomentSectionDetailViewModel comprehensiveSection)
         {
             _comprehensiveControl.ViewModel = comprehensiveSection;
+        }
+        else if (section is LiveMomentSectionDetailViewModel liveSection)
+        {
+            _liveControl.ViewModel = liveSection;
         }
 
         _commentPanel.ViewModel = vm.CommentModule;
@@ -67,7 +73,8 @@ public sealed class MomentShell : Component
         // 之前是在同一个位置换 TypeKey，Reactor 会重建宿主元素，挂在上面的控件实例
         // 跟着被丢掉，切回综合时整片内容（包括顶部 UP 主栏）都是空白.
         _videoControl.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
-        _comprehensiveControl.Visibility = isVideo ? Visibility.Collapsed : Visibility.Visible;
+        _comprehensiveControl.Visibility = !isVideo && !isLive ? Visibility.Visible : Visibility.Collapsed;
+        _liveControl.Visibility = isLive ? Visibility.Visible : Visibility.Collapsed;
 
         var children = new List<Element>
         {
@@ -81,6 +88,9 @@ public sealed class MomentShell : Component
             new XamlHostElement(() => _comprehensiveControl, _ => { })
                 .Grid(row: 1)
                 .WithKey("moment-comprehensive"),
+            new XamlHostElement(() => _liveControl, _ => { })
+                .Grid(row: 1)
+                .WithKey("moment-live"),
 
             // 评论面板常驻，开关只切它自己的 Visibility（绑 IsPanelOpened）.
             // 之前是按 IsCommentsOpened 决定要不要把它加进树：每次开关就是挂载/卸载一次，
@@ -98,3 +108,4 @@ public sealed class MomentShell : Component
             children.ToArray());
     }
 }
+
