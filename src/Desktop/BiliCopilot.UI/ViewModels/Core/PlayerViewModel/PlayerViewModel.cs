@@ -82,7 +82,19 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     }
 
     [RelayCommand]
-    internal async Task InitializeAsync(MediaSnapshot snapshot)
+    internal Task InitializeAsync(MediaSnapshot snapshot)
+        => InitializeCoreAsync(snapshot, reusePlayer: false);
+
+    /// <summary>
+    /// 从结束页切到另一个视频：复用现有 mpv 实例，只换解析器再重新加载媒体.
+    /// 重建实例正是白屏卡死的根源；重播按钮稳，也是因为它全程没碰播放器实例.
+    /// </summary>
+    /// <param name="snapshot">新视频快照.</param>
+    /// <returns>任务.</returns>
+    internal Task InitializeWithReuseAsync(MediaSnapshot snapshot)
+        => InitializeCoreAsync(snapshot, reusePlayer: true);
+
+    private async Task InitializeCoreAsync(MediaSnapshot snapshot, bool reusePlayer)
     {
         _snapshot = snapshot;
         IsLive = snapshot.Type == BiliMediaType.Live;
@@ -249,6 +261,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             await InitializeWebEngineAsync();
             logger.LogInformation("本次播放使用网页播放器（Shaka）");
         }
+        else if (reusePlayer && Player is { IsWebEngine: false, Mpv: not null })
+        {
+            // 收尾时换视频（结束页点推荐）走这条路：不重建 mpv，只把解析器换成新视频的，
+            // 后面再让现有播放器重新加载媒体。重建实例就是白屏卡死的根源，重播按钮能稳
+            // 也是因为它全程没碰播放器实例.
+            logger.LogInformation("初始化：复用现有 mpv（不重建实例）");
+            Player.Mpv.UpdateResolvers(_sourceResolver, _historyResolver);
+        }
         else
         {
             // 重载时必须先把上一个播放器放掉：MpvPlayer 共用同一个 mpv client，
@@ -323,6 +343,13 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             if (Window.IsClosed)
             {
                 return;
+            }
+
+            if (reusePlayer && Player is { IsWebEngine: false })
+            {
+                // 复用路径：解析器已经指向新视频，让现有播放器按新源重新加载即可.
+                logger.LogInformation("初始化：复用播放器重新加载媒体");
+                await Player.ReplayAsync();
             }
 
             if (UseWebEngine)

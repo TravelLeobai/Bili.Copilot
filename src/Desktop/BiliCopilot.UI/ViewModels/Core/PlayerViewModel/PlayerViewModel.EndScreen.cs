@@ -352,7 +352,7 @@ public sealed partial class PlayerViewModel
         logger.LogInformation("结束页切视频：{Bvid}（延后到事件结束后执行）", vm.Data.Identifier.Id);
         queue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-            () => InitializeCommand.Execute(snapshot));
+            () => { _ = InitializeWithReuseAsync(snapshot); });
     }
 
     private static string FormatEndCount(double value)
@@ -360,6 +360,8 @@ public sealed partial class PlayerViewModel
             ? $"{value / 10000:F1}万"
             : Math.Round(value).ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
 }
+
+
 
 
 
