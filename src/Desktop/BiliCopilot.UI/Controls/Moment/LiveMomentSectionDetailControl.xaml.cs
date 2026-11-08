@@ -15,6 +15,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 {
     private LiveUperBar _uperBar = new();
     private ReactorHostControl? _cardHost;
+    private bool _cardMounted;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveMomentSectionDetailControl"/> class.
@@ -41,8 +42,16 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         if (_cardHost is null)
         {
             _cardHost = new ReactorHostControl();
+            // 挂载要等宿主真的进到可视树里：太早 Mount 组件拿不到尺寸，整片区域会空白.
+            _cardHost.Loaded += (_, _) =>
+            {
+                if (!_cardMounted && _cardHost is not null && ViewModel is not null)
+                {
+                    _cardMounted = true;
+                    _cardHost.Mount(new LiveMomentWaterfall(ViewModel));
+                }
+            };
             CardHost.Children.Add(_cardHost);
-            _cardHost.Mount(new LiveMomentWaterfall(ViewModel));
         }
 
         _uperBar.Bind(ViewModel);
@@ -52,6 +61,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     {
         _cardHost?.Dispose();
         _cardHost = null;
+        _cardMounted = false;
         UperHost.Children.Clear();
         CardHost.Children.Clear();
     }
@@ -63,5 +73,6 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
 
 

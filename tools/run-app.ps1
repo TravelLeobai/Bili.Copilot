@@ -39,8 +39,14 @@ if (-not $NoBuild) {
 }
 
 Write-Host "== 停掉旧进程 ==" -ForegroundColor Cyan
+# 先礼后兵：先请求关窗（让它把 settings.dat 正常落盘，taskkill 时写坏过好几次），
+# 关不掉再强杀.
+Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue | ForEach-Object {
+    $_.CloseMainWindow() | Out-Null
+}
+Start-Sleep -Seconds 6
 Get-Process -Name "*BiliCopilot*" -ErrorAction SilentlyContinue | ForEach-Object { taskkill /F /PID $_.Id 2>&1 | Out-Null }
-Start-Sleep -Seconds 4
+Start-Sleep -Seconds 3
 
 # 包数据目录名带 publisher hash（Richasy.BiliCopilot.Dev_g7ew4fxhv1f46），
 # 不能直接拼包名，否则 Test-Path 永远 false、备份从来没跑过.
@@ -125,6 +131,7 @@ else {
     Write-Host "启动失败 —— 去看事件查看器里 combase.dll 那条" -ForegroundColor Red
     exit 1
 }
+
 
 
 
