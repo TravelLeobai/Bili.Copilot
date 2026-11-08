@@ -22,6 +22,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 
     private readonly List<ObservableCollection<LiveSectionCardViewModel>> _buckets = [];
     private int _columnCount = -1;
+    private LiveMomentSectionDetailViewModel? _attachedViewModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveMomentSectionDetailControl"/> class.
@@ -32,6 +33,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
+        DataContextChanged += (_, _) => AttachViewModel();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -48,13 +50,35 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 
     private void OnLoadedCore()
     {
-        if (ViewModel is not null)
+        AttachViewModel();
+        UpdateColumns(force: true);
+
+        // 首帧时控件尺寸、数据都可能还没就位；排到下一轮调度再铺一次，
+        // 否则会出现"卡片要等窗口尺寸变化才出来".
+        this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                UpdateColumns(force: true);
+                Distribute();
+            });
+    }
+
+    private void AttachViewModel()
+    {
+        if (ViewModel is null || ReferenceEquals(ViewModel, _attachedViewModel))
         {
-            ViewModel.Items.CollectionChanged -= OnItemsChanged;
-            ViewModel.Items.CollectionChanged += OnItemsChanged;
+            return;
         }
 
-        UpdateColumns(force: true);
+        if (_attachedViewModel is not null)
+        {
+            _attachedViewModel.Items.CollectionChanged -= OnItemsChanged;
+        }
+
+        _attachedViewModel = ViewModel;
+        _attachedViewModel.Items.CollectionChanged += OnItemsChanged;
+        Distribute();
     }
 
     private static void WriteCrashLog(string tag, Exception ex)
@@ -235,6 +259,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
 
 
 
