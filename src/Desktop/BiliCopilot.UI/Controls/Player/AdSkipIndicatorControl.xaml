@@ -12,7 +12,8 @@
     <StackPanel Orientation="Horizontal" Spacing="4">
         <DropDownButton
             x:Name="SponsorButton"
-            Padding="8,4"
+            Height="32"
+            Padding="8,0,8,0"
             VerticalAlignment="Center"
             HorizontalContentAlignment="Stretch"
             VerticalContentAlignment="Center"
@@ -46,7 +47,8 @@
 
         <DropDownButton
             x:Name="AiButton"
-            Padding="8,4"
+            Height="32"
+            Padding="8,0,8,0"
             VerticalAlignment="Center"
             HorizontalContentAlignment="Stretch"
             VerticalContentAlignment="Center"

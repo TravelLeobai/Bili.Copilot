@@ -474,9 +474,11 @@
                             <!--  直播专用：原画 / 线路选择，从右侧互动面板挪到这里  -->
                             <DropDownButton
                                 x:Name="LiveStreamSelector"
+                                Height="32"
                                 Margin="12,0,0,0"
-                                Padding="10,4,10,4"
+                                Padding="8,0,8,0"
                                 VerticalAlignment="Center"
+                                VerticalContentAlignment="Center"
                                 Content="{x:Bind ViewModel.LiveQualityAndLineText, Mode=OneWay}"
                                 Visibility="{x:Bind local:PlayerOverlay.GetLiveSelectorVisibility(ViewModel.IsLive), Mode=OneWay}">
                                 <DropDownButton.Flyout>
@@ -485,7 +487,10 @@
                             </DropDownButton>
                             <DropDownButton
                                 x:Name="SourceSelector"
+                                Height="32"
                                 Margin="12,0,0,0"
+                                Padding="8,0,8,0"
+                                VerticalAlignment="Center"
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Center"
                                 x:Load="{x:Bind ViewModel.IsSourceSelectable, Mode=OneWay}">
@@ -935,3 +940,4 @@
         </VisualStateManager.VisualStateGroups>
     </Grid>
 </local:PlayerControlBase>
+
