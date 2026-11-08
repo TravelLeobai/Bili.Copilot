@@ -81,7 +81,87 @@ public sealed class LiveFollowService
             ParseLiveStatus(json, rooms, seen);
         }
 
+        await FillMissingRoomInfoAsync(rooms, cookie, cancellationToken).ConfigureAwait(false);
         return rooms;
+    }
+
+    /// <summary>
+    /// 批量开播状态接口偶尔不给主播名/头像，这里对缺的房间补一次直播间详情。
+    /// </summary>
+    /// <param name="rooms">已拿到的房间.</param>
+    /// <param name="cookie">Cookie.</param>
+    /// <param name="cancellationToken">取消令牌.</param>
+    /// <returns>任务.</returns>
+    private static async Task FillMissingRoomInfoAsync(
+        List<FollowedLiveRoom> rooms,
+        string cookie,
+        CancellationToken cancellationToken)
+    {
+        var targets = rooms
+            .Select((room, index) => (room, index))
+            .Where(p => string.IsNullOrEmpty(p.room.UserName)
+                || p.room.UserName == "关注的主播"
+                || string.IsNullOrEmpty(p.room.Face))
+            .Take(12)
+            .ToList();
+
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        foreach (var (room, index) in targets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var url = $"https://api.live.bilibili.com/xlive/web-room/v1/index/getInfoByRoom?room_id={room.RoomId}";
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+                request.Headers.TryAddWithoutValidation("Referer", "https://live.bilibili.com/");
+                request.Headers.TryAddWithoutValidation("User-Agent", UserAgent[0]);
+
+                using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    continue;
+                }
+
+                var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var document = JsonDocument.Parse(json);
+                if (!document.RootElement.TryGetProperty("data", out var data))
+                {
+                    continue;
+                }
+
+                var name = string.Empty;
+                var face = string.Empty;
+                var title = room.Title;
+                if (data.TryGetProperty("anchor_info", out var anchor)
+                    && anchor.TryGetProperty("base_info", out var baseInfo))
+                {
+                    name = ReadString(baseInfo, "uname") ?? string.Empty;
+                    face = ReadString(baseInfo, "face") ?? string.Empty;
+                }
+
+                if (data.TryGetProperty("room_info", out var roomInfo))
+                {
+                    title = ReadString(roomInfo, "title") ?? title;
+                }
+
+                rooms[index] = room with
+                {
+                    UserName = string.IsNullOrEmpty(name) ? room.UserName : name,
+                    Face = string.IsNullOrEmpty(face) ? room.Face : face,
+                    Title = string.IsNullOrEmpty(title) ? room.Title : title,
+                };
+            }
+            catch
+            {
+                // 补不到就保持原样，不影响列表.
+            }
+        }
     }
 
     /// <summary>
@@ -239,3 +319,4 @@ public sealed class LiveFollowService
 /// <param name="Face">主播头像.</param>
 /// <param name="Online">人气.</param>
 public sealed record FollowedLiveRoom(long RoomId, long UserId, string UserName, string Title, string Face, long Online);
+
