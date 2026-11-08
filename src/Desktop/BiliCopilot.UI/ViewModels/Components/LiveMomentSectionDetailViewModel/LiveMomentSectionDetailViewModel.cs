@@ -115,7 +115,8 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             {
                 _allCards.Add(new LiveSectionCardViewModel(
                     string.IsNullOrEmpty(live.Title) ? $"{live.UserName} 的直播间" : live.Title,
-                    live.Face,
+                    // 封面优先用直播间封面，拿不到再退回主播头像.
+                    NormalizeCover(string.IsNullOrEmpty(live.Cover) ? live.Face : live.Cover),
                     live.UserName,
                     live.UserId.ToString(),
                     "直播中",
@@ -306,6 +307,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 

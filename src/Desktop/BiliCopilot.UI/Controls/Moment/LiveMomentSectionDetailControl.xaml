@@ -85,6 +85,8 @@
         <ScrollViewer
             Grid.Row="1"
             Padding="16,4,16,16"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
             SizeChanged="OnScrollerSizeChanged"
             VerticalScrollBarVisibility="Auto"
             VerticalScrollMode="Auto">
@@ -94,7 +96,9 @@
                 </ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
                     <DataTemplate x:DataType="local:LiveCardColumn">
-                        <ItemsControl ItemsSource="{x:Bind Cards, Mode=OneWay}">
+                        <ItemsControl
+                            Width="{x:Bind Width, Mode=OneWay}"
+                            ItemsSource="{x:Bind Cards, Mode=OneWay}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <StackPanel Spacing="16" />
@@ -198,3 +202,4 @@
         </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>
+

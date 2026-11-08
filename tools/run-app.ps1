@@ -42,12 +42,22 @@ Write-Host "== 停掉旧进程 ==" -ForegroundColor Cyan
 Get-Process -Name "*BiliCopilot*" -ErrorAction SilentlyContinue | ForEach-Object { taskkill /F /PID $_.Id 2>&1 | Out-Null }
 Start-Sleep -Seconds 4
 
-$stateRoot = Join-Path $env:LOCALAPPDATA "Packages\$packageName\LocalState"
-$backup = Join-Path $env:TEMP "bilicopilot-localstate-backup"
-if (Test-Path $stateRoot) {
+$packageDir = Join-Path $env:LOCALAPPDATA "Packages\$packageName"
+$backup = Join-Path $env:TEMP "bilicopilot-data-backup"
+
+# 登录态和设置其实在包根目录的 Settings\settings.dat 里（不在 LocalState），
+# 所以三个目录都要一起备份，只备份 LocalState 会丢登录.
+$dataDirs = @("LocalState", "Settings", "RoamingState")
+if (Test-Path $packageDir) {
     Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
-    Copy-Item $stateRoot $backup -Recurse -Force
-    Write-Host "== 已备份 LocalState → $backup ==" -ForegroundColor Cyan
+    foreach ($dir in $dataDirs) {
+        $src = Join-Path $packageDir $dir
+        if (Test-Path $src) {
+            Copy-Item $src (Join-Path $backup $dir) -Recurse -Force
+        }
+    }
+
+    Write-Host "== 已备份 LocalState / Settings / RoamingState → $backup ==" -ForegroundColor Cyan
 }
 
 Write-Host "== 卸载 dev 包 ==" -ForegroundColor Cyan
@@ -59,9 +69,14 @@ Add-AppxPackage -Register (Join-Path $Bin "AppxManifest.xml")
 Start-Sleep -Seconds 2
 
 if (Test-Path $backup) {
-    New-Item -ItemType Directory -Path $stateRoot -Force | Out-Null
-    Copy-Item (Join-Path $backup "*") $stateRoot -Recurse -Force
-    Write-Host "== 已还原 LocalState（登录态应当还在） ==" -ForegroundColor Cyan
+    foreach ($dir in $dataDirs) {
+        $saved = Join-Path $backup $dir
+        if (Test-Path $saved) {
+            Copy-Item $saved (Join-Path $packageDir $dir) -Recurse -Force
+        }
+    }
+
+    Write-Host "== 已还原应用数据（登录态应当还在） ==" -ForegroundColor Cyan
 }
 
 Write-Host "== 启动 ==" -ForegroundColor Cyan
@@ -76,3 +91,4 @@ else {
     Write-Host "启动失败 —— 去看事件查看器里 combase.dll 那条" -ForegroundColor Red
     exit 1
 }
+

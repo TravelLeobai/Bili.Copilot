@@ -137,6 +137,7 @@ public sealed class LiveFollowService
 
                 var name = string.Empty;
                 var face = string.Empty;
+                var cover = room.Cover;
                 var title = room.Title;
                 if (data.TryGetProperty("anchor_info", out var anchor)
                     && anchor.TryGetProperty("base_info", out var baseInfo))
@@ -148,6 +149,7 @@ public sealed class LiveFollowService
                 if (data.TryGetProperty("room_info", out var roomInfo))
                 {
                     title = ReadString(roomInfo, "title") ?? title;
+                    cover = ReadString(roomInfo, "keyframe", "user_cover", "cover") ?? cover;
                 }
 
                 rooms[index] = room with
@@ -155,6 +157,7 @@ public sealed class LiveFollowService
                     UserName = string.IsNullOrEmpty(name) ? room.UserName : name,
                     Face = string.IsNullOrEmpty(face) ? room.Face : face,
                     Title = string.IsNullOrEmpty(title) ? room.Title : title,
+                    Cover = string.IsNullOrEmpty(cover) ? room.Cover : cover,
                 };
             }
             catch
@@ -258,8 +261,9 @@ public sealed class LiveFollowService
                     ReadLong(item, "uid"),
                     ReadString(item, "uname") ?? "关注的主播",
                     ReadString(item, "title") ?? string.Empty,
-                    ReadString(item, "face", "keyframe", "cover") ?? string.Empty,
-                    ReadLong(item, "online")));
+                    ReadString(item, "face") ?? string.Empty,
+                    ReadLong(item, "online"),
+                    ReadString(item, "cover", "keyframe", "user_cover") ?? string.Empty));
             }
         }
         catch
@@ -318,5 +322,7 @@ public sealed class LiveFollowService
 /// <param name="Title">直播间标题.</param>
 /// <param name="Face">主播头像.</param>
 /// <param name="Online">人气.</param>
-public sealed record FollowedLiveRoom(long RoomId, long UserId, string UserName, string Title, string Face, long Online);
+/// <param name="Cover">直播间封面（拿不到时用头像兜底）.</param>
+public sealed record FollowedLiveRoom(long RoomId, long UserId, string UserName, string Title, string Face, long Online, string Cover);
+
 

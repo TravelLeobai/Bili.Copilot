@@ -15,7 +15,9 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 {
     private const double MinCardWidth = 240d;
     private const double CardGap = 16d;
+    private const double SidePadding = 32d;
     private int _columnCount;
+    private double _cardWidth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveMomentSectionDetailControl"/> class.
@@ -76,14 +78,18 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 
     private void OnScrollerSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var width = e.NewSize.Width - 32; // ScrollViewer 的左右 padding
+        // 可用宽度去掉左右 padding，再按最小卡片宽算列数；卡片宽由剩余空间均分.
+        var width = Math.Max(MinCardWidth, e.NewSize.Width - SidePadding);
         var count = (int)Math.Max(1, Math.Floor((width + CardGap) / (MinCardWidth + CardGap)));
-        if (count == _columnCount)
+        var cardWidth = Math.Floor((width - ((count - 1) * CardGap)) / count);
+
+        if (count == _columnCount && Math.Abs(cardWidth - _cardWidth) < 0.5)
         {
             return;
         }
 
         _columnCount = count;
+        _cardWidth = cardWidth;
         RebuildColumns();
     }
 
@@ -108,6 +114,11 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
             {
                 Columns.Add(new LiveCardColumn());
             }
+        }
+
+        foreach (var column in Columns)
+        {
+            column.Width = _cardWidth > 0 ? _cardWidth : MinCardWidth;
         }
 
         foreach (var column in Columns)
@@ -143,12 +154,18 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 /// <summary>
 /// 瀑布流的一列.
 /// </summary>
-public sealed class LiveCardColumn
+public sealed partial class LiveCardColumn : CommunityToolkit.Mvvm.ComponentModel.ObservableObject
 {
     /// <summary>
     /// 这一列的卡片.
     /// </summary>
     public ObservableCollection<LiveSectionCardViewModel> Cards { get; } = [];
+
+    /// <summary>
+    /// 列宽（按窗口宽度均分，保证卡片尺寸一致）.
+    /// </summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
+    private double _width;
 }
 
 /// <summary>
@@ -157,3 +174,4 @@ public sealed class LiveCardColumn
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
