@@ -96,6 +96,9 @@ public sealed partial class SettingsPageViewModel
     private bool _isVideoMomentNotificationEnabled;
 
     [ObservableProperty]
+    private bool _isLiveStartNotificationEnabled;
+
+    [ObservableProperty]
     private bool _bottomProgressVisible;
 
     [ObservableProperty]
@@ -434,4 +437,5 @@ public sealed partial class SettingsPageViewModel
     /// </summary>
     public ObservableCollection<string> GpuDevices { get; } = [];
 }
+
 

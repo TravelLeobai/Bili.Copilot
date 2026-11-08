@@ -93,6 +93,8 @@ public sealed partial class NotificationViewModel
         try
         {
             var builder = new AppNotificationBuilder()
+                .AddArgument("page", "live")
+                .AddArgument("args", string.Join('|', room.RoomId, room.UserId, room.UserName, room.Face, room.Title))
                 .AddText($"{room.UserName} 开播了")
                 .AddText(string.IsNullOrEmpty(room.Title) ? "正在直播" : room.Title);
 
@@ -251,6 +253,7 @@ public sealed partial class NotificationViewModel
 
                 rooms.Add(new LiveRoomBrief(
                     roomId,
+                    ReadLong(item, "uid"),
                     ReadString(item, "uname") ?? "关注的主播",
                     ReadString(item, "title") ?? string.Empty,
                     ReadString(item, "face", "keyframe", "cover") ?? string.Empty));
@@ -307,5 +310,7 @@ public sealed partial class NotificationViewModel
     private static string Truncate(string text)
         => text.Length <= 300 ? text : text[..300] + "…";
 
-    private sealed record LiveRoomBrief(long RoomId, string UserName, string Title, string Face);
+    private sealed record LiveRoomBrief(long RoomId, long UserId, string UserName, string Title, string Face);
 }
+
+

@@ -61,6 +61,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         HideWhenCloseWindow = SettingsToolkit.ReadLocalSetting(SettingNames.HideWhenCloseWindow, false);
         IsNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsNotificationEnabled, true);
         IsVideoMomentNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, true);
+        IsLiveStartNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsLiveStartNotificationEnabled, true);
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
@@ -510,6 +511,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnIsVideoMomentNotificationEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, value);
+
+    partial void OnIsLiveStartNotificationEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.IsLiveStartNotificationEnabled, value);
 
     partial void OnBottomProgressVisibleChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.IsBottomProgressBarVisible, value);
@@ -1072,4 +1076,5 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     }
 
 }
+
 

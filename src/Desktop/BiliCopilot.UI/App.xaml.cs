@@ -11,7 +11,9 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.Windows.AppNotifications;
+using Richasy.BiliKernel.Models.Appearance;
 using Richasy.BiliKernel.Models.Media;
+using Richasy.BiliKernel.Models.User;
 using Serilog;
 using System.Text.Json;
 
@@ -232,6 +234,35 @@ public partial class App : Application
                 return;
             }
 
+            // 开播提醒带的是 "房间号|主播uid|主播名|头像|标题"，直接开播放器进直播间.
+            if (type == "live")
+            {
+                var parts = argsStr.Split('|', 5);
+                if (parts.Length < 1 || !long.TryParse(parts[0], out var roomId) || roomId <= 0)
+                {
+                    return;
+                }
+
+                _dispatcherQueue.TryEnqueue(() =>
+                {
+                    var title = parts.Length > 4 ? parts[4] : string.Empty;
+                    var identifier = new MediaIdentifier(roomId.ToString(), title, default);
+
+                    // 带上主播信息，直播面板的头像/昵称/粉丝数才有东西显示.
+                    UserProfile? user = null;
+                    if (parts.Length > 3 && Uri.TryCreate(parts[3], UriKind.Absolute, out var faceUri))
+                    {
+                        var userId = parts.Length > 1 ? parts[1] : string.Empty;
+                        var userName = parts.Length > 2 ? parts[2] : string.Empty;
+                        user = new UserProfile(userId, userName, new BiliImage(faceUri));
+                    }
+
+                    var live = new LiveInformation(identifier, user ?? default!);
+                    this.Get<AppViewModel>().OpenPlayerCommand.Execute(new MediaSnapshot(live));
+                });
+                return;
+            }
+
             _dispatcherQueue.TryEnqueue(() =>
             {
                 var identifier = JsonSerializer.Deserialize(argsStr, GlobalSerializeContext.Default.MediaIdentifier);
@@ -345,6 +376,7 @@ public partial class App : Application
         }
     }
 }
+
 
 
 

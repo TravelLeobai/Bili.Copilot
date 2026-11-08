@@ -23,6 +23,12 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsEnabled="{x:Bind ViewModel.IsNotificationEnabled, Mode=OneWay}" IsOn="{x:Bind ViewModel.IsVideoMomentNotificationEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard Header="{ext:Locale Name=LiveStartNotification}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Video" />
+                </base:SettingsCard.HeaderIcon>
+                <ToggleSwitch IsEnabled="{x:Bind ViewModel.IsNotificationEnabled, Mode=OneWay}" IsOn="{x:Bind ViewModel.IsLiveStartNotificationEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>

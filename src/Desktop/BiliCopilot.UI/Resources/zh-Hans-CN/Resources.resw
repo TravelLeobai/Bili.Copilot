@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -2145,6 +2145,9 @@
   <data name="VideoCount" xml:space="preserve">
     <value>视频数</value>
   </data>
+  <data name="LiveStartNotification" xml:space="preserve">
+    <value>关注主播开播提醒</value>
+  </data>
   <data name="VideoDynamicNotification" xml:space="preserve">
     <value>新视频动态通知</value>
   </data>
@@ -3265,3 +3268,4 @@
     <value>左右拖动调整宽度；双击恢复默认；方向键微调</value>
   </data>
 </root>
+
