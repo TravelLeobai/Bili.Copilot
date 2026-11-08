@@ -161,7 +161,11 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         }
     }
 
-    private void SelectUper(LiveSectionUperViewModel? uper)
+    /// <summary>
+    /// 选中某个 UP 主（过滤栏在控件里通过 ItemsView 选中后回调这里）.
+    /// </summary>
+    /// <param name="uper">选中的项.</param>
+    public void SelectUper(LiveSectionUperViewModel? uper)
     {
         if (uper is null)
         {
@@ -302,6 +306,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 

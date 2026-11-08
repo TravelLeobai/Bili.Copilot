@@ -154,12 +154,12 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     /// <summary>
     /// 直播房间号（直播卡片才有）.
     /// </summary>
-    public long RoomId { get; init; }
+    public long RoomId { get; set; }
 
     /// <summary>
     /// 视频 BV 号（回放卡片才有）.
     /// </summary>
-    public string Bvid { get; init; } = string.Empty;
+    public string Bvid { get; set; } = string.Empty;
 
     /// <summary>
     /// 播放.
@@ -183,6 +183,7 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         }
     }
 }
+
 
 
 

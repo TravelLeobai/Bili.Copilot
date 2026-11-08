@@ -17,7 +17,7 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!--  顶部 UP 主过滤栏：和动态页视频/综合分区同一套条形样式  -->
+        <!--  顶部 UP 主过滤栏：与视频/综合分区同一套（ItemsView + ItemContainer 64×70、间距 4）  -->
         <ScrollViewer
             Grid.Row="0"
             Height="76"
@@ -27,162 +27,174 @@
             VerticalAlignment="Top"
             VerticalScrollBarVisibility="Disabled"
             VerticalScrollMode="Disabled">
-            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Upers, Mode=OneWay}">
-                <ItemsRepeater.Layout>
-                    <StackLayout Orientation="Horizontal" Spacing="8" />
-                </ItemsRepeater.Layout>
-                <ItemsRepeater.ItemTemplate>
+            <ItemsView
+                x:Name="UperView"
+                ItemsSource="{x:Bind ViewModel.Upers, Mode=OneWay}"
+                SelectionMode="Single">
+                <ItemsView.ItemTemplate>
                     <DataTemplate x:DataType="items:LiveSectionUperViewModel">
-                        <Button
-                            Padding="8,4"
+                        <ItemContainer
+                            Width="64"
+                            Height="70"
+                            Padding="0"
                             Background="Transparent"
-                            BorderThickness="0"
-                            Command="{x:Bind SelectCommand}"
-                            ToolTipService.ToolTip="{x:Bind Name}">
-                            <StackPanel Width="56" Spacing="4">
-                                <Grid>
+                            Style="{StaticResource AppItemContainerStyle}"
+                            ToolTipService.ToolTip="{x:Bind Name, Mode=OneWay}">
+                            <Grid RowSpacing="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid
+                                    Width="44"
+                                    Height="44"
+                                    HorizontalAlignment="Center">
                                     <ic:SymbolIcon
-                                        Margin="6,0"
+                                        HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
-                                        FontSize="16"
+                                        FontSize="18"
                                         Symbol="BubbleMultiple"
                                         Visibility="{x:Bind IsTotal, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
                                     <controls:BasicCoverImage
-                                        Width="40"
-                                        Height="40"
-                                        VerticalAlignment="Center"
-                                        CornerRadius="20"
+                                        Width="44"
+                                        Height="44"
+                                        CornerRadius="22"
                                         DecodeWidth="100"
                                         Source="{x:Bind Avatar, Mode=OneWay}"
                                         Visibility="{x:Bind IsTotal, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}" />
                                 </Grid>
                                 <TextBlock
-                                    FontSize="11"
+                                    Grid.Row="1"
+                                    HorizontalAlignment="Center"
+                                    FontSize="10"
                                     MaxLines="1"
+                                    Opacity="0.7"
                                     Text="{x:Bind Name, Mode=OneWay}"
-                                    TextAlignment="Center"
                                     TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </Button>
+                            </Grid>
+                        </ItemContainer>
                     </DataTemplate>
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
+                </ItemsView.ItemTemplate>
+                <ItemsView.Layout>
+                    <StackLayout Orientation="Horizontal" Spacing="4" />
+                </ItemsView.Layout>
+            </ItemsView>
         </ScrollViewer>
 
-        <!--  卡片：沿用动态里视频卡片的排版（头像+作者 / 封面 / 标题 / 底部操作），
-              直播卡去掉点赞和展开全文，只留"用浏览器打开"  -->
+        <!--  卡片区：列数按宽度算，做成瀑布流（每列一个 StackPanel，高度各自累加）  -->
         <ScrollViewer
             Grid.Row="1"
             Padding="16,4,16,16"
+            SizeChanged="OnScrollerSizeChanged"
             VerticalScrollBarVisibility="Auto"
             VerticalScrollMode="Auto">
-            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+            <ItemsRepeater ItemsSource="{x:Bind Columns, Mode=OneWay}">
                 <ItemsRepeater.Layout>
-                    <!--  按窗口宽度自动增减列数，卡片宽度均分  -->
-                    <UniformGridLayout
-                        ItemsStretch="Fill"
-                        MinColumnSpacing="16"
-                        MinItemHeight="250"
-                        MinItemWidth="240"
-                        MinRowSpacing="16" />
+                    <StackLayout Orientation="Horizontal" Spacing="16" />
                 </ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="items:LiveSectionCardViewModel">
-                    <Grid
-                        MinHeight="240"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8"
-                        Tapped="OnCardTapped">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="126" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <!--  作者行  -->
-                        <Grid
-                            Margin="12,10,12,6"
-                            ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <controls:BasicCoverImage
-                                Width="32"
-                                Height="32"
-                                CornerRadius="16"
-                                DecodeWidth="100"
-                                Source="{x:Bind Avatar, Mode=OneWay}" />
-                            <TextBlock
-                                Grid.Column="1"
-                                VerticalAlignment="Center"
-                                FontSize="13"
-                                MaxLines="1"
-                                Text="{x:Bind AuthorName, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis" />
-                        </Grid>
+                    <DataTemplate x:DataType="local:LiveCardColumn">
+                        <ItemsControl ItemsSource="{x:Bind Cards, Mode=OneWay}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="16" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="items:LiveSectionCardViewModel">
+                                    <Grid
+                                        MinHeight="240"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        CornerRadius="8"
+                                        Tapped="OnCardTapped">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="126" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
 
-                        <!--  封面 + 角标  -->
-                        <Grid Grid.Row="1">
-                            <controls:BasicCoverImage
-                                DecodeWidth="600"
-                                Source="{x:Bind CoverUri, Mode=OneWay}" />
-                            <Border
-                                Padding="6,2"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Top"
-                                Background="#CC000000"
-                                CornerRadius="4">
-                                <TextBlock
-                                    FontSize="11"
-                                    Foreground="White"
-                                    Text="{x:Bind Badge, Mode=OneWay}" />
-                            </Border>
-                        </Grid>
+                                        <!--  作者行：头像 + 名字 + 右侧角标（离右边缘 12，和头像离左边缘一致）  -->
+                                        <Grid
+                                            Margin="12,10,12,6"
+                                            ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <controls:BasicCoverImage
+                                                Width="32"
+                                                Height="32"
+                                                CornerRadius="16"
+                                                DecodeWidth="100"
+                                                Source="{x:Bind Avatar, Mode=OneWay}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                FontSize="13"
+                                                MaxLines="1"
+                                                Text="{x:Bind AuthorName, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <Border
+                                                Grid.Column="2"
+                                                Padding="6,1"
+                                                VerticalAlignment="Center"
+                                                Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                CornerRadius="4">
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                                    Text="{x:Bind Badge, Mode=OneWay}" />
+                                            </Border>
+                                        </Grid>
 
-                        <TextBlock
-                            Grid.Row="2"
-                            Margin="12,8,12,4"
-                            FontSize="13"
-                            MaxLines="2"
-                            Text="{x:Bind Title, Mode=OneWay}"
-                            TextTrimming="CharacterEllipsis"
-                            TextWrapping="Wrap" />
+                                        <!--  封面  -->
+                                        <Grid Grid.Row="1">
+                                            <controls:BasicCoverImage DecodeWidth="600" Source="{x:Bind CoverUri, Mode=OneWay}" />
+                                        </Grid>
 
-                        <!--  底部：只保留用浏览器打开  -->
-                        <Grid
-                            Grid.Row="3"
-                            Margin="12,0,8,8"
-                            ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock
-                                VerticalAlignment="Center"
-                                FontSize="11"
-                                Opacity="0.6"
-                                Text="{x:Bind Detail, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis" />
-                            <Button
-                                Grid.Column="1"
-                                Padding="6"
-                                AutomationProperties.Name="在浏览器中打开"
-                                Click="OnOpenInBrowserClick"
-                                Style="{StaticResource BasicPlayerIconButtonStyle}"
-                                ToolTipService.ToolTip="在浏览器中打开">
-                                <ic:SymbolIcon FontSize="14" Symbol="Globe" />
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </DataTemplate>
+                                        <TextBlock
+                                            Grid.Row="2"
+                                            Margin="12,8,12,4"
+                                            FontSize="13"
+                                            MaxLines="2"
+                                            Text="{x:Bind Title, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="Wrap" />
+
+                                        <!--  底部：只保留用浏览器打开  -->
+                                        <Grid
+                                            Grid.Row="3"
+                                            Margin="12,0,8,8"
+                                            ColumnSpacing="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                FontSize="11"
+                                                Opacity="0.6"
+                                                Text="{x:Bind Detail, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis" />
+                                            <Button
+                                                Grid.Column="1"
+                                                Padding="6"
+                                                AutomationProperties.Name="在浏览器中打开"
+                                                Click="OnOpenInBrowserClick"
+                                                Style="{StaticResource BasicPlayerIconButtonStyle}"
+                                                ToolTipService.ToolTip="在浏览器中打开">
+                                                <ic:SymbolIcon FontSize="14" Symbol="Globe" />
+                                            </Button>
+                                        </Grid>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </DataTemplate>
                 </ItemsRepeater.ItemTemplate>
             </ItemsRepeater>
         </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>
-
-
-
-
-
