@@ -419,6 +419,16 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     /// </summary>
     internal static double GetLiveDotOpacity(bool isBehind) => isBehind ? 1d : 0.45d;
     /// <summary>
+    /// 视频播放用的那组弹幕控件（弹 + 弹幕显示设置）：
+    /// 直播有自己的那颗"弹"，这里必须收起来，否则宽窗口下底栏会出现两颗"弹".
+    /// </summary>
+    /// <param name="danmakuVisible">VM 判断的可见性.</param>
+    /// <param name="isLive">是否直播.</param>
+    /// <returns>可见性.</returns>
+    public static Visibility GetVodDanmakuVisibility(bool danmakuVisible, bool isLive)
+        => danmakuVisible && !isLive ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>
     /// 只在直播时显示（视频播放界面不受影响）.
     /// </summary>
     /// <param name="isLive">是否直播.</param>
@@ -434,4 +444,5 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     public static Visibility GetLiveHidden(bool isLive)
         => isLive ? Visibility.Collapsed : Visibility.Visible;
 }
+
 

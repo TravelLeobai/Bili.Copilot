@@ -122,7 +122,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 TextBlock($"已播 {vm.LiveUptimeText}").FontSize(11).Opacity(0.7)));
 
         // 关注按钮复用视频页 UP 卡片那颗心（UpSectionControl 里的同款）：
-        // 已关注是实心，未关注是空心；放在 UP 信息同一行最右边.
+        // 已关注是实心 + 着色（B 站粉），未关注是空心灰；放在 UP 信息同一行最右边.
         var followHost = new XamlHostElement(
             () =>
             {
@@ -134,6 +134,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                         ? FluentIcons.Common.IconVariant.Filled
                         : FluentIcons.Common.IconVariant.Regular,
                 };
+                ApplyFollowColor(icon, vm.IsLiveUserFollowed);
                 var button = new Button
                 {
                     Content = icon,
@@ -155,6 +156,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                     icon.IconVariant = vm.IsLiveUserFollowed
                         ? FluentIcons.Common.IconVariant.Filled
                         : FluentIcons.Common.IconVariant.Regular;
+                    ApplyFollowColor(icon, vm.IsLiveUserFollowed);
                 }
 
                 button.IsEnabled = vm.LiveUser is not null;
@@ -736,6 +738,16 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             .CornerRadius(size / 2)
             .Background(ResolveBrush("ControlFillColorSecondaryBrush"));
     }
+    /// <summary>
+    /// 已关注的心形上色（B 站粉），未关注保持默认前景色.
+    /// </summary>
+    private static void ApplyFollowColor(FluentIcons.WinUI.SymbolIcon icon, bool followed)
+    {
+        icon.Foreground = followed
+            ? new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(255, 0xFB, 0x72, 0x99))
+            : ResolveBrush("TextFillColorSecondaryBrush");
+    }
+
     private static Brush ResolveBrush(string name)
     {
         if (Application.Current.Resources.TryGetValue(name, out var value) && value is Brush brush)
@@ -1108,6 +1120,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             : null;
     }
 }
+
 
 
 

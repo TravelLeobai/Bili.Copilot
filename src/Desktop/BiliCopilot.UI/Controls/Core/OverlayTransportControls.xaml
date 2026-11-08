@@ -432,7 +432,7 @@
                 <StackPanel
                     Orientation="Horizontal"
                     Spacing="6"
-                    Visibility="{x:Bind ViewModel.IsDanmakuControlVisible, Mode=OneWay}">
+                    Visibility="{x:Bind local:OverlayTransportControls.GetVodDanmakuVisibility(ViewModel.IsDanmakuControlVisible, ViewModel.IsLive), Mode=OneWay}">
                     <ToggleButton
                         x:Name="DanmakuToggleButton"
                         Margin="0,0,8,0"
