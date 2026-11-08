@@ -98,6 +98,13 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         {
             keyboardSource.KeyUp += OnWindowKeyUp;
         }
+
+        // 首屏内容挂上来 = 启动成功。不能等 Window.Activated：
+        // 从自动化/后台方式拉起时窗口可能一直不激活，那样永远等不到激活事件.
+        BiliCopilot.UI.Services.StartupTrace.Mark("MainWindow:shell-loaded");
+        this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => BiliCopilot.UI.Services.StartupTrace.MarkReady());
     }
 
     private static PointInt32 GetSavedWindowPosition()
@@ -119,12 +126,18 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
             return;
         }
 
+        BiliCopilot.UI.Services.StartupTrace.Mark("MainWindow:first-activated");
         MoveAndResize();
         this.Get<ILogger<App>>().LogInformation($"App version: {this.Get<IAppToolkit>().GetPackageVersion()}");
         var localTheme = SettingsToolkit.ReadLocalSetting(SettingNames.AppTheme, ElementTheme.Default);
         this.Get<AppViewModel>().ChangeThemeCommand.Execute(localTheme);
         AppWindow.Changed += OnWindowChanged;
         _isFirstActivated = false;
+
+        // 再给一帧时间让首屏画出来，然后才认"启动成功"：Smoke Test 只认这个标记.
+        this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => BiliCopilot.UI.Services.StartupTrace.MarkReady());
     }
 
     internal void UnregisterEventHandlers()
@@ -273,6 +286,8 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         }
     }
 }
+
+
 
 
 

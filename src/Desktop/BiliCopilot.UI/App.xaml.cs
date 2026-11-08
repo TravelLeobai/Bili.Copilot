@@ -149,38 +149,55 @@ public partial class App : Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        var instance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey(Id);
-        if (instance.IsCurrent)
+        Services.StartupTrace.Mark("OnLaunched:enter", $"version={Services.StartupTrace.Version} sha={Services.StartupTrace.GitSha}");
+        try
         {
-            var rootFolder = Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder;
-            var fullPath = $"{rootFolder.Path}\\Logger";
-            LoggerFolder = fullPath;
-            if (!Directory.Exists(fullPath))
+            var instance = Microsoft.Windows.AppLifecycle.AppInstance.FindOrRegisterForKey(Id);
+            if (instance.IsCurrent)
             {
-                _ = Directory.CreateDirectory(fullPath);
+                var rootFolder = Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder;
+                var fullPath = $"{rootFolder.Path}\\Logger";
+                LoggerFolder = fullPath;
+                if (!Directory.Exists(fullPath))
+                {
+                    _ = Directory.CreateDirectory(fullPath);
+                }
+
+                Services.StartupTrace.Mark("OnLaunched:appdata-ready", rootFolder.Path);
+                instance.Activated += OnInstanceActivated;
+                // 后台解码：内核默认就是开的，这里恢复默认，解码不再压 UI 线程.
+                Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = true;
+
+                // 启动自愈：settings.dat 一旦被写坏，应用会每次启动都在同一个位置崩，
+                // 外面只能靠卸载重装救。这里记一个"正在启动"的标记：
+                // 连续两次启动都没走到成功，就把 Settings 挪走、用全新设置继续启动.
+                EnsureHealthySettings(rootFolder.Path);
+                ScheduleStartupMark(rootFolder.Path);
+                Services.StartupTrace.Mark("OnLaunched:settings-checked");
+                BiliCopilot.UI.Services.ImageDiagnostics.Initialize();
+                Services.StartupTrace.Mark("OnLaunched:image-diag-ready");
+                GlobalDependencies.Initialize();
+                Services.StartupTrace.Mark("OnLaunched:dependencies-ready");
+                ProbeEnhancementSettings();
+                Services.StartupTrace.Mark("OnLaunched:enhancement-settings-read");
+                _ = SyncQualityUnlockIfNeededAsync();
+                _ = SyncCdnPoolIfNeededAsync();
+                ApplyMomentVideoLayoutPreset(SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.MomentVideoLayoutPreset, 0));
+                Services.StartupTrace.Mark("OnLaunched:launch-command");
+                GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().LaunchCommand.Execute(default);
+                Services.StartupTrace.Mark("OnLaunched:launch-command-returned");
             }
-
-            instance.Activated += OnInstanceActivated;
-            // 后台解码：内核默认就是开的，这里恢复默认，解码不再压 UI 线程.
-            Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = true;
-
-            // 启动自愈：settings.dat 一旦被写坏，应用会每次启动都在同一个位置崩，
-            // 外面只能靠卸载重装救。这里记一个"正在启动"的标记：
-            // 连续两次启动都没走到成功，就把 Settings 挪走、用全新设置继续启动.
-            EnsureHealthySettings(rootFolder.Path);
-            ScheduleStartupMark(rootFolder.Path);
-            BiliCopilot.UI.Services.ImageDiagnostics.Initialize();
-            GlobalDependencies.Initialize();
-            ProbeEnhancementSettings();
-            _ = SyncQualityUnlockIfNeededAsync();
-            _ = SyncCdnPoolIfNeededAsync();
-            ApplyMomentVideoLayoutPreset(SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.MomentVideoLayoutPreset, 0));
-            GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().LaunchCommand.Execute(default);
+            else
+            {
+                Services.StartupTrace.Mark("OnLaunched:redirect-to-primary");
+                var activatedArgs = instance.GetActivatedEventArgs();
+                _ = instance.RedirectActivationToAsync(activatedArgs).AsTask().ContinueWith(_ => Current.Exit());
+            }
         }
-        else
+        catch (Exception ex)
         {
-            var activatedArgs = instance.GetActivatedEventArgs();
-            _ = instance.RedirectActivationToAsync(activatedArgs).AsTask().ContinueWith(_ => Current.Exit());
+            Services.StartupTrace.Fail("OnLaunched:exception", ex);
+            throw;
         }
     }
 
