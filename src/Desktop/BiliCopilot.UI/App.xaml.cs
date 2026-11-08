@@ -154,6 +154,12 @@ public partial class App : Application
             instance.Activated += OnInstanceActivated;
             // 后台解码：内核默认就是开的，这里恢复默认，解码不再压 UI 线程.
             Richasy.WinUIKernel.Share.Base.ImageExBase.EnableBackgroundDecoding = true;
+
+            // 启动自愈：settings.dat 一旦被写坏，应用会每次启动都在同一个位置崩，
+            // 外面只能靠卸载重装救。这里记一个"正在启动"的标记：
+            // 连续两次启动都没走到成功，就把 Settings 挪走、用全新设置继续启动.
+            EnsureHealthySettings(rootFolder.Path);
+            ScheduleStartupMark(rootFolder.Path);
             BiliCopilot.UI.Services.ImageDiagnostics.Initialize();
             GlobalDependencies.Initialize();
             ProbeEnhancementSettings();
@@ -172,10 +178,78 @@ public partial class App : Application
     private static MainWindow? GetMainWindow()
         => GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().Windows.Find(p => p is MainWindow) as MainWindow;
 
+    /// <summary>
+    /// 启动自愈：连续两次没走到"成功启动"就把 Settings 挪走。
+    /// 坏掉的 settings.dat 会让应用每次启动都崩在 MainShell 构造里（combase 0x80004003）。
+    /// </summary>
+    /// <param name="localFolder">LocalState 目录.</param>
+    private static void EnsureHealthySettings(string localFolder)
+    {
+        try
+        {
+            var guard = Path.Combine(localFolder, "startup-guard.txt");
+            var attempts = File.Exists(guard) && int.TryParse(File.ReadAllText(guard).Trim(), out var value) ? value : 0;
+            attempts++;
+            if (attempts >= 2)
+            {
+                var packagesRoot = Directory.GetParent(localFolder)?.FullName;
+                var settingsDir = packagesRoot is null ? null : Path.Combine(packagesRoot, "Settings");
+                if (settingsDir is not null && Directory.Exists(settingsDir))
+                {
+                    var broken = Path.Combine(packagesRoot!, $"Settings-broken-{DateTime.Now:HHmmss}");
+                    try
+                    {
+                        Directory.Move(settingsDir, broken);
+                    }
+                    catch
+                    {
+                        // 挪不动就算了，下一轮再试.
+                    }
+                }
+
+                attempts = 1;
+            }
+
+            File.WriteAllText(guard, attempts.ToString());
+        }
+        catch
+        {
+            // 自愈本身失败不影响启动.
+        }
+    }
+
+    /// <summary>
+    /// 启动成功（窗口激活后调用）：清掉启动标记.
+    /// </summary>
+    private static void MarkStartupSucceeded(string localFolder)
+    {
+        try
+        {
+            var guard = Path.Combine(localFolder, "startup-guard.txt");
+            if (File.Exists(guard))
+            {
+                File.Delete(guard);
+            }
+        }
+        catch
+        {
+            // 忽略.
+        }
+    }
+
     private void OnInstanceActivated(object? sender, AppActivationArguments e)
     {
         _dispatcherQueue.TryEnqueue(() => GetMainWindow()?.Activate());
     }
+
+    /// <summary>
+    /// 窗口起来之后再清启动标记：只有真的跑到这儿才算"启动成功".
+    /// </summary>
+    /// <param name="localFolder">LocalState 目录.</param>
+    private void ScheduleStartupMark(string localFolder)
+        => _dispatcherQueue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => _ = System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(6)).ContinueWith(_ => MarkStartupSucceeded(localFolder)));
 
     private void InitializeTrayIcon()
     {
@@ -376,6 +450,7 @@ public partial class App : Application
         }
     }
 }
+
 
 
 

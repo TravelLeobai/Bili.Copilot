@@ -82,6 +82,19 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 
     private void UpdateColumns(bool force)
     {
+        try
+        {
+            UpdateColumnsCore(force);
+        }
+        catch (Exception ex)
+        {
+            // 列构建失败也不能把整个应用带崩.
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+    }
+
+    private void UpdateColumnsCore(bool force)
+    {
         if (ColumnHost is null)
         {
             return;
@@ -177,6 +190,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
 
 
 
