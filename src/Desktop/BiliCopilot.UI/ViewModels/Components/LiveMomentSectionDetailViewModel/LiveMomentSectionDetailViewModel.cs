@@ -56,18 +56,9 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     /// 过滤后要展示的卡片.
     /// </summary>
     public ObservableCollection<LiveSectionCardViewModel> Items { get; } = [];
-    /// <summary>
-    /// 用户指定的切片 UP 主 id.
-    /// </summary>
-    public HashSet<string> ClipCreatorIds { get; private set; } = [];
 
     /// <summary>
-    /// 切片 UP 主 id → 名字（设置里回显用）.
-    /// </summary>
-    public Dictionary<string, string> ClipCreatorNames { get; private set; } = [];
-
-    /// <summary>
-    /// 内容类型过滤：全部 / 直播 / 回放 / 切片.
+    /// 内容类型过滤：全部 / 直播 / 回放.
     /// </summary>
     [ObservableProperty]
     private LiveFilterType _filterType = LiveFilterType.All;
@@ -142,33 +133,19 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 });
             }
 
-            ClipCreatorIds = ClipCreatorStore.Load();
             BuildUpers(_allCards);
             SelectedUper ??= Upers.FirstOrDefault();
             ApplyFilter();
             IsLoading = false;
             IsEmpty = _allCards.Count == 0;
 
-            // 第二阶段：回放 / 切片慢慢补进来，不挡直播列表（扫投稿要几秒）.
+            // 第二阶段：回放慢慢补进来，不挡直播列表（扫投稿要几秒）.
             var followedIds = await LiveFollowService.GetFollowedUserIdsAsync(relationship);
             _logger.LogInformation("直播分区：关注用户 {Count} 个", followedIds.Count);
-            RefreshFollowedNames(relationship);
 
             var replays = await LoadReplaysAsync(cookies, followedIds);
             _logger.LogInformation("直播分区：回放 {Count} 个", replays.Count);
-
-            foreach (var card in replays)
-            {
-                if (ClipCreatorIds.Contains(card.AuthorId))
-                {
-                    card.IsClip = true;
-                    card.Badge = "切片";
-                }
-
-                _allCards.Add(card);
-            }
-
-            _logger.LogInformation("直播分区：切片 UP {Count} 个，命中切片 {Hit} 条", ClipCreatorIds.Count, _allCards.Count(p => p.IsClip));
+            _allCards.AddRange(replays);
 
             BuildUpers(_allCards);
             SelectedUper ??= Upers.FirstOrDefault();
@@ -187,88 +164,8 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     }
 
     /// <summary>
-    /// 拉一遍关注用户的名字，切片设置里要用真实昵称而不是只有 id.
+    /// 用卡片里的作者铺顶部过滤栏.
     /// </summary>
-    /// <param name="relationship">关注关系服务.</param>
-    private void RefreshFollowedNames(IRelationshipService relationship) => _ = LoadFollowedNamesAsync(relationship);
-
-    private async Task LoadFollowedNamesAsync(IRelationshipService relationship)
-    {
-        try
-        {
-            var groups = await relationship.GetMyFollowUserGroupsAsync();
-            if (groups is null)
-            {
-                return;
-            }
-
-            foreach (var group in groups)
-            {
-                var offset = 0;
-                for (var page = 0; page < 3; page++)
-                {
-                    var (users, next) = await relationship.GetMyFollowUserGroupDetailAsync(group.Id, offset);
-                    if (users is null || users.Count == 0)
-                    {
-                        break;
-                    }
-
-                    foreach (var user in users)
-                    {
-                        var id = user.Profile.User.Id;
-                        if (!string.IsNullOrEmpty(id))
-                        {
-                            _followedNames[id] = user.Profile.User.Name;
-                            _followedAvatars[id] = user.Profile.User.Avatar?.Uri;
-                        }
-                    }
-
-                    offset = next;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "拉关注用户名失败（切片设置里只显示 id）");
-        }
-    }
-
-    /// <summary>
-    /// 可选的 UP 主列表（切片设置的选择来源），带头像.
-    /// </summary>
-    /// <returns>id / 名字 / 头像.</returns>
-    public IReadOnlyList<(string Id, string Name, Uri? Avatar)> GetFollowedUsers()
-    {
-        var result = new List<(string Id, string Name, Uri? Avatar)>();
-        var seen = new HashSet<string>();
-
-        // 先用关注列表的全量用户（含头像）：这样没开播、也没投稿的 UP 也能选到.
-        foreach (var pair in _followedNames)
-        {
-            if (!seen.Add(pair.Key))
-            {
-                continue;
-            }
-
-            _followedAvatars.TryGetValue(pair.Key, out var avatar);
-            result.Add((pair.Key, pair.Value, avatar));
-        }
-
-        // 再补上卡片里出现过、但关注列表没覆盖到的人（比如回放的作者）.
-        foreach (var card in _allCards)
-        {
-            if (string.IsNullOrEmpty(card.AuthorId) || !seen.Add(card.AuthorId))
-            {
-                continue;
-            }
-
-            var name = string.IsNullOrEmpty(card.AuthorName) ? card.AuthorId : card.AuthorName;
-            result.Add((card.AuthorId, name, card.Avatar));
-        }
-
-        return result;
-    }
-
     private void BuildUpers(List<LiveSectionCardViewModel> cards)
     {
         Upers.Clear();
@@ -282,7 +179,6 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 continue;
             }
 
-            _followedNames[card.AuthorId] = card.AuthorName;
             Upers.Add(new LiveSectionUperViewModel(card.AuthorId, card.AuthorName, card.Avatar, SelectUper));
         }
     }
@@ -318,39 +214,8 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     }
 
     /// <summary>
-    /// 设置切片 UP 主：持久化，并把他们的投稿标成"切片"放进列表.
+    /// 按「选中的 UP 主 + 内容类型」过滤要展示的卡片.
     /// </summary>
-    /// <param name="ids">UP 主 id 集合.</param>
-    public void SetClipCreators(IEnumerable<string> ids)
-    {
-        try
-        {
-            var set = ids.Where(p => !string.IsNullOrEmpty(p)).ToHashSet();
-            ClipCreatorIds = set;
-            ClipCreatorNames = set
-                .Where(p => _followedNames.ContainsKey(p))
-                .ToDictionary(p => p, p => _followedNames[p]);
-
-            // 存文件，不写 LocalSettings —— 之前写完 LocalSettings 应用下次启动就崩.
-            ClipCreatorStore.Save(set, ClipCreatorNames);
-
-            foreach (var card in _allCards)
-            {
-                card.IsClip = !card.IsLive && set.Contains(card.AuthorId);
-                card.Badge = card.IsClip ? "切片" : (card.IsLive ? "直播中" : "回放");
-            }
-
-            // 列表在弹窗关闭动画期间重建容易重入，推到下一轮调度.
-            this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
-                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                ApplyFilter);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "保存切片 UP 主失败");
-        }
-    }
-
     private void ApplyFilter()
     {
         Items.Clear();
@@ -492,6 +357,9 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
+
+
 
 
 
