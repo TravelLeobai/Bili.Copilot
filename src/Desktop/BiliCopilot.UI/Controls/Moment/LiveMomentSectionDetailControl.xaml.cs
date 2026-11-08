@@ -17,9 +17,9 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     /// </summary>
     public LiveMomentSectionDetailControl() => InitializeComponent();
 
-    private void OnCardClick(object sender, ItemClickEventArgs e)
+    private void OnCardTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
-        if (e.ClickedItem is LiveSectionCardViewModel card)
+        if (sender is FrameworkElement element && element.DataContext is LiveSectionCardViewModel card)
         {
             card.PlayCommand.Execute(default);
         }
@@ -42,4 +42,5 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
 

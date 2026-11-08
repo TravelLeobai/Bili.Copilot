@@ -71,32 +71,34 @@
 
         <!--  卡片：沿用动态里视频卡片的排版（头像+作者 / 封面 / 标题 / 底部操作），
               直播卡去掉点赞和展开全文，只留"用浏览器打开"  -->
-        <GridView
+        <ScrollViewer
             Grid.Row="1"
             Padding="16,4,16,16"
-            IsItemClickEnabled="True"
-            ItemClick="OnCardClick"
-            ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
-            SelectionMode="None">
-            <GridView.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <ItemsWrapGrid ItemHeight="248" ItemWidth="248" />
-                </ItemsPanelTemplate>
-            </GridView.ItemsPanel>
-            <GridView.ItemTemplate>
-                <DataTemplate x:DataType="items:LiveSectionCardViewModel">
+            VerticalScrollBarVisibility="Auto"
+            VerticalScrollMode="Auto">
+            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                <ItemsRepeater.Layout>
+                    <!--  按窗口宽度自动增减列数，卡片宽度均分  -->
+                    <UniformGridLayout
+                        ItemsStretch="Fill"
+                        MinColumnSpacing="16"
+                        MinItemHeight="250"
+                        MinItemWidth="240"
+                        MinRowSpacing="16" />
+                </ItemsRepeater.Layout>
+                <ItemsRepeater.ItemTemplate>
+                    <DataTemplate x:DataType="items:LiveSectionCardViewModel">
                     <Grid
-                        Width="232"
-                        Height="240"
+                        MinHeight="240"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        CornerRadius="8">
+                        CornerRadius="8"
+                        Tapped="OnCardTapped">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="126" />
-                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-
                         <!--  作者行  -->
                         <Grid
                             Margin="12,10,12,6"
@@ -174,10 +176,13 @@
                         </Grid>
                     </Grid>
                 </DataTemplate>
-            </GridView.ItemTemplate>
-        </GridView>
+                </ItemsRepeater.ItemTemplate>
+            </ItemsRepeater>
+        </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>
+
+
 
 
 
