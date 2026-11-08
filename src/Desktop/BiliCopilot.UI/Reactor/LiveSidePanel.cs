@@ -337,67 +337,20 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildFooter(PlayerViewModel vm)
     {
-        // 底栏：[滤][礼][表情][输入 *][发送]；弹幕开关挪到播放器底栏去了，这里不再重复.
+        // 底栏：[礼][表情][输入 *][发送]；弹幕开关和过滤都挪到播放器底栏了，这里不再重复.
         return Grid(
-            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
             new[] { GridSize.Auto },
-            BuildFilterButton(vm).Grid(row: 0, column: 0).Margin(0, 0, 6, 0),
-            BuildGiftButton(vm).Grid(row: 0, column: 1).Margin(0, 0, 6, 0),
-            BuildEmoteButton(vm).Grid(row: 0, column: 2).Margin(0, 0, 6, 0),
-            BuildInputBox(vm).Grid(row: 0, column: 3).Margin(0, 0, 6, 0),
-            BuildSendButton(vm).Grid(row: 0, column: 4))
+            BuildGiftButton(vm).Grid(row: 0, column: 0).Margin(0, 0, 6, 0),
+            BuildEmoteButton(vm).Grid(row: 0, column: 1).Margin(0, 0, 6, 0),
+            BuildInputBox(vm).Grid(row: 0, column: 2).Margin(0, 0, 6, 0),
+            BuildSendButton(vm).Grid(row: 0, column: 3))
             .Padding(12, 8, 12, 12);
     }
 
     /// <summary>
     /// 弹幕过滤入口：等级和粉丝牌两个开关，开关状态直接写 ViewModel（会落本地设置）.
     /// </summary>
-    private Element BuildFilterButton(PlayerViewModel vm)
-        => new XamlHostElement(
-            () =>
-            {
-                var button = new Button
-                {
-                    Width = 32,
-                    Height = 32,
-                    Padding = new Thickness(0),
-                    Content = new FluentIcons.WinUI.SymbolIcon
-                    {
-                        Symbol = FluentIcons.Common.Symbol.Filter,
-                        FontSize = 14,
-                    },
-                };
-                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(button, "弹幕过滤");
-                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "弹幕过滤");
-
-                var panel = new StackPanel { Spacing = 10, MinWidth = 250 };
-                panel.Children.Add(new TextBlock { Text = "弹幕过滤", FontSize = 14, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
-                panel.Children.Add(CreateFilterToggle("过滤 B 站等级小于 3 的用户", vm.IsLiveDanmakuLevelFilterEnabled, value => vm.IsLiveDanmakuLevelFilterEnabled = value));
-                panel.Children.Add(CreateFilterToggle("过滤没有粉丝牌的用户", vm.IsLiveDanmakuMedalFilterEnabled, value => vm.IsLiveDanmakuMedalFilterEnabled = value));
-                panel.Children.Add(new TextBlock
-                {
-                    Text = "只作用于普通弹幕，礼物、醒目留言、上舰和进场消息不受影响。",
-                    FontSize = 11,
-                    TextWrapping = TextWrapping.Wrap,
-                    Foreground = Application.Current.Resources.TryGetValue("TextFillColorSecondaryBrush", out var brush)
-                        ? brush as Brush
-                        : null,
-                });
-
-                var flyout = new Flyout { Content = panel, Placement = FlyoutPlacementMode.Top };
-                button.Flyout = flyout;
-                return button;
-            },
-            _ => { })
-            .WithKey("live-filter");
-
-    private static ToggleSwitch CreateFilterToggle(string header, bool initial, Action<bool> onChanged)
-    {
-        var toggle = new ToggleSwitch { Header = header, IsOn = initial };
-        toggle.Toggled += (_, _) => onChanged(toggle.IsOn);
-        return toggle;
-    }
-
     private Element BuildGiftButton(PlayerViewModel vm)
         => new XamlHostElement(
             () =>
@@ -1155,6 +1108,7 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             : null;
     }
 }
+
 
 
 

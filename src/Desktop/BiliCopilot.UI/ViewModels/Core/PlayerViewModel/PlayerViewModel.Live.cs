@@ -273,7 +273,11 @@ public sealed partial class PlayerViewModel
         {
             LiveTitle = _snapshot.Live.Identifier.Title;
             LiveUser = _snapshot.Live.User;
+
+            // 快照里的 Relation 不一定带得回来（常常是 Unknown），
+            // 面板上的关注按钮要靠它决定实心/空心，所以主动查一次.
             IsLiveUserFollowed = _snapshot.Live.Relation is UserRelationStatus.Following or UserRelationStatus.Friends or UserRelationStatus.SpeciallyFollowed;
+            _ = RefreshLiveFollowStateAsync();
         }
 
         if (string.IsNullOrEmpty(LiveRoomId))
@@ -709,6 +713,34 @@ public sealed partial class PlayerViewModel
         }
     }
 
+    /// <summary>
+    /// 主动查一次关注关系：直播快照里的 Relation 常常是 Unknown，
+    /// 只靠它会让已关注的 UP 也显示成没关注.
+    /// </summary>
+    private async Task RefreshLiveFollowStateAsync()
+    {
+        if (LiveUser is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var state = await this.Get<IRelationshipService>().GetRelationshipAsync(LiveUser.Id);
+            var followed = state is UserRelationStatus.Following or UserRelationStatus.Friends or UserRelationStatus.SpeciallyFollowed;
+            if (followed != IsLiveUserFollowed)
+            {
+                IsLiveUserFollowed = followed;
+            }
+
+            logger.LogInformation("直播关注状态查询：{User} → {State}", LiveUser.Name, state);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "查询直播关注状态失败，沿用快照里的值");
+        }
+    }
+
     [RelayCommand]
     private async Task ToggleLiveFollowAsync()
     {
@@ -854,6 +886,7 @@ public sealed partial class PlayerViewModel
         }
     }
 }
+
 
 
 

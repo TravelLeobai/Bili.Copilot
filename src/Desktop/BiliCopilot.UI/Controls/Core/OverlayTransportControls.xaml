@@ -468,6 +468,34 @@
                     Style="{StaticResource TogglePlayerIconButtonStyle}"
                     ToolTipService.ToolTip="{ext:Locale Name=DanmakuSwitch}"
                     Visibility="{x:Bind local:OverlayTransportControls.GetLiveOnly(ViewModel.IsLive), Mode=OneWay}" />
+                <!--  直播专用弹幕过滤：和上面那颗"弹"同一种圆形按钮，面板里那个已撤掉  -->
+                <Button
+                    x:Name="LiveDanmakuFilterButton"
+                    Margin="0,0,8,0"
+                    Padding="0"
+                    AutomationProperties.Name="弹幕过滤"
+                    Style="{StaticResource BasicPlayerIconButtonStyle}"
+                    ToolTipService.ToolTip="弹幕过滤"
+                    Visibility="{x:Bind local:OverlayTransportControls.GetLiveOnly(ViewModel.IsLive), Mode=OneWay}">
+                    <ic:SymbolIcon FontSize="14" Symbol="Filter" />
+                    <Button.Flyout>
+                        <Flyout Placement="Top">
+                            <StackPanel MinWidth="250" Spacing="10">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Text="弹幕过滤" />
+                                <ToggleSwitch Header="过滤 B 站等级小于 3 的用户" IsOn="{x:Bind ViewModel.IsLiveDanmakuLevelFilterEnabled, Mode=TwoWay}" />
+                                <ToggleSwitch Header="过滤没有粉丝牌的用户" IsOn="{x:Bind ViewModel.IsLiveDanmakuMedalFilterEnabled, Mode=TwoWay}" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    Text="只作用于普通弹幕，礼物、醒目留言、上舰和进场消息不受影响。"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
                 <Button
                     x:Name="CompactOverlayButton"
                     Margin="0,0,8,0"
