@@ -31,6 +31,12 @@
 ### 其它界面改造
 
 - **动态页**：综合动态换成响应式瀑布流，可用宽度 ≥900 DIP 两列、≥1250 DIP 三列；顶部关注 UP 头像条可按人筛选。
+- **动态页 · 直播分区**：动态页的 `SelectorBar` 多了第三段「直播」，进来先看到关注的主播**正在直播**的房间，几秒后再往下补**直播回放 / 录播**卡片。
+  - 在播列表自己拼：拉关注分组里的用户 → 批量问 `room/v1/Room/get_status_info_by_uids` → 取 `live_status=1` 的房间；缺主播名或头像的，再补一次 `getInfoByRoom` 拿 `anchor_info.base_info`。
+  - 回放走「关注 UP 主的投稿动态」再按标题筛「直播回放 / 录播」。不用全站搜索——搜出来全是大主播，关注的人根本不在结果里（实测 0 命中）。
+  - 卡片区是 `ItemsRepeater` + `UniformGridLayout`（`MinItemWidth=240`、`ItemsStretch=Fill`），列数随窗口宽度增减，行高按该行最高的卡片算，长标题两行不会被裁。点卡片进播放，右下角 Globe 用浏览器打开直播间 / 视频页。
+  - 加载分两段：第一段只拉关注分组 + 开播状态，直播卡先出来、界面立刻可用；第二段扫投稿补回放。补卡片走**增量追加**（只 `Items.Add` 新卡、只往头像条尾部加新作者），不整页重建。
+  - 角标：`直播中` 是实心 accent；`回放` 是 outline 样式。
 - **评论面板**：整块 Reactor 化，主评论与「N 条回复」共用一套卡片，排序、点赞、回复、加载更多都在。
 - **顶栏与侧边栏**：搜索框居中，收藏 / 稍后再看 / 历史移到左侧，右侧只留窗口按钮；头像放进 PaneFooter，折叠态也能点搜索图标展开并聚焦搜索框。
 - **搜索页背景**：右下角「编辑背景」，可导入 B 站主题装扮的 JSON（自动下装扮包、解出静态图与 mp4），也能直接传本地图片或视频；导入过的留在列表里带缩略图，叉号删除时连资源目录一起清掉，背景可以设成透明。
@@ -138,6 +144,8 @@ dotnet build Desktop\BiliCopilot.UI\BiliCopilot.UI.csproj -c Debug -p:Platform=x
 
 - **设置文件损坏会导致启动即崩**：症状是启动约十秒后进程消失，事件日志里是 `combase.dll` + `0x80004003`（`E_POINTER`），日志停在 `Visor initialized successfully` 之后。用同一份代码重编也照样崩，隔离设置文件就正常。治法：退出应用，删掉
   `%LOCALAPPDATA%\Packages\Richasy.BiliCopilot.Dev_g7ew4fxhv1f46\Settings\settings.dat`，代价是登录态和偏好重置，需要重新扫码。删之前先备份一份。
+  现在应用自带兜底：启动时记 `startup-guard.txt`，连续两轮没走到「窗口起来」就把 `Settings` 挪成 `Settings-broken-<时间>` 并用全新设置继续启动，不会再被卡死。
+- **别用 `Copy-Item` / 备份还原去搬包数据目录**：`LocalState` / `Settings` 里的文件带包身份的 EFS 状态，外部拷贝会破坏它，之后应用读写会抛 `0x80070199`（未按预期加密）或启动即崩。要重置就整个删掉让系统重建，别往回拷。
 - **`DefaultStyleOptimizations` 实验开关默认关闭**：WinUI 自带的控件样式优化开关，走 `AppContext.SetSwitch`，本机实测打开后启动不稳，所以先关掉，代码里留了注释。
 - **画质解锁有额度**：走第三方登记服务，额度用完会返回 `code=9`，此时自动退回常规地址，不影响播放。
 
