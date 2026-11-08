@@ -210,7 +210,10 @@ public sealed class CommentPanel : Component
 
                 // key 里带上位置：置顶评论通常同时出现在 Comments 里，只按 rpid 做 key 会撞车，
                 // Reactor 会把同一个元素复用给两处，第一张卡片的按钮就失效了.
-                return CreateCard(item.Data, item.ShowMore, true, $"c-{index}-{item.Data.Data.Id}", Refresh).Margin(12, 4, 12, 4);
+                // 第一张卡片的上边距 12：和顶栏上方"SelectorBar → 评论列表"那 14 的间距对齐
+                // （面板顶 padding 12 + 顶栏自身 2 = 14；这边是顶栏底 padding 2 + 卡片 12）.
+                return CreateCard(item.Data, item.ShowMore, true, $"c-{index}-{item.Data.Data.Id}", Refresh)
+                    .Margin(12, index == 0 ? 14 : 4, 12, 4);
             },
             index => $"c-{index}-{listItems[index].Data.Data.Id}",
             estimatedItemHeight: 132,
@@ -226,11 +229,12 @@ public sealed class CommentPanel : Component
             });
 
 
+        // 空闲时别留一个空 TextBlock：它仍占一行行高，会把第一张卡片和顶栏的间距撑大一截.
         Element status = viewModel.IsLoading
             ? TextBlock("正在加载…").FontSize(12).Opacity(0.6).Margin(0, 8, 0, 0).HAlign(HorizontalAlignment.Center)
             : viewModel.IsEmpty
                 ? TextBlock("还没有评论").FontSize(13).Opacity(0.6).Margin(0, 24, 0, 0).HAlign(HorizontalAlignment.Center)
-                : TextBlock(string.Empty);
+                : TextBlock(string.Empty).Height(0);
 
         var input = new XamlHostElement(
             () => new CommentTextBox(),
@@ -564,5 +568,7 @@ public sealed class CommentPanel : Component
         }
     }
 }
+
+
 
 
