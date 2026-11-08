@@ -3,7 +3,6 @@
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
 using Richasy.WinUIKernel.Share.Base;
-using System.Collections.ObjectModel;
 using Windows.System;
 
 namespace BiliCopilot.UI.Controls.Moment;
@@ -16,8 +15,8 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     private const double MinCardWidth = 240d;
     private const double CardGap = 16d;
     private const double SidePadding = 32d;
-    private int _columnCount;
-    private double _cardWidth;
+    private const double CardHeight = 250d;
+    private double _lastSlotWidth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveMomentSectionDetailControl"/> class.
@@ -25,48 +24,28 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     public LiveMomentSectionDetailControl()
     {
         InitializeComponent();
-        Columns = [];
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
 
-    /// <summary>
-    /// 瀑布流各列.
-    /// </summary>
-    public ObservableCollection<LiveCardColumn> Columns { get; }
-
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (ViewModel is not null)
-        {
-            ViewModel.Items.CollectionChanged -= OnItemsChanged;
-            ViewModel.Items.CollectionChanged += OnItemsChanged;
-        }
-
-        if (UperView is not null)
+        if (ViewModel is not null && UperView is not null)
         {
             UperView.SelectionChanged -= OnUperSelectionChanged;
             UperView.SelectionChanged += OnUperSelectionChanged;
         }
 
-        RebuildColumns();
+        UpdateCardSize();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (ViewModel is not null)
-        {
-            ViewModel.Items.CollectionChanged -= OnItemsChanged;
-        }
-
         if (UperView is not null)
         {
             UperView.SelectionChanged -= OnUperSelectionChanged;
         }
     }
-
-    private void OnItemsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
-        => RebuildColumns();
 
     private void OnUperSelectionChanged(ItemsView sender, ItemsViewSelectionChangedEventArgs args)
     {
@@ -76,64 +55,49 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         }
     }
 
-    private void OnScrollerSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        // 可用宽度去掉左右 padding，再按最小卡片宽算列数；卡片宽由剩余空间均分.
-        var width = Math.Max(MinCardWidth, e.NewSize.Width - SidePadding);
-        var count = (int)Math.Max(1, Math.Floor((width + CardGap) / (MinCardWidth + CardGap)));
-        var cardWidth = Math.Floor((width - ((count - 1) * CardGap)) / count);
+    private void OnCardViewSizeChanged(object sender, SizeChangedEventArgs e) => UpdateCardSize();
 
-        if (count == _columnCount && Math.Abs(cardWidth - _cardWidth) < 0.5)
+    /// <summary>
+    /// 按可用宽度算列数，把卡片槽宽写进 ItemsWrapGrid：每张卡等宽，列数随窗口增减.
+    /// </summary>
+    private void UpdateCardSize()
+    {
+        if (CardView?.ItemsPanelRoot is not ItemsWrapGrid panel)
         {
             return;
         }
 
-        _columnCount = count;
-        _cardWidth = cardWidth;
-        RebuildColumns();
+        var available = CardView.ActualWidth - SidePadding;
+        if (available <= 0)
+        {
+            return;
+        }
+
+        var count = (int)Math.Max(1, Math.Floor((available + CardGap) / (MinCardWidth + CardGap)));
+        var cardWidth = Math.Floor((available - ((count - 1) * CardGap)) / count);
+        var slotWidth = cardWidth + CardGap;
+
+        if (Math.Abs(slotWidth - _lastSlotWidth) < 0.5)
+        {
+            return;
+        }
+
+        _lastSlotWidth = slotWidth;
+        panel.ItemWidth = slotWidth;
+        panel.ItemHeight = CardHeight;
     }
 
-    private void RebuildColumns()
+    private void OnCardClick(object sender, ItemClickEventArgs e)
     {
-        if (ViewModel is null)
+        if (e.ClickedItem is LiveSectionCardViewModel card)
         {
-            return;
-        }
-
-        var count = Math.Max(1, _columnCount);
-        if (count > ViewModel.Items.Count)
-        {
-            count = Math.Max(1, ViewModel.Items.Count);
-        }
-
-        // 列数变了就重建列；列数没变则只把内容按列重新分配.
-        if (Columns.Count != count)
-        {
-            Columns.Clear();
-            for (var i = 0; i < count; i++)
-            {
-                Columns.Add(new LiveCardColumn());
-            }
-        }
-
-        foreach (var column in Columns)
-        {
-            column.Width = _cardWidth > 0 ? _cardWidth : MinCardWidth;
-        }
-
-        foreach (var column in Columns)
-        {
-            column.Cards.Clear();
-        }
-
-        for (var i = 0; i < ViewModel.Items.Count; i++)
-        {
-            Columns[i % Columns.Count].Cards.Add(ViewModel.Items[i]);
+            card.PlayCommand.Execute(default);
         }
     }
 
     private void OnCardTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
+        // 卡片主体点击播放；Globe 按钮有自己的 Click，不会走到这里.
         if (sender is FrameworkElement element && element.DataContext is LiveSectionCardViewModel card)
         {
             card.PlayCommand.Execute(default);
@@ -152,26 +116,8 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 }
 
 /// <summary>
-/// 瀑布流的一列.
-/// </summary>
-public sealed partial class LiveCardColumn : CommunityToolkit.Mvvm.ComponentModel.ObservableObject
-{
-    /// <summary>
-    /// 这一列的卡片.
-    /// </summary>
-    public ObservableCollection<LiveSectionCardViewModel> Cards { get; } = [];
-
-    /// <summary>
-    /// 列宽（按窗口宽度均分，保证卡片尺寸一致）.
-    /// </summary>
-    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty]
-    private double _width;
-}
-
-/// <summary>
 /// 直播分区控件基类.
 /// </summary>
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
-

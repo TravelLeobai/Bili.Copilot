@@ -42,7 +42,10 @@ Write-Host "== 停掉旧进程 ==" -ForegroundColor Cyan
 Get-Process -Name "*BiliCopilot*" -ErrorAction SilentlyContinue | ForEach-Object { taskkill /F /PID $_.Id 2>&1 | Out-Null }
 Start-Sleep -Seconds 4
 
-$packageDir = Join-Path $env:LOCALAPPDATA "Packages\$packageName"
+# 包数据目录名带 publisher hash（Richasy.BiliCopilot.Dev_g7ew4fxhv1f46），
+# 不能直接拼包名，否则 Test-Path 永远 false、备份从来没跑过.
+$packageFamily = (Get-AppxPackage -Name $packageName).PackageFamilyName
+$packageDir = Join-Path $env:LOCALAPPDATA "Packages\$packageFamily"
 $backup = Join-Path $env:TEMP "bilicopilot-data-backup"
 
 # 登录态和设置其实在包根目录的 Settings\settings.dat 里（不在 LocalState），
@@ -91,4 +94,5 @@ else {
     Write-Host "启动失败 —— 去看事件查看器里 combase.dll 那条" -ForegroundColor Red
     exit 1
 }
+
 
