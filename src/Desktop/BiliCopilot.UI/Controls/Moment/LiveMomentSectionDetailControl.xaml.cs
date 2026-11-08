@@ -36,6 +36,18 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        try
+        {
+            OnLoadedCore();
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog("LiveMomentSection.OnLoaded", ex);
+        }
+    }
+
+    private void OnLoadedCore()
+    {
         if (ViewModel is not null)
         {
             ViewModel.Items.CollectionChanged -= OnItemsChanged;
@@ -43,6 +55,26 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         }
 
         UpdateColumns(force: true);
+    }
+
+    private static void WriteCrashLog(string tag, Exception ex)
+    {
+        try
+        {
+            var folder = App.LoggerFolder;
+            if (string.IsNullOrEmpty(folder))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(folder);
+            File.AppendAllText(
+                Path.Combine(folder, $"crash-{DateTime.Now:yyyy-MM-dd}.txt"),
+                $"{DateTime.Now:O} [{tag}]{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch
+        {
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -88,8 +120,21 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         }
         catch (Exception ex)
         {
-            // 列构建失败也不能把整个应用带崩.
-            System.Diagnostics.Debug.WriteLine(ex);
+            // 列构建失败也不能把整个应用带崩，先把现场写进日志.
+            try
+            {
+                var folder = App.LoggerFolder;
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    Directory.CreateDirectory(folder);
+                    File.AppendAllText(
+                        Path.Combine(folder, $"crash-{DateTime.Now:yyyy-MM-dd}.txt"),
+                        $"{DateTime.Now:O} [LiveMomentSection.UpdateColumns]{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+                }
+            }
+            catch
+            {
+            }
         }
     }
 
@@ -190,6 +235,8 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
+
 
 
 

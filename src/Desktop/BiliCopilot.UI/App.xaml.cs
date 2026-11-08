@@ -37,6 +37,15 @@ public partial class App : Application
         // 本机 IPv6 出口不通，.NET 默认优先 AAAA 会一直挂到超时；关掉 IPv6 优先，走 IPv4.
         AppContext.SetSwitch("System.Net.DisableIPv6", true);
 
+        // 崩溃取证：未处理异常先落盘再让进程死，否则只能去事件查看器里看到一行 combase 码.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => LogFatal("AppDomain.UnhandledException", e.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            LogFatal("TaskScheduler.UnobservedTaskException", e.Exception);
+            e.SetObserved();
+        };
+        UnhandledException += (_, e) => LogFatal("Application.UnhandledException", e.Exception);
+
         // 实验开关：把 ContextFlyout 的初始化推迟到第一次真正打开时。
         // WinUI 认的是 AppContext 开关，名字就是 DeferContextFlyoutInit。
         // 打包应用从 shell 启动时拿不到父进程环境变量，所以除了环境变量
@@ -177,6 +186,29 @@ public partial class App : Application
 
     private static MainWindow? GetMainWindow()
         => GlobalDependencies.Kernel.GetRequiredService<AppViewModel>().Windows.Find(p => p is MainWindow) as MainWindow;
+
+    /// <summary>
+    /// 把致命异常写到日志目录，方便下次崩溃时定位（事件查看器里只有 combase 的错误码）.
+    /// </summary>
+    /// <param name="source">来源标记.</param>
+    /// <param name="exception">异常.</param>
+    private static void LogFatal(string source, Exception? exception)
+    {
+        try
+        {
+            var folder = string.IsNullOrEmpty(LoggerFolder)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BiliCopilot.Crash")
+                : LoggerFolder;
+            Directory.CreateDirectory(folder);
+            var file = Path.Combine(folder, $"crash-{DateTime.Now:yyyy-MM-dd}.txt");
+            var text = $"{DateTime.Now:O} [{source}]{Environment.NewLine}{exception}{Environment.NewLine}{Environment.NewLine}";
+            File.AppendAllText(file, text);
+        }
+        catch
+        {
+            // 记不下来就算了，别在崩溃路径上再抛一次.
+        }
+    }
 
     /// <summary>
     /// 启动自愈：连续两次没走到"成功启动"就把 Settings 挪走。

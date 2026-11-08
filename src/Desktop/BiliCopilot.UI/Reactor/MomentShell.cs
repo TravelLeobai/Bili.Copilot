@@ -21,7 +21,9 @@ public sealed class MomentShell : Component
     private readonly MomentHeader _header = new();
     private readonly VideoMomentSectionDetailControl _videoControl = new();
     private readonly ComprehensiveMomentSectionDetailControl _comprehensiveControl = new();
-    private readonly LiveMomentSectionDetailControl _liveControl = new();
+    // 直播段的控件延迟创建：只有真的切到"直播"那一刻才实例化，
+    // 万一这一段有隐藏问题，也不会拖累动态页其它分段.
+    private LiveMomentSectionDetailControl? _liveControl;
     private readonly CommentOverlayPanel _commentPanel = new();
     private int _commentsOpenVersion;
 
@@ -55,6 +57,8 @@ public sealed class MomentShell : Component
         }
         else if (section is LiveMomentSectionDetailViewModel liveSection)
         {
+            // 直播段控件延迟创建：只在真正切到"直播"时才实例化.
+            _liveControl ??= new LiveMomentSectionDetailControl();
             _liveControl.ViewModel = liveSection;
         }
 
@@ -74,7 +78,10 @@ public sealed class MomentShell : Component
         // 跟着被丢掉，切回综合时整片内容（包括顶部 UP 主栏）都是空白.
         _videoControl.Visibility = isVideo ? Visibility.Visible : Visibility.Collapsed;
         _comprehensiveControl.Visibility = !isVideo && !isLive ? Visibility.Visible : Visibility.Collapsed;
-        _liveControl.Visibility = isLive ? Visibility.Visible : Visibility.Collapsed;
+        if (_liveControl is not null)
+        {
+            _liveControl.Visibility = isLive ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         var children = new List<Element>
         {
@@ -88,9 +95,11 @@ public sealed class MomentShell : Component
             new XamlHostElement(() => _comprehensiveControl, _ => { })
                 .Grid(row: 1)
                 .WithKey("moment-comprehensive"),
-            new XamlHostElement(() => _liveControl, _ => { })
-                .Grid(row: 1)
-                .WithKey("moment-live"),
+            _liveControl is null
+                ? TextBlock(string.Empty)
+                : new XamlHostElement(() => _liveControl, _ => { })
+                    .Grid(row: 1)
+                    .WithKey("moment-live"),
 
             // 评论面板常驻，开关只切它自己的 Visibility（绑 IsPanelOpened）.
             // 之前是按 IsCommentsOpened 决定要不要把它加进树：每次开关就是挂载/卸载一次，
@@ -108,4 +117,5 @@ public sealed class MomentShell : Component
             children.ToArray());
     }
 }
+
 
