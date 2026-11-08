@@ -227,10 +227,28 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     }
 
     /// <summary>
-    /// 关注用户列表（切片设置的选择来源）.
+    /// 可选的 UP 主列表（切片设置的选择来源），带头像.
     /// </summary>
-    /// <returns>id → 名字.</returns>
-    public IReadOnlyDictionary<string, string> GetFollowedUsers() => _followedNames;
+    /// <returns>id / 名字 / 头像.</returns>
+    public IReadOnlyList<(string Id, string Name, Uri? Avatar)> GetFollowedUsers()
+    {
+        var result = new List<(string Id, string Name, Uri? Avatar)>();
+        var seen = new HashSet<string>();
+        foreach (var card in _allCards)
+        {
+            if (string.IsNullOrEmpty(card.AuthorId) || !seen.Add(card.AuthorId))
+            {
+                continue;
+            }
+
+            var name = string.IsNullOrEmpty(card.AuthorName)
+                ? _followedNames.GetValueOrDefault(card.AuthorId, card.AuthorId)
+                : card.AuthorName;
+            result.Add((card.AuthorId, name, card.Avatar));
+        }
+
+        return result;
+    }
 
     private void BuildUpers(List<LiveSectionCardViewModel> cards)
     {
@@ -450,6 +468,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 

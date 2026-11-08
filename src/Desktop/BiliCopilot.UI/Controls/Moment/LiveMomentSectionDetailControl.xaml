@@ -124,7 +124,6 @@
     <Grid HorizontalAlignment="Stretch">
         <Grid.RowDefinitions>
             <RowDefinition Height="76" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -194,24 +193,9 @@
         </ScrollViewer>
 
         <!--  卡片区：列由代码按宽度生成，每列一个自动高度的 StackPanel（真瀑布流）  -->
-        <!--  内容类型过滤：全部 / 直播 / 回放 / 切片，外加切片 UP 管理  -->
-        <StackPanel
-            Grid.Row="1"
-            Margin="16,0,16,8"
-            Orientation="Horizontal"
-            Spacing="8">
-            <Button x:Name="FilterAllButton" Click="OnFilterButtonClick" Tag="All" Content="全部" />
-            <Button x:Name="FilterLiveButton" Click="OnFilterButtonClick" Tag="Live" Content="直播中" />
-            <Button x:Name="FilterReplayButton" Click="OnFilterButtonClick" Tag="Replay" Content="回放" />
-            <Button x:Name="FilterClipButton" Click="OnFilterButtonClick" Tag="Clip" Content="切片" />
-            <Button
-                Click="OnManageClipCreatorsClick"
-                Content="管理切片 UP" />
-        </StackPanel>
-
         <ScrollViewer
-            Grid.Row="2"
-            Padding="16,4,16,16"
+            Grid.Row="1"
+            Padding="16,12,16,16"
             HorizontalScrollBarVisibility="Disabled"
             HorizontalScrollMode="Disabled"
             VerticalScrollBarVisibility="Auto"
@@ -222,4 +206,5 @@
         </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>
+
 

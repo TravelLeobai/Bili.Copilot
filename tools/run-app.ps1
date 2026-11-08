@@ -50,7 +50,7 @@ $backup = Join-Path $env:TEMP "bilicopilot-data-backup"
 
 # 登录态和设置其实在包根目录的 Settings\settings.dat 里（不在 LocalState），
 # 所以三个目录都要一起备份，只备份 LocalState 会丢登录.
-$dataDirs = @("LocalState", "Settings", "RoamingState")
+$dataDirs = if ($RestoreSettings) { @("LocalState", "Settings", "RoamingState") } else { @("LocalState") }
 if (Test-Path $packageDir) {
     Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
     foreach ($dir in $dataDirs) {
@@ -114,6 +114,7 @@ else {
     Write-Host "启动失败 —— 去看事件查看器里 combase.dll 那条" -ForegroundColor Red
     exit 1
 }
+
 
 
 

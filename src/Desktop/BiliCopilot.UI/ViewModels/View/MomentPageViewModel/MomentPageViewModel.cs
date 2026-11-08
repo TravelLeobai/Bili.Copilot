@@ -61,11 +61,17 @@ public sealed partial class MomentPageViewModel : ViewModelBase
         }
 
         SelectedSection = section;
+        OnPropertyChanged(nameof(IsLiveSectionSelected));
         var isVideo = section is VideoMomentSectionDetailViewModel;
         SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastMomentSectionIsVideo, isVideo);
         SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastMomentSectionType, (int)section.SectionType);
         SelectedSection.InitializeCommand.Execute(default);
     }
+
+    /// <summary>
+    /// 当前是不是"直播"分区（头部据此显示"添加切片 UP"）.
+    /// </summary>
+    public bool IsLiveSectionSelected => SelectedSection is LiveMomentSectionDetailViewModel;
 
     [RelayCommand]
     private void ShowComment(MomentInformation data)
@@ -87,6 +93,7 @@ public sealed partial class MomentPageViewModel : ViewModelBase
     public void SetVideoOpenedMarkStyle(Models.Constants.MomentVideoOpenedMarkStyle style)
         => Sections?.OfType<VideoMomentSectionDetailViewModel>().FirstOrDefault()?.SetOpenedMarkStyle(style);
 }
+
 
 
 
