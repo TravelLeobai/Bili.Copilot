@@ -121,7 +121,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                     "直播中",
                     true,
                     live.Online > 0 ? $"{live.Online:N0} 人气" : "正在直播",
-                    live.Face)
+                    ToUri(live.Face))
                 {
                     RoomId = live.RoomId,
                 });
@@ -147,7 +147,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     private void BuildUpers(List<LiveSectionCardViewModel> cards)
     {
         Upers.Clear();
-        Upers.Add(new LiveSectionUperViewModel(string.Empty, "全部", string.Empty, SelectUper));
+        Upers.Add(new LiveSectionUperViewModel(string.Empty, "全部", null, SelectUper));
 
         var seen = new HashSet<string>();
         foreach (var card in cards)
@@ -246,7 +246,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                         keyword,
                         false,
                         "回放",
-                        NormalizeCover(moment.User?.Avatar?.Uri?.ToString())));
+                        moment.User?.Avatar?.Uri));
                 }
 
                 if (view.HasMoreMoments != true)
@@ -269,6 +269,23 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             ? string.Empty
             : System.Text.RegularExpressions.Regex.Replace(text, "<.*?>", string.Empty);
 
+    private static Uri? ToUri(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var value = url.Trim();
+        if (value.StartsWith("//", StringComparison.Ordinal))
+        {
+            value = "https:" + value;
+        }
+
+        value = value.Replace("http://", "https://");
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) ? uri : null;
+    }
+
     private static string NormalizeCover(string? url)
     {
         if (string.IsNullOrEmpty(url))
@@ -285,6 +302,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 

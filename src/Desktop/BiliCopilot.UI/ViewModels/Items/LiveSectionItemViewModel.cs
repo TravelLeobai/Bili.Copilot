@@ -23,7 +23,7 @@ public sealed partial class LiveSectionUperViewModel : ViewModelBase
     /// <param name="name">显示名.</param>
     /// <param name="avatar">头像地址.</param>
     /// <param name="selectAction">点击时回调.</param>
-    public LiveSectionUperViewModel(string userId, string name, string avatar, Action<LiveSectionUperViewModel> selectAction)
+    public LiveSectionUperViewModel(string userId, string name, Uri? avatar, Action<LiveSectionUperViewModel> selectAction)
     {
         UserId = userId;
         Name = name;
@@ -45,9 +45,9 @@ public sealed partial class LiveSectionUperViewModel : ViewModelBase
     public string Name { get; }
 
     /// <summary>
-    /// 头像地址.
+    /// 头像地址（BasicCoverImage 只吃 Uri，传字符串会在 WinRT 投影里 E_INVALIDARG 崩掉）.
     /// </summary>
-    public string Avatar { get; }
+    public Uri? Avatar { get; }
 
     /// <summary>
     /// 是否是"全部".
@@ -87,7 +87,7 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         string badge,
         bool isLive,
         string detail,
-        string avatar = "")
+        Uri? avatar = default)
     {
         Avatar = avatar;
         Title = title;
@@ -105,14 +105,19 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     public string Title { get; }
 
     /// <summary>
-    /// 封面.
+    /// 封面地址.
     /// </summary>
     public string Cover { get; }
 
     /// <summary>
+    /// 封面（供 BasicCoverImage 绑定，只吃 Uri）.
+    /// </summary>
+    public Uri? CoverUri => Uri.TryCreate(Cover, UriKind.Absolute, out var uri) ? uri : null;
+
+    /// <summary>
     /// 主播/UP 主头像.
     /// </summary>
-    public string Avatar { get; }
+    public Uri? Avatar { get; }
 
     /// <summary>
     /// 用浏览器打开的地址.
@@ -178,5 +183,7 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         }
     }
 }
+
+
 
 

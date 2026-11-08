@@ -122,9 +122,9 @@
 
                         <!--  封面 + 角标  -->
                         <Grid Grid.Row="1">
-                            <Image
-                                Source="{x:Bind Cover, Converter={StaticResource BitmapConverter}}"
-                                Stretch="UniformToFill" />
+                            <controls:BasicCoverImage
+                                DecodeWidth="600"
+                                Source="{x:Bind CoverUri, Mode=OneWay}" />
                             <Border
                                 Padding="6,2"
                                 HorizontalAlignment="Left"
@@ -178,4 +178,6 @@
         </GridView>
     </Grid>
 </local:LiveSectionControlBase>
+
+
 
