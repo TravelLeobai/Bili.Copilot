@@ -525,6 +525,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
+        var previous = Sources.FirstOrDefault(p => p.IsSelected);
         foreach (var item in Sources)
         {
             item.IsSelected = item.Equals(source);
@@ -536,16 +537,57 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         // 原实现只是 Player.ReplayAsync(Player.Position)：那是把"已经加载的旧媒体"原地重播一遍，
         // 解析器没有重跑、新清晰度的地址根本没取，所以切了等于没切；再加上重播后视频输出没接回去，
         // 就成了"画面静止、只有声音".
-        // 正确做法是按新的 PreferQuality 重新走一遍加载，再跳回原位置.
-        _continuePosition = Player?.Position;
-        if (_sourceResolver is VideoMediaSourceResolver videoResolver)
+        // 现在和结束页切视频走同一条路：复用现有 mpv（不 dispose 再 new，重建正是白屏卡死/闪退的根源），
+        // 换掉解析器的清晰度后让播放器按新源重新加载，再跳回原位置.
+        if (selected is null || _sourceResolver is not VideoMediaSourceResolver videoResolver)
         {
-            _snapshot.PreferQuality = selected.Data.Quality;
-            videoResolver.ResetSnapshot(_snapshot);
-            await ReloadAtAsync(_continuePosition ?? 0);
+            return;
         }
 
-        await Task.CompletedTask;
+        _continuePosition = Player?.Position;
+        _snapshot.PreferQuality = selected.Data.Quality;
+        videoResolver.ResetSnapshot(_snapshot);
+
+        try
+        {
+            await InitializeWithReuseAsync(_snapshot);
+
+            // InitializeCoreAsync 内部把异常兜住了，失败只会写 ErrorMessage，所以这里看它.
+            if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                throw new InvalidOperationException(ErrorMessage);
+            }
+
+            var target = _continuePosition ?? 0;
+            if (Player is { IsWebEngine: false } && target > 0.5)
+            {
+                var duration = Player.Duration;
+                if (duration > 1)
+                {
+                    target = Math.Min(target, duration - 1);
+                }
+
+                await ApplySeekAsync(target);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "切换清晰度失败：{Quality}", selected.Data.Quality);
+            ShowPlayerTip($"切换到 {selected.Data.Quality} 失败，已退回原来的清晰度", true);
+
+            // 回滚选择状态，别让界面显示成"已经切过去了".
+            if (previous is not null)
+            {
+                foreach (var item in Sources)
+                {
+                    item.IsSelected = item.Equals(previous);
+                }
+
+                SelectedSource = previous;
+                _snapshot.PreferQuality = previous.Data.Quality;
+                videoResolver.ResetSnapshot(_snapshot);
+            }
+        }
     }
 
     private void CheckBottomProgressBarVisible()
