@@ -40,7 +40,10 @@ internal static class QualityUnlockService
         ConnectCallback = IpV4Connector.ConnectAsync,
     })
     {
-        Timeout = TimeSpan.FromSeconds(12),
+        // 解析服务器要拿 cookie 自己去 B 站取 playurl，实测一次 12~21 秒（假 cookie 也要 12.6s）。
+        // 原来给了 12 秒，等于每次都在半路掐断 —— 用户看到的
+        // "卡在=请求服务器 (TaskCanceledException) · Timeout of 12 seconds" 就是这么来的.
+        Timeout = TimeSpan.FromSeconds(60),
     };
 
     /// <summary>
@@ -243,25 +246,6 @@ internal static class QualityUnlockService
         // 解析服务的接口说明里 url.query 是 { avid, bvid, cid, fn }，浏览器那条请求本来也带着
         // avid 和 fn，缺了容易被它判成"不是浏览器的请求"，所以先查 aid 再一起签名。
         var aid = await GetAidAsync(bvid, cookie, logger).ConfigureAwait(false);
-        var playQuery = await BiliWbiSigner.SignAsync(
-            new Dictionary<string, string>
-            {
-                ["avid"] = aid > 0 ? aid.ToString(CultureInfo.InvariantCulture) : "0",
-                ["bvid"] = bvid,
-                ["cid"] = cid,
-                ["qn"] = qn.ToString(CultureInfo.InvariantCulture),
-                ["fn"] = "0",
-                ["type"] = "0",
-                ["otype"] = "json",
-                ["fourk"] = "1",
-                ["fnver"] = "0",
-                ["fnval"] = "4048",
-                ["platform"] = "pc",
-                ["high_quality"] = "1",
-            },
-            cookie,
-            logger).ConfigureAwait(false);
-        var playUrl = $"https://api.bilibili.com/x/player/wbi/playurl?{playQuery}";
 
         // 登录态一律转发：解锁服务器要靠它拿到大会员画质.
         // buvid3 缺失时 B 站会对 playurl 走风控，服务端替我们取就失败（表现为 code=2 fail），
@@ -271,7 +255,6 @@ internal static class QualityUnlockService
         // 服务端要的 ui 结构是照脚本来的：ua/mid/vip/level/money/cookie/csrf/name/face.
         // 少了 name、face 会被判成 invalid（实测返回 {"code":2,"message":"invalid"}）.
         var ui = await BuildUiAsync(cookieForServer, csrf, mid, logger).ConfigureAwait(false);
-        var body = $"{{\"ui\":{ui},\"url\":\"{Escape(playUrl)}\"}}";
 
         // 只记字段名，不记值：日志有可能被贴出去，凭证不能跟着走.
         logger?.LogInformation(
@@ -282,14 +265,64 @@ internal static class QualityUnlockService
                     .Select(p => p.Split('=')[0].Trim())
                     .Where(p => p.Length > 0)));
 
-        // 失败时面板要能说清卡在哪，先把这次请求的"环境快照"备好.
-        // vip / level 在 BuildUiAsync 里读，这里只记请求侧能看到的.
-        var context = $"服务器={Server} qn={qn} avid={(aid > 0 ? aid.ToString(CultureInfo.InvariantCulture) : "未知")} "
-            + $"wbi签名={(playQuery.Contains("w_rid=", StringComparison.Ordinal) ? "有" : "无")} "
-            + $"buvid3={(cookieForServer.Contains("buvid3=", StringComparison.Ordinal) ? "有" : "无")} "
-            + $"mid={mid}";
+        QualityUnlockResult? last = null;
 
-        return await SendToServerAsync("api/bzview2", ui, body, context, logger).ConfigureAwait(false);
+        // 第一步：严格按解析服务给的说明发——ui 只要 { mid, cookie }，
+        // url 只带 { avid, bvid, cid, fn }，不用我们自己的 wbi 签名（服务端自己签）.
+        {
+            var docUi = $"{{\"mid\":\"{Escape(mid)}\",\"cookie\":\"{Escape(cookieForServer)}\"}}";
+            var docUrl = "https://api.bilibili.com/x/player/wbi/playurl"
+                + $"?avid={(aid > 0 ? aid.ToString(CultureInfo.InvariantCulture) : "0")}"
+                + $"&bvid={Uri.EscapeDataString(bvid)}"
+                + $"&cid={Uri.EscapeDataString(cid)}"
+                + "&fn=0";
+            var docBody = $"{{\"ui\":{docUi},\"url\":\"{Escape(docUrl)}\"}}";
+            var docContext = $"服务器={Server} 方式=按接口说明（ui=mid+cookie，url 四参数） avid={aid} cid={cid} mid={mid}";
+            logger?.LogInformation("画质解锁：按接口说明发第一步（ui 只要 mid+cookie，url 只要 avid/bvid/cid/fn）");
+            last = await SendToServerAsync("api/bzview2", docUi, docBody, docContext, logger).ConfigureAwait(false);
+            if (last.Success)
+            {
+                logger?.LogInformation("画质解锁：按接口说明发成功了");
+                return last;
+            }
+
+            logger?.LogInformation("画质解锁：第一步被拒（{Reason}），退回完整 ui + 带签名 URL", last.Message);
+        }
+
+        // 第二步：完整 ui（ua/vip/level/money/csrf）+ 我们自己签好名的 playurl，
+        // 只试请求画质一次——之前按画质逐级回退会连着打七八次，把服务端额度烧光（today 一路涨到 code=9）.
+        {
+            var playQuery = await BiliWbiSigner.SignAsync(
+                new Dictionary<string, string>
+                {
+                    ["avid"] = aid > 0 ? aid.ToString(CultureInfo.InvariantCulture) : "0",
+                    ["bvid"] = bvid,
+                    ["cid"] = cid,
+                    ["qn"] = qn.ToString(CultureInfo.InvariantCulture),
+                    ["fn"] = "0",
+                    ["type"] = "0",
+                    ["otype"] = "json",
+                    ["fourk"] = "1",
+                    ["fnver"] = "0",
+                    ["fnval"] = "4048",
+                    ["platform"] = "pc",
+                    ["high_quality"] = "1",
+                },
+                cookie,
+                logger).ConfigureAwait(false);
+            var playUrl = $"https://api.bilibili.com/x/player/wbi/playurl?{playQuery}";
+            var body = $"{{\"ui\":{ui},\"url\":\"{Escape(playUrl)}\"}}";
+
+            // 失败时面板要能说清卡在哪，先把这次请求的"环境快照"备好.
+            var context = $"服务器={Server} qn={qn} avid={(aid > 0 ? aid.ToString(CultureInfo.InvariantCulture) : "未知")} "
+                + $"wbi签名={(playQuery.Contains("w_rid=", StringComparison.Ordinal) ? "有" : "无")} "
+                + $"buvid3={(cookieForServer.Contains("buvid3=", StringComparison.Ordinal) ? "有" : "无")} "
+                + $"mid={mid}";
+
+            last = await SendToServerAsync("api/bzview2", ui, body, context, logger).ConfigureAwait(false);
+        }
+
+        return last;
     }
 
     /// <summary>
@@ -462,14 +495,35 @@ internal static class QualityUnlockService
             request.Headers.TryAddWithoutValidation("Referer", $"{Server}/hd2a/");
             request.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
 
-            using var response = await Client.SendAsync(request).ConfigureAwait(false);
-            var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            HttpResponseMessage? response = null;
+            try
+            {
+                response = await Client.SendAsync(request).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException)
+            {
+                // 服务端第一次可能因为要取 wbi key 而慢，重试一次再判失败.
+                logger?.LogWarning("画质解锁请求超时（{Elapsed:F0}s），重试一次", stopwatch.Elapsed.TotalSeconds);
+                using var retry = new HttpRequestMessage(HttpMethod.Post, $"{Server}/{apiPath}")
+                {
+                    Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+                };
+                retry.Headers.TryAddWithoutValidation("Origin", Server);
+                retry.Headers.TryAddWithoutValidation("Referer", $"{Server}/hd2a/");
+                retry.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+                response = await Client.SendAsync(retry).ConfigureAwait(false);
+            }
+
+            using var _ = response;
+            stopwatch.Stop();
+            var text = await response!.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 logger?.LogWarning("画质解锁请求失败：HTTP {Status}", (int)response.StatusCode);
                 return QualityUnlockResult.Failed(
                     $"HTTP {(int)response.StatusCode}",
-                    $"{context} · 卡在=服务器响应 · 返回={Shorten(text, 120)}");
+                    $"{context} · 用时={stopwatch.Elapsed.TotalSeconds:F1}s · 卡在=服务器响应 · 返回={Shorten(text, 120)}");
             }
 
             using var document = JsonDocument.Parse(text);
@@ -483,10 +537,10 @@ internal static class QualityUnlockService
                     message = "解锁次数已达上限，给任意视频投币可以重置额度";
                 }
 
-                logger?.LogWarning("画质解锁被拒绝：code={Code} message={Message}", code, message);
+                logger?.LogWarning("画质解锁被拒绝：code={Code} message={Message} 返回={Body}", code, message, Shorten(text, 200));
                 return QualityUnlockResult.Failed(
                     message,
-                    $"{context} · 卡在=服务端替我们取 playurl · code={code} · 服务器返回={Shorten(text, 120)}");
+                    $"{context} · 用时={stopwatch.Elapsed.TotalSeconds:F1}s · code={code} · 服务器返回={Shorten(text, 120)}");
             }
 
             var (video, audio, quality) = ParseDash(root);
@@ -498,7 +552,7 @@ internal static class QualityUnlockService
                     $"{context} · 卡在=解析返回（code=0 但没有 dash）");
             }
 
-            logger?.LogInformation("画质解锁成功：qn={Quality}", quality);
+            logger?.LogInformation("画质解锁成功：qn={Quality} 用时={Elapsed:F1}s", quality, stopwatch.Elapsed.TotalSeconds);
             return new QualityUnlockResult
             {
                 Success = true,
@@ -769,6 +823,10 @@ internal sealed class QualityUnlockSyncResult
 
     public bool Success => !string.IsNullOrEmpty(Server);
 }
+
+
+
+
 
 
 
