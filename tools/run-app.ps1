@@ -91,6 +91,17 @@ Start-Process "shell:AppsFolder\$aumid"
 Start-Sleep -Seconds 26
 
 $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue
+
+# 重新注册后的第一次启动经常失败（combase 那条），先重试两次再考虑清设置，
+# 否则会把好的 settings.dat 当成坏的一起删掉.
+for ($i = 0; $i -lt 2 -and -not $app; $i++) {
+    Write-Host "首次启动失败，重试 ($($i + 1)/2)" -ForegroundColor Yellow
+    Start-Sleep -Seconds 4
+    Start-Process "shell:AppsFolder\$aumid"
+    Start-Sleep -Seconds 26
+    $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue
+}
+
 if (-not $app) {
     # 崩在启动阶段（combase.dll + 0x80004003）多半是还原回来的 settings.dat 坏了 ——
     # 用坏掉的设置文件，每次启动都会在同一个地方崩。把 Settings 挪走再试一次，
@@ -114,6 +125,7 @@ else {
     Write-Host "启动失败 —— 去看事件查看器里 combase.dll 那条" -ForegroundColor Red
     exit 1
 }
+
 
 
 
