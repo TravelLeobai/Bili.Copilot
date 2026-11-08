@@ -117,6 +117,26 @@ public static class BackgroundLibrary
         return list;
     }
 
+    /// <summary>
+    /// 背景目录必须是应用自己创建的（包数据的 EFS 加密状态由系统维护）。
+    /// 外部拷进来的旧文件加密属性对不上时读写会被判定为访问被拒，这里探一次、不行就删掉重建.
+    /// </summary>
+    private static void EnsureRootWritable()
+    {
+        Directory.CreateDirectory(Root);
+        var probe = Path.Combine(Root, ".write-probe");
+        try
+        {
+            File.WriteAllText(probe, "probe");
+            File.Delete(probe);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            TryDeleteDirectory(Root);
+            Directory.CreateDirectory(Root);
+        }
+    }
+
     private static void SaveIndex(IEnumerable<BackgroundEntry> entries)
     {
         Directory.CreateDirectory(Root);
@@ -157,6 +177,7 @@ public static class BackgroundLibrary
     /// </summary>
     public static BackgroundEntry ImportImage(string sourcePath)
     {
+        EnsureRootWritable();
         var id = "img_" + DateTime.Now.ToString("yyyyMMddHHmmss");
         var dir = Path.Combine(Root, id);
         Directory.CreateDirectory(dir);
@@ -185,6 +206,7 @@ public static class BackgroundLibrary
     /// </summary>
     public static BackgroundEntry ImportVideo(string sourcePath)
     {
+        EnsureRootWritable();
         var id = "vid_" + DateTime.Now.ToString("yyyyMMddHHmmss");
         var dir = Path.Combine(Root, id);
         Directory.CreateDirectory(dir);
@@ -211,6 +233,7 @@ public static class BackgroundLibrary
     /// </summary>
     public static async Task<BackgroundEntry> ImportThemeAsync(string jsonPath)
     {
+        EnsureRootWritable();
         var text = await File.ReadAllTextAsync(jsonPath);
         var name = ExtractJsonString(text, "\"name\"") ?? Path.GetFileNameWithoutExtension(jsonPath);
         var packageUrl = ExtractJsonString(text, "\"package_url\"")
@@ -410,6 +433,8 @@ public static class BackgroundLibrary
         return end < 0 ? null : json.Substring(start + 1, end - start - 1);
     }
 }
+
+
 
 
 
