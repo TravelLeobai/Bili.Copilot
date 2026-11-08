@@ -68,6 +68,7 @@ public sealed partial class LiveSectionUperViewModel : ViewModelBase
 /// </summary>
 public sealed partial class LiveSectionCardViewModel : ViewModelBase
 {
+    private string _badge = string.Empty;
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveSectionCardViewModel"/> class.
     /// </summary>
@@ -137,9 +138,22 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     public string AuthorId { get; }
 
     /// <summary>
-    /// 角标文案.
+    /// 角标文案（会随切片归属变化，所以要走属性通知）.
     /// </summary>
-    public string Badge { get; set; }
+    public string Badge
+    {
+        get => _badge;
+        set
+        {
+            if (_badge == value)
+            {
+                return;
+            }
+
+            _badge = value;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>
     /// 副标题.
@@ -193,6 +207,7 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         }
     }
 }
+
 
 
 

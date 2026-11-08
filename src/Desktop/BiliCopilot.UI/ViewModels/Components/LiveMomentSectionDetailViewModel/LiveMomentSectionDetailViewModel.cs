@@ -119,15 +119,10 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         {
             var cookies = this.Get<IBiliCookiesResolver>();
             var relationship = this.Get<IRelationshipService>();
-            var followedIds = await LiveFollowService.GetFollowedUserIdsAsync(relationship);
-            _logger.LogInformation("直播分区：关注用户 {Count} 个", followedIds.Count);
-            RefreshFollowedNames(relationship);
 
+            // 第一阶段：先把正在直播的房间放出来（这一步只依赖关注分组 + 开播状态接口）.
             var lives = await LiveFollowService.GetLiveRoomsAsync(cookies, relationship);
             _logger.LogInformation("直播分区：在播 {Count} 个", lives.Count);
-
-            var replays = await LoadReplaysAsync(cookies, followedIds);
-            _logger.LogInformation("直播分区：回放 {Count} 个", replays.Count);
 
             _allCards.Clear();
             foreach (var live in lives.OrderByDescending(p => p.Online))
@@ -147,20 +142,30 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 });
             }
 
-            _allCards.AddRange(replays);
+            ClipCreatorIds = ClipCreatorStore.Load();
+            BuildUpers(_allCards);
+            SelectedUper ??= Upers.FirstOrDefault();
+            ApplyFilter();
+            IsLoading = false;
+            IsEmpty = _allCards.Count == 0;
 
-            // 切片 UP 主来自设置：他们的投稿标成"切片"，和回放区分开.
-            var clipSetting = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LiveClipCreatorIds, string.Empty);
-            ClipCreatorIds = clipSetting
-                .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .ToHashSet();
-            foreach (var card in _allCards)
+            // 第二阶段：回放 / 切片慢慢补进来，不挡直播列表（扫投稿要几秒）.
+            var followedIds = await LiveFollowService.GetFollowedUserIdsAsync(relationship);
+            _logger.LogInformation("直播分区：关注用户 {Count} 个", followedIds.Count);
+            RefreshFollowedNames(relationship);
+
+            var replays = await LoadReplaysAsync(cookies, followedIds);
+            _logger.LogInformation("直播分区：回放 {Count} 个", replays.Count);
+
+            foreach (var card in replays)
             {
-                if (!card.IsLive && ClipCreatorIds.Contains(card.AuthorId))
+                if (ClipCreatorIds.Contains(card.AuthorId))
                 {
                     card.IsClip = true;
                     card.Badge = "切片";
                 }
+
+                _allCards.Add(card);
             }
 
             _logger.LogInformation("直播分区：切片 UP {Count} 个，命中切片 {Hit} 条", ClipCreatorIds.Count, _allCards.Count(p => p.IsClip));
@@ -318,27 +323,32 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     /// <param name="ids">UP 主 id 集合.</param>
     public void SetClipCreators(IEnumerable<string> ids)
     {
-        var set = ids.Where(p => !string.IsNullOrEmpty(p)).ToHashSet();
-        ClipCreatorIds = set;
-        ClipCreatorNames = set
-            .Where(p => _followedNames.ContainsKey(p))
-            .ToDictionary(p => p, p => _followedNames[p]);
-
-        SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LiveClipCreatorIds, string.Join(',', set));
-        SettingsToolkit.WriteLocalSetting(
-            Models.Constants.SettingNames.LiveClipCreatorNames,
-            JsonSerializer.Serialize(ClipCreatorNames));
-
-        foreach (var card in _allCards)
+        try
         {
-            card.IsClip = !card.IsLive && set.Contains(card.AuthorId);
-            if (card.IsClip)
-            {
-                card.Badge = "切片";
-            }
-        }
+            var set = ids.Where(p => !string.IsNullOrEmpty(p)).ToHashSet();
+            ClipCreatorIds = set;
+            ClipCreatorNames = set
+                .Where(p => _followedNames.ContainsKey(p))
+                .ToDictionary(p => p, p => _followedNames[p]);
 
-        ApplyFilter();
+            // 存文件，不写 LocalSettings —— 之前写完 LocalSettings 应用下次启动就崩.
+            ClipCreatorStore.Save(set, ClipCreatorNames);
+
+            foreach (var card in _allCards)
+            {
+                card.IsClip = !card.IsLive && set.Contains(card.AuthorId);
+                card.Badge = card.IsClip ? "切片" : (card.IsLive ? "直播中" : "回放");
+            }
+
+            // 列表在弹窗关闭动画期间重建容易重入，推到下一轮调度.
+            this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
+                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                ApplyFilter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "保存切片 UP 主失败");
+        }
     }
 
     private void ApplyFilter()
@@ -482,6 +492,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 

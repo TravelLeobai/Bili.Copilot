@@ -91,6 +91,9 @@ catch {
     Add-AppxPackage -Register $binManifest
 }
 
+$settingsDir = Join-Path $env:LOCALAPPDATA ("Packages\{0}\Settings" -f (Get-AppxPackage -Name $packageName).PackageFamilyName)
+$goodSettings = Join-Path $env:TEMP "bili-settings-good.dat"
+
 Start-Sleep -Seconds 2
 Write-Host "== 启动 ==" -ForegroundColor Cyan
 for ($i = 1; $i -le 4; $i++) {
@@ -98,6 +101,12 @@ for ($i = 1; $i -le 4; $i++) {
     Start-Sleep -Seconds 26
     $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
     if ($app) {
+        # 起来了就把当前 settings.dat 存一份"可用"快照，下次启动崩了可以拿它顶.
+        $currentSettings = Join-Path $settingsDir "settings.dat"
+        if (Test-Path $currentSettings) {
+            Copy-Item $currentSettings $goodSettings -Force
+        }
+
         Write-Host "OK：进程 PID=$($app.Id)" -ForegroundColor Green
         exit 0
     }
@@ -107,5 +116,19 @@ for ($i = 1; $i -le 4; $i++) {
     Start-Sleep -Seconds 4
 }
 
+# 四次都起不来：多半是 settings.dat 坏了（上次崩在写设置的时候）。用"可用"快照顶一下再试.
+if (Test-Path $goodSettings) {
+    Write-Host "启动失败，用上次可用的 settings.dat 顶替再试" -ForegroundColor Yellow
+    Copy-Item $goodSettings (Join-Path $settingsDir "settings.dat") -Force
+    Start-Process "shell:AppsFolder\$aumid"
+    Start-Sleep -Seconds 26
+    $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+    if ($app) {
+        Write-Host "OK：进程 PID=$($app.Id)（用快照设置）" -ForegroundColor Green
+        exit 0
+    }
+}
+
 Write-Host "启动失败 —— 看事件查看器里 combase.dll 那条；可加 -CleanData 重注册（会清数据）" -ForegroundColor Red
 exit 1
+
