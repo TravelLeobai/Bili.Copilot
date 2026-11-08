@@ -45,6 +45,9 @@ public sealed partial class PlayerViewModel
     private bool _isRightKeyDown;
     private bool _isTlsFailed;
     private DispatcherQueueTimer? _endSettleTimer;
+
+    // 初始化看门狗：任何一步卡住都别让界面永远停在"连接中".
+    private DispatcherQueueTimer? _connectWatchdog;
     private double _prevPosition;
     private bool _isBroken;
     private IReadOnlyList<SponsorSegment> _sponsorSegments = Array.Empty<SponsorSegment>();
@@ -285,4 +288,5 @@ public sealed partial class PlayerViewModel
 
     public ObservableCollection<SystemFont> Fonts { get; } = [];
 }
+
 

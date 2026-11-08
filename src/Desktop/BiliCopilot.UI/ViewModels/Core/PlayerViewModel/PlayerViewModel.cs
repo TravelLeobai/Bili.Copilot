@@ -100,6 +100,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         CacheSpeedText = default;
         ShowPlayerWindow();
         IsConnecting = true;
+        StartConnectWatchdog();
         IsSourceSelectable = false;
         IsDanmakuEnabled = false;
         IsDanmakuLoading = false;
@@ -144,6 +145,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             System.Diagnostics.Debug.WriteLine($"Player initialized with connector: {Connector.GetType().Name}");
             await Connector.InitializeAsync(_snapshot, default);
+            logger.LogInformation("初始化：连接器就绪");
             if (Window.IsClosed)
             {
                 return;
@@ -199,7 +201,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         if (_historyResolver != null && Player != null)
         {
-            await _historyResolver.SaveHistoryAsync(Player.Position, Player.Duration, Richasy.MpvKernel.Core.Enums.MpvPlayerState.End, true);
+            try
+            {
+                // 上一条的历史保存是"锦上添花"，不能让它把新视频的初始化卡住.
+                await _historyResolver.SaveHistoryAsync(Player.Position, Player.Duration, Richasy.MpvKernel.Core.Enums.MpvPlayerState.End, true)
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "保存上一条播放历史失败或超时，继续初始化");
+            }
         }
 
         // TODO: 创建历史记录处理器
@@ -249,13 +260,32 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 Player = null;
             }
 
+            logger.LogInformation("初始化：创建播放器");
             Player = new PlayerSurface(new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger));
             Player.PropertyChanged += OnPlayerPropertyChanged;
             Player.Mpv!.UpdateResolvers(_sourceResolver, _historyResolver);
 
             try
             {
-                await Player.InitializeAsync();
+                // mpv 建实例偶尔会卡死（同一窗口里连着换视频时实测过，45 秒都不返回，
+                // 界面就一直白屏+连接中）。给个上限，超时就走网页播放器，别让用户干等.
+                await Player.InitializeAsync().WaitAsync(TimeSpan.FromSeconds(20));
+                logger.LogInformation("初始化：播放器就绪");
+            }
+            catch (TimeoutException)
+            {
+                logger.LogWarning("mpv 播放器初始化超过 20 秒没返回，改用网页播放器");
+                var stuck = Player;
+                Player = null;
+                if (!await TryFallbackToWebEngineAsync())
+                {
+                    ErrorMessage = "播放器初始化超时，请重试";
+                    _ = DisposeStuckPlayerAsync(stuck);
+                    return;
+                }
+
+                logger.LogInformation("已回落到网页播放器（mpv 初始化超时）");
+                _ = DisposeStuckPlayerAsync(stuck);
             }
             catch (Exception ex)
             {
@@ -273,6 +303,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
+        logger.LogInformation("初始化：重置呈现模式");
         await ResetPlayerPresenterModeAsync();
         if (Window.IsClosed)
         {
@@ -308,9 +339,72 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
         finally
         {
+            StopConnectWatchdog();
             logger.LogInformation("重载诊断：播放初始化收尾，关闭连接中状态");
             IsConnecting = false;
         }
+    }
+
+    /// <summary>
+    /// 初始化看门狗：45 秒还没收尾就把"连接中"关掉，免得界面永远卡住.
+    /// 正常初始化结束时由 StopConnectWatchdog 取消.
+    /// </summary>
+    private void StartConnectWatchdog()
+    {
+        StopConnectWatchdog();
+        var timer = queue.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(45);
+        timer.IsRepeating = false;
+        timer.Tick += OnConnectWatchdogTick;
+        _connectWatchdog = timer;
+        timer.Start();
+    }
+
+    private void StopConnectWatchdog()
+    {
+        if (_connectWatchdog is null)
+        {
+            return;
+        }
+
+        _connectWatchdog.Tick -= OnConnectWatchdogTick;
+        _connectWatchdog.Stop();
+        _connectWatchdog = null;
+    }
+
+    /// <summary>
+    /// 放掉那个卡住的 mpv 播放器（不给它无限期拖住初始化线程）.
+    /// </summary>
+    /// <param name="player">卡住的播放器实例.</param>
+    private async Task DisposeStuckPlayerAsync(PlayerSurface? player)
+    {
+        if (player is null)
+        {
+            return;
+        }
+
+        try
+        {
+            player.PropertyChanged -= OnPlayerPropertyChanged;
+            await player.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "释放卡住的播放器失败，忽略");
+        }
+    }
+
+    private void OnConnectWatchdogTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Tick -= OnConnectWatchdogTick;
+        _connectWatchdog = null;
+        if (!IsConnecting)
+        {
+            return;
+        }
+
+        logger.LogWarning("初始化超过 45 秒仍未收尾，强制关闭连接中状态");
+        IsConnecting = false;
     }
 
     public void UpdateTheme(ElementTheme theme)
@@ -1201,6 +1295,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
+
 
 
 
