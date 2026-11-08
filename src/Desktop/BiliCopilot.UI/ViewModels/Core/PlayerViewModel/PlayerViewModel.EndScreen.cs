@@ -342,7 +342,17 @@ public sealed partial class PlayerViewModel
             return;
         }
 
-        InitializeCommand.Execute(new UI.Models.MediaSnapshot(vm.Data, connector.IsPrivatePlay));
+        var snapshot = new UI.Models.MediaSnapshot(vm.Data, connector.IsPrivatePlay);
+
+        // 不能在点击回调里直接切视频：InitializeAsync 一进来就 ResetEndScreen() 清空
+        // EndRecommendations，等于把正在派发 Click 的那张卡片连同它所在的 ItemsRepeater
+        // 一起拆掉，XAML 侧对象被即时销毁 → coreclr 访问违例（实测白屏闪退）。
+        // 先把结束页收起来、把点击事件放走，下一轮再切.
+        IsPlaybackEnded = false;
+        logger.LogInformation("结束页切视频：{Bvid}（延后到事件结束后执行）", vm.Data.Identifier.Id);
+        queue.TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => InitializeCommand.Execute(snapshot));
     }
 
     private static string FormatEndCount(double value)

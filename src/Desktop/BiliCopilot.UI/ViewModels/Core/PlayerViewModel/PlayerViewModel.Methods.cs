@@ -1066,7 +1066,7 @@ public sealed partial class PlayerViewModel
             if (_sourceResolver is VideoMediaSourceResolver videoResolver)
             {
                 logger.LogInformation("重载诊断：开始解析视频源");
-                var sources = await videoResolver.GetSourcesAsync();
+                var sources = await videoResolver.GetSourcesAsync().WaitAsync(TimeSpan.FromSeconds(45));
                 logger.LogInformation("重载诊断：视频源解析完成，共 {Count} 个", sources?.Count ?? 0);
                 IsSourceSelectable = sources?.Count > 1;
                 Sources.Clear();
@@ -1095,7 +1095,7 @@ public sealed partial class PlayerViewModel
             }
             else if (_sourceResolver is PgcMediaSourceResolver pgcResolver)
             {
-                var sources = await pgcResolver.GetSourcesAsync();
+                var sources = await pgcResolver.GetSourcesAsync().WaitAsync(TimeSpan.FromSeconds(45));
                 IsSourceSelectable = sources?.Count > 1;
                 Sources.Clear();
                 if (sources != null)
@@ -1142,7 +1142,11 @@ public sealed partial class PlayerViewModel
             {
                 var aid = videoVM._view.Information.Identifier.Id;
                 var cid = videoVM._part.Identifier.Id;
-                var metas = await service.GetSubtitleMetasAsync(aid, cid);
+                // 字幕元数据这一步原来没超时：B 站 player/v2 偶发不返回时 InitializeAsync 会一直等，
+                // 界面就永远停在"连接中"（从结束页切新视频时实测过）。给个上限，超时按没有字幕处理.
+                logger.LogInformation("开始加载字幕元数据：aid={Aid} cid={Cid}", aid, cid);
+                var metas = await service.GetSubtitleMetasAsync(aid, cid).WaitAsync(TimeSpan.FromSeconds(10));
+                logger.LogInformation("字幕元数据返回 {Count} 条", metas?.Count ?? 0);
                 Subtitles.Clear();
                 if (metas?.Count > 0)
                 {
@@ -1390,6 +1394,8 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
+
 
 
 
