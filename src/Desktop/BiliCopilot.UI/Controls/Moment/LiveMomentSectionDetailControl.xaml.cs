@@ -9,11 +9,18 @@ namespace BiliCopilot.UI.Controls.Moment;
 
 /// <summary>
 /// 直播分区（动态页新增的分段）.
-/// 卡片区是声明式 ItemsRepeater + UniformGridLayout：列数随宽度自动增减，
-/// 行高按该行最高的卡片算，标题两行也不会被裁.
+/// 卡片区是声明式 ItemsRepeater + UniformGridLayout：
+/// ItemsStretch=None 让卡片保持内容高度（行高由该行最高卡片决定，互不拉伸），
+/// MinItemWidth 在代码里按可用宽度算，所以列宽均分、右侧不留空白.
 /// </summary>
 public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlBase
 {
+    private const double MinCardWidth = 240d;
+    private const double CardGap = 16d;
+    private const double SidePadding = 32d;
+
+    private double _lastItemWidth;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveMomentSectionDetailControl"/> class.
     /// </summary>
@@ -21,37 +28,69 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        SizeChanged += OnSizeChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        UpdateItemWidth();
+
+        // 首帧尺寸可能还是 0，下一轮调度再算一次；顺手把滚动偏移归零，
+        // 否则第一行卡片上半截（作者头像行）会被初始偏移切掉.
+        this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () =>
+            {
+                UpdateItemWidth();
+                try
+                {
+                    CardScroller?.ChangeView(null, 0, null, true);
+                }
+                catch
+                {
+                    // 归零失败不影响使用.
+                }
+            });
+    }
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e) => UpdateItemWidth();
+
+    /// <summary>
+    /// 按可用宽度算列数，把"恰好能均分的卡片宽"写回 UniformGridLayout.
+    /// </summary>
+    private void UpdateItemWidth()
+    {
         try
         {
-            // 首帧的滚动位置可能被焦点/首项对齐推到非 0，导致第一行卡片顶部被切掉.
-            // 排到下一个调度回合把偏移归零（只做一次，用户之后的滚动不动）.
-            this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
-                Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
-                () =>
-                {
-                    try
-                    {
-                        CardScroller?.ChangeView(null, 0, null, true);
-                    }
-                    catch
-                    {
-                    }
-                });
+            if (CardLayout is null)
+            {
+                return;
+            }
 
-            var count = ViewModel?.Items.Count ?? 0;
-            WriteCrashLog("LiveMomentSection.OnLoaded", null, $"items={count}");
+            var width = ActualWidth > 0 ? ActualWidth : (CardScroller?.ActualWidth ?? 0);
+            if (width <= 0)
+            {
+                return;
+            }
+
+            var available = Math.Max(MinCardWidth, width - SidePadding);
+            var count = (int)Math.Max(1, Math.Floor((available + CardGap) / (MinCardWidth + CardGap)));
+            var cardWidth = Math.Floor((available - ((count - 1) * CardGap)) / count);
+            if (Math.Abs(cardWidth - _lastItemWidth) < 0.5)
+            {
+                return;
+            }
+
+            _lastItemWidth = cardWidth;
+            CardLayout.MinItemWidth = cardWidth;
         }
         catch (Exception ex)
         {
-            WriteCrashLog("LiveMomentSection.OnLoaded", ex, string.Empty);
+            WriteCrashLog("LiveMomentSection.UpdateItemWidth", ex);
         }
     }
 
-    private static void WriteCrashLog(string tag, Exception? ex, string extra)
+    private static void WriteCrashLog(string tag, Exception ex)
     {
         try
         {
@@ -64,7 +103,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
             Directory.CreateDirectory(folder);
             File.AppendAllText(
                 Path.Combine(folder, $"crash-{DateTime.Now:yyyy-MM-dd}.txt"),
-                $"{DateTime.Now:O} [{tag}] {extra}{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
+                $"{DateTime.Now:O} [{tag}]{Environment.NewLine}{ex}{Environment.NewLine}{Environment.NewLine}");
         }
         catch
         {
