@@ -3,6 +3,7 @@
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
 using Richasy.WinUIKernel.Share.Base;
+using Windows.System;
 
 namespace BiliCopilot.UI.Controls.Moment;
 
@@ -23,6 +24,16 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
             card.PlayCommand.Execute(default);
         }
     }
+
+    private async void OnOpenInBrowserClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element
+            && element.DataContext is LiveSectionCardViewModel card
+            && !string.IsNullOrEmpty(card.BrowserUrl))
+        {
+            await Launcher.LaunchUriAsync(new Uri(card.BrowserUrl));
+        }
+    }
 }
 
 /// <summary>
@@ -31,3 +42,4 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+

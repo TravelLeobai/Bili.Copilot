@@ -120,7 +120,8 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                     live.UserId.ToString(),
                     "直播中",
                     true,
-                    live.Online > 0 ? $"{live.Online:N0} 人气" : "正在直播")
+                    live.Online > 0 ? $"{live.Online:N0} 人气" : "正在直播",
+                    live.Face)
                 {
                     RoomId = live.RoomId,
                 });
@@ -156,7 +157,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 continue;
             }
 
-            Upers.Add(new LiveSectionUperViewModel(card.AuthorId, card.AuthorName, card.Cover, SelectUper));
+            Upers.Add(new LiveSectionUperViewModel(card.AuthorId, card.AuthorName, card.Avatar, SelectUper));
         }
     }
 
@@ -244,7 +245,8 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                         moment.User?.Id ?? string.Empty,
                         keyword,
                         false,
-                        "回放"));
+                        "回放",
+                        NormalizeCover(moment.User?.Avatar?.Uri?.ToString())));
                 }
 
                 if (view.HasMoreMoments != true)
@@ -283,6 +285,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 

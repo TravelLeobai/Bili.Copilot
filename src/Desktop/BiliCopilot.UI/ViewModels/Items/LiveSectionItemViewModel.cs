@@ -78,6 +78,7 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     /// <param name="badge">角标文案.</param>
     /// <param name="isLive">是否是直播.</param>
     /// <param name="detail">副标题（人气 / 播放量等）.</param>
+    /// <param name="avatar">主播/UP 主头像.</param>
     public LiveSectionCardViewModel(
         string title,
         string cover,
@@ -85,8 +86,10 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         string authorId,
         string badge,
         bool isLive,
-        string detail)
+        string detail,
+        string avatar = "")
     {
+        Avatar = avatar;
         Title = title;
         Cover = cover;
         AuthorName = authorName;
@@ -105,6 +108,18 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     /// 封面.
     /// </summary>
     public string Cover { get; }
+
+    /// <summary>
+    /// 主播/UP 主头像.
+    /// </summary>
+    public string Avatar { get; }
+
+    /// <summary>
+    /// 用浏览器打开的地址.
+    /// </summary>
+    public string BrowserUrl => IsLive
+        ? $"https://live.bilibili.com/{RoomId}"
+        : string.IsNullOrEmpty(Bvid) ? string.Empty : $"https://www.bilibili.com/video/{Bvid}";
 
     /// <summary>
     /// UP 主名.
@@ -163,3 +178,5 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         }
     }
 }
+
+
