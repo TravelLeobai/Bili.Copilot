@@ -281,7 +281,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             }
 
             logger.LogInformation("初始化：创建播放器");
-            Player = new PlayerSurface(new Richasy.MpvKernel.Player.MpvPlayer(Client!, _sourceResolver, _historyResolver, logger: logger));
+            Player = new PlayerSurface(new Richasy.MpvKernel.Player.MpvPlayer(
+                Client!,
+                _sourceResolver,
+                _historyResolver,
+                logger: new MpvLogWatcher(logger, OnMpvSuspectLog)));
             Player.PropertyChanged += OnPlayerPropertyChanged;
             Player.Mpv!.UpdateResolvers(_sourceResolver, _historyResolver);
 
@@ -397,6 +401,55 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _connectWatchdog.Tick -= OnConnectWatchdogTick;
         _connectWatchdog.Stop();
         _connectWatchdog = null;
+    }
+
+    /// <summary>
+    /// mpv 报了"设备丢失 / swapchain 建不出来"这类消息：画面会直接变黑或白，
+    /// 但音频还在跑，用户只能重开。这里自动重建一次播放器，还不行就退到网页播放器.
+    /// </summary>
+    /// <param name="message">触发恢复的 mpv 日志原文.</param>
+    private void OnMpvSuspectLog(string message)
+    {
+        if (_isDeviceRecovering)
+        {
+            return;
+        }
+
+        _isDeviceRecovering = true;
+        queue.TryEnqueue(() => _ = RecoverFromDeviceLostAsync(message));
+    }
+
+    private async Task RecoverFromDeviceLostAsync(string message)
+    {
+        try
+        {
+            _deviceRecoverAttempts++;
+            logger.LogWarning("检测到画面输出异常（第 {Count} 次）：{Message}", _deviceRecoverAttempts, message);
+
+            if (_deviceRecoverAttempts == 1)
+            {
+                ShowPlayerTip("画面输出异常，正在重建播放器…", true);
+                var position = Player?.Position ?? 0;
+                await ReloadAtAsync(position);
+                return;
+            }
+
+            // 重建过一次还是丢设备，说明这台机器的 mpv 输出已经不能用了，直接换网页播放器.
+            ShowPlayerTip("画面仍未恢复，已切换到网页播放器", true);
+            if (!await TryFallbackToWebEngineAsync(Player?.Position ?? 0))
+            {
+                ShowPlayerTip("播放器输出异常，请重开播放窗口", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "重建播放器失败");
+            ShowPlayerTip("播放器输出异常，请重开播放窗口", true);
+        }
+        finally
+        {
+            _isDeviceRecovering = false;
+        }
     }
 
     /// <summary>
@@ -1364,6 +1417,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
 
 

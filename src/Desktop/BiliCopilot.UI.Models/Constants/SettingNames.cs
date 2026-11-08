@@ -206,8 +206,11 @@ public enum SettingNames
     MomentVideoOpenedMarkStyle,
     MomentVideoLeftPaneRatio,
     LiveDanmakuLevelFilter,
+    IsLiveStartNotificationEnabled,
+    LastLiveRoomIds,
     LiveDanmakuMedalFilter,
 }
+
 
 
 

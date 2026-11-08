@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Moment;
@@ -14,7 +14,9 @@ public sealed partial class NotificationViewModel
     private readonly IMomentDiscoveryService _momentService;
 
     private DispatcherTimer _timer;
+    private DispatcherTimer _liveTimer;
     private bool _isTileSupport;
 
     private List<string> _momentIds;
 }
+

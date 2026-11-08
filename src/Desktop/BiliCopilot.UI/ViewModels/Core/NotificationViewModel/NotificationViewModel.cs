@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
@@ -47,8 +47,22 @@ public sealed partial class NotificationViewModel : ViewModelBase
             _timer.Start();
         }
 
+        // 开播提醒要勤一点：关注的主播一开播就该收到，15 分钟太晚.
+        if (_liveTimer is null)
+        {
+            _liveTimer = new DispatcherTimer();
+            _liveTimer.Interval = TimeSpan.FromMinutes(3);
+            _liveTimer.Tick += OnLiveTimerTick;
+        }
+
+        if (!_liveTimer.IsEnabled)
+        {
+            _liveTimer.Start();
+        }
+
         await InitializeCommand.ExecuteAsync(default);
         TrySendVideoMomentNotificationsCommand.Execute(default);
+        TrySendLiveStartNotificationsCommand.Execute(default);
     }
 
     [RelayCommand]
@@ -65,4 +79,8 @@ public sealed partial class NotificationViewModel : ViewModelBase
 
     private void OnTimerTick(object? sender, object e)
         => TrySendVideoMomentNotificationsCommand.Execute(default);
+
+    private void OnLiveTimerTick(object? sender, object e)
+        => TrySendLiveStartNotificationsCommand.Execute(default);
 }
+

@@ -48,6 +48,10 @@ public sealed partial class PlayerViewModel
 
     // 初始化看门狗：任何一步卡住都别让界面永远停在"连接中".
     private DispatcherQueueTimer? _connectWatchdog;
+
+    // 画面输出异常（mpv 丢设备）的恢复状态.
+    private bool _isDeviceRecovering;
+    private int _deviceRecoverAttempts;
     private double _prevPosition;
     private bool _isBroken;
     private IReadOnlyList<SponsorSegment> _sponsorSegments = Array.Empty<SponsorSegment>();
@@ -288,5 +292,6 @@ public sealed partial class PlayerViewModel
 
     public ObservableCollection<SystemFont> Fonts { get; } = [];
 }
+
 
 
