@@ -37,7 +37,9 @@ internal sealed class MpvLogWatcher(ILogger inner, Action<string> onSuspect) : I
     {
         inner.Log(logLevel, eventId, state, exception, formatter);
 
-        if (logLevel < LogLevel.Warning)
+        // mpv 内部这些 error 是以 Information 级别转出来的（日志里就是 [INF] [MPV] Log message: error - Device lost!），
+        // 按 Warning 以上过滤会把它们全漏掉——之前就是因为这个，设备丢失一直没触发恢复.
+        if (logLevel < LogLevel.Information)
         {
             return;
         }
@@ -65,3 +67,4 @@ internal sealed class MpvLogWatcher(ILogger inner, Action<string> onSuspect) : I
         }
     }
 }
+

@@ -108,7 +108,9 @@ public sealed class CommentPanel : Component
                 {
                     var item = replyItems[index];
                     var key = index == 0 ? "detail-main" : $"reply-{index}-{item.Data.Id}";
-                    return CreateCard(item, null, false, key, () => setVersion(++_version)).Margin(12, 4, 12, 4);
+                    // 第一条（主评论）上边距和主列表保持一致，进出楼中楼时卡片位置不跳.
+                    return CreateCard(item, null, false, key, () => setVersion(++_version))
+                        .Margin(12, index == 0 ? 14 : 4, 12, 4);
                 },
                 index => index == 0 ? "detail-main" : $"reply-{index}-{replyItems[index].Data.Id}",
                 estimatedItemHeight: 132,
@@ -122,11 +124,12 @@ public sealed class CommentPanel : Component
                     }
                 });
 
+            // 同上：空闲时别留空 TextBlock，否则第一条回复会被顶下去一截.
             var detailStatus = detail.IsLoading
                 ? (Element)TextBlock("正在加载…").FontSize(12).Opacity(0.6).HAlign(HorizontalAlignment.Center)
                 : detail.IsEmpty
                     ? TextBlock("还没有回复").FontSize(13).Opacity(0.6).HAlign(HorizontalAlignment.Center)
-                    : TextBlock(string.Empty);
+                    : TextBlock(string.Empty).Height(0);
 
             var detailInput = new XamlHostElement(
                 () => new CommentTextBox(),
@@ -152,7 +155,8 @@ public sealed class CommentPanel : Component
                 columns: new[] { GridSize.Star() },
                 rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
                 // 左边距 12 = 评论卡片的 Margin(12,4,12,4)，让箭头左缘与卡片左缘齐平；顶部再加一点留白.
-                backButton.Grid(row: 0, column: 0).Margin(12, 12, 0, 8).HAlign(HorizontalAlignment.Left),
+                // 下边距 7：让"返回按钮 → 第一条回复"的间距和主列表"标题 → 第一条评论"完全一致（实测都是 50px）.
+                backButton.Grid(row: 0, column: 0).Margin(12, 12, 0, 7).HAlign(HorizontalAlignment.Left),
                 detailStatus.Grid(row: 1, column: 0),
                 detailList.WithKey("detail-list").Grid(row: 2, column: 0),
                 detailInput.WithKey("detail-input").Grid(row: 3, column: 0))
@@ -568,6 +572,8 @@ public sealed class CommentPanel : Component
         }
     }
 }
+
+
 
 
 

@@ -98,7 +98,9 @@ public sealed partial class PlayerViewModel
                 throw new InvalidOperationException("已按测试开关模拟 mpv 初始化失败");
             }
 
-            Client = await MpvClient.CreateAsync(mpvPath, options, logger: logger);
+            // mpv 的 "Device lost / DXGI_ERROR_DEVICE_RESET" 是 Client 这一层打出来的（不是 MpvPlayer），
+            // 所以 client 的 logger 也得包上，否则恢复逻辑收不到信号.
+            Client = await MpvClient.CreateAsync(mpvPath, options, logger: new MpvLogWatcher(logger, OnMpvSuspectLog));
             Client.ErrorOccurred += OnClientErrorOccurred;
             Client.CacheStateChanged += OnClientCacheStateChanged;
             SetSubtitleDelaySecondsCommand.Execute(SubtitleDelaySeconds);
@@ -1394,6 +1396,7 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
 
 
 
