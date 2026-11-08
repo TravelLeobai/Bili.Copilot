@@ -40,7 +40,9 @@ internal static class QualityUnlockService
         ConnectCallback = IpV4Connector.ConnectAsync,
     })
     {
-        Timeout = TimeSpan.FromSeconds(12),
+        // 解析服务器要拿 cookie 自己去 B 站取 playurl，实测一次 12~21 秒，
+        // 原来给 12 秒会卡在半路（表现为 TaskCanceledException / Timeout of 12 seconds）.
+        Timeout = TimeSpan.FromSeconds(60),
     };
 
     /// <summary>
