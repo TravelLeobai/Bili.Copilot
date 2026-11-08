@@ -30,6 +30,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     private readonly ILogger<LiveMomentSectionDetailViewModel> _logger;
     private readonly List<LiveSectionCardViewModel> _allCards = [];
     private readonly Dictionary<string, string> _followedNames = [];
+    private readonly Dictionary<string, Uri?> _followedAvatars = [];
 
     private readonly IMomentDiscoveryService? _momentService;
 
@@ -213,6 +214,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                         if (!string.IsNullOrEmpty(id))
                         {
                             _followedNames[id] = user.Profile.User.Name;
+                            _followedAvatars[id] = user.Profile.User.Avatar?.Uri;
                         }
                     }
 
@@ -234,6 +236,20 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     {
         var result = new List<(string Id, string Name, Uri? Avatar)>();
         var seen = new HashSet<string>();
+
+        // 先用关注列表的全量用户（含头像）：这样没开播、也没投稿的 UP 也能选到.
+        foreach (var pair in _followedNames)
+        {
+            if (!seen.Add(pair.Key))
+            {
+                continue;
+            }
+
+            _followedAvatars.TryGetValue(pair.Key, out var avatar);
+            result.Add((pair.Key, pair.Value, avatar));
+        }
+
+        // 再补上卡片里出现过、但关注列表没覆盖到的人（比如回放的作者）.
         foreach (var card in _allCards)
         {
             if (string.IsNullOrEmpty(card.AuthorId) || !seen.Add(card.AuthorId))
@@ -241,9 +257,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 continue;
             }
 
-            var name = string.IsNullOrEmpty(card.AuthorName)
-                ? _followedNames.GetValueOrDefault(card.AuthorId, card.AuthorId)
-                : card.AuthorName;
+            var name = string.IsNullOrEmpty(card.AuthorName) ? card.AuthorId : card.AuthorName;
             result.Add((card.AuthorId, name, card.Avatar));
         }
 
@@ -468,6 +482,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 

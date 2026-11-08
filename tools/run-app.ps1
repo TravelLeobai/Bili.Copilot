@@ -1,123 +1,111 @@
-# 重新注册 dev 包并保留应用数据（登录态、设置）。
+# 编译 + 注册 + 启动（默认不清应用数据）。
 #
 # 背景：这个项目用 dev 模式注册（Add-AppxPackage -Register）直接跑 bin 目录。
-# 重编译之后，包激活偶尔会坏掉，表现为启动即崩（事件日志 combase.dll + 0x80004003，
-# 日志停在 "Visor initialized successfully"）。已装状态下同版本注册会被拒（0x80073CFB），
-# 提版本号升级注册（0x80073D06 反向拒绝）也不总能解决，只有先卸载再注册最可靠 ——
-# 但卸载会把 %LOCALAPPDATA%\Packages\<包名>\LocalState 一起删掉，登录态和设置跟着没。
+#   * 同版本重注册会被拒（0x80073CFB）；
+#   * 卸载再注册能解决，但会把 %LOCALAPPDATA%\Packages\<包族> 下的 LocalState / Settings 一起删掉，
+#     登录态、设置全没（Settings\settings.dat 才是登录态所在）。
+#   * 实测把备份的 settings.dat 放回去会启动即崩（combase 0x80004003），所以默认不还原设置。
 #
-# 所以这个脚本做四件事：备份 LocalState → 卸载 → 注册 → 还原 LocalState → 启动。
+# 现在的做法：每次构建前把清单版本号 +1，然后 Add-AppxPackage -Register 走"升级注册"，
+# 不卸载、数据保留。启动失败就重试几次（重新注册后第一次启动偶发失败）。
 #
-# 用法：pwsh -File tools\run-app.ps1 [-Bin <bin 目录>] [-NoBuild]
+# 用法：
+#   pwsh -File tools\run-app.ps1              # 构建 + 注册 + 启动
+#   pwsh -File tools\run-app.ps1 -NoBuild     # 只注册 + 启动
+#   pwsh -File tools\run-app.ps1 -CleanData   # 先用卸载再注册（会清数据，兜底用）
 
 param(
     [string]$Bin = "",
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$CleanData
 )
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 $packageName = "Richasy.BiliCopilot.Dev"
 $aumid = "Richasy.BiliCopilot.Dev_g7ew4fxhv1f46!App"
+$manifestSource = Join-Path $repo "src\Desktop\BiliCopilot.UI\Package.appxmanifest"
 
 if ([string]::IsNullOrEmpty($Bin)) {
     $Bin = Join-Path $repo "src\_build\x64\Debug\BiliCopilot.UI\bin"
 }
 
+$binManifest = Join-Path $Bin "AppxManifest.xml"
+
+function Get-ManifestVersion([string]$path) {
+    if (-not (Test-Path $path)) { return $null }
+    $text = Get-Content $path -Raw
+    if ($text -match 'Version="(\d+)\.(\d+)\.(\d+)\.(\d+)"') {
+        return [version]("{0}.{1}.{2}.{3}" -f $matches[1], $matches[2], $matches[3], $matches[4])
+    }
+    return $null
+}
+
+function Set-ManifestVersion([string]$path, [version]$version) {
+    $text = Get-Content $path -Raw
+    $text = [regex]::Replace($text, 'Version="\d+\.\d+\.\d+\.\d+"', ('Version="{0}"' -f $version), 1)
+    Set-Content -Path $path -Value $text -Encoding utf8
+}
+
+Write-Host "== 停掉旧进程 ==" -ForegroundColor Cyan
+Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+Start-Sleep -Seconds 5
+Get-Process -Name "*BiliCopilot*" -ErrorAction SilentlyContinue | ForEach-Object { taskkill /F /PID $_.Id 2>&1 | Out-Null }
+Start-Sleep -Seconds 3
+
 if (-not $NoBuild) {
+    # 构建前先加版本号：构建会把清单从源码复制到 bin，所以改源码这份.
+    $current = Get-ManifestVersion $manifestSource
+    if ($null -ne $current) {
+        $next = [version]("{0}.{1}.{2}.{3}" -f $current.Major, $current.Minor, $current.Build, ($current.Revision + 1))
+        Set-ManifestVersion $manifestSource $next
+        Write-Host "== 版本号 $current → $next ==" -ForegroundColor Cyan
+    }
+
     Write-Host "== 构建 ==" -ForegroundColor Cyan
     Push-Location (Join-Path $repo "src")
     try {
         & D:\dotnet\dotnet.exe build "Desktop\BiliCopilot.UI\BiliCopilot.UI.csproj" -c Debug -p:Platform=x64 "-p:SolutionDir=$repo\src\"
-        if ($LASTEXITCODE -ne 0) {
-            throw "构建失败（exit $LASTEXITCODE）"
-        }
+        if ($LASTEXITCODE -ne 0) { throw "构建失败（exit $LASTEXITCODE）" }
     }
     finally {
         Pop-Location
     }
 }
 
-Write-Host "== 停掉旧进程 ==" -ForegroundColor Cyan
-Get-Process -Name "*BiliCopilot*" -ErrorAction SilentlyContinue | ForEach-Object { taskkill /F /PID $_.Id 2>&1 | Out-Null }
-Start-Sleep -Seconds 4
-
-# 包数据目录名带 publisher hash（Richasy.BiliCopilot.Dev_g7ew4fxhv1f46），
-# 不能直接拼包名，否则 Test-Path 永远 false、备份从来没跑过.
-$packageFamily = (Get-AppxPackage -Name $packageName).PackageFamilyName
-$packageDir = Join-Path $env:LOCALAPPDATA "Packages\$packageFamily"
-$backup = Join-Path $env:TEMP "bilicopilot-data-backup"
-
-# 登录态和设置其实在包根目录的 Settings\settings.dat 里（不在 LocalState），
-# 所以三个目录都要一起备份，只备份 LocalState 会丢登录.
-$dataDirs = if ($RestoreSettings) { @("LocalState", "Settings", "RoamingState") } else { @("LocalState") }
-if (Test-Path $packageDir) {
-    Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
-    foreach ($dir in $dataDirs) {
-        $src = Join-Path $packageDir $dir
-        if (Test-Path $src) {
-            $dest = Join-Path $backup $dir
-            # 用 robocopy 而不是 Copy-Item：Copy-Item -Force 会去复制 EFS 加密属性，
-            # 在 Temp 目录上直接报"无法加密指定的文件".
-            & robocopy $src $dest /E /COPY:DAT /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
-        }
-    }
-
-    Write-Host "== 已备份 LocalState / Settings / RoamingState → $backup ==" -ForegroundColor Cyan
-}
-
-Write-Host "== 卸载 dev 包 ==" -ForegroundColor Cyan
-Get-AppxPackage -Name $packageName | ForEach-Object { Remove-AppxPackage -Package $_.PackageFullName }
-Start-Sleep -Seconds 3
-
-Write-Host "== 重新注册 ==" -ForegroundColor Cyan
-Add-AppxPackage -Register (Join-Path $Bin "AppxManifest.xml")
-Start-Sleep -Seconds 2
-
-if (Test-Path $backup) {
-    foreach ($dir in $dataDirs) {
-        $saved = Join-Path $backup $dir
-        if (Test-Path $saved) {
-            $dest = Join-Path $packageDir $dir
-            & robocopy $saved $dest /E /COPY:DAT /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
-        }
-    }
-
-    Write-Host "== 已还原应用数据（登录态应当还在） ==" -ForegroundColor Cyan
-}
-
-Write-Host "== 启动 ==" -ForegroundColor Cyan
-Start-Process "shell:AppsFolder\$aumid"
-Start-Sleep -Seconds 26
-
-$app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue
-if (-not $app) {
-    # 崩在启动阶段（combase.dll + 0x80004003）多半是还原回来的 settings.dat 坏了 ——
-    # 用坏掉的设置文件，每次启动都会在同一个地方崩。把 Settings 挪走再试一次，
-    # 代价是登录态丢失，但至少能把应用启动起来.
-    Write-Host "启动失败，疑似还原的 settings.dat 损坏，清掉设置再试" -ForegroundColor Yellow
-    $brokenSettings = Join-Path $packageDir "Settings"
-    if (Test-Path $brokenSettings) {
-        Move-Item $brokenSettings (Join-Path $env:TEMP ("bili-settings-broken-" + (Get-Date -Format "HHmmss"))) -Force
-    }
-
+if ($CleanData) {
+    Write-Host "== 卸载 dev 包（会清应用数据） ==" -ForegroundColor Yellow
+    Get-AppxPackage -Name $packageName | ForEach-Object { Remove-AppxPackage -Package $_.PackageFullName }
     Start-Sleep -Seconds 3
+}
+
+Write-Host "== 注册 ==" -ForegroundColor Cyan
+try {
+    Add-AppxPackage -Register $binManifest
+}
+catch {
+    $message = $_.Exception.Message
+    Write-Host "注册失败（$message），改用卸载 + 注册（会清数据）" -ForegroundColor Yellow
+    Get-AppxPackage -Name $packageName | ForEach-Object { Remove-AppxPackage -Package $_.PackageFullName }
+    Start-Sleep -Seconds 3
+    Add-AppxPackage -Register $binManifest
+}
+
+Start-Sleep -Seconds 2
+Write-Host "== 启动 ==" -ForegroundColor Cyan
+for ($i = 1; $i -le 4; $i++) {
     Start-Process "shell:AppsFolder\$aumid"
     Start-Sleep -Seconds 26
-    $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue
+    $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+    if ($app) {
+        Write-Host "OK：进程 PID=$($app.Id)" -ForegroundColor Green
+        exit 0
+    }
+
+    Write-Host "第 $i 次没起来，重试" -ForegroundColor Yellow
+    Get-Process -Name "*BiliCopilot*" -ErrorAction SilentlyContinue | ForEach-Object { taskkill /F /PID $_.Id 2>&1 | Out-Null }
+    Start-Sleep -Seconds 4
 }
 
-if ($app) {
-    Write-Host "OK：进程 PID=$($app.Id)" -ForegroundColor Green
-}
-else {
-    Write-Host "启动失败 —— 去看事件查看器里 combase.dll 那条" -ForegroundColor Red
-    exit 1
-}
-
-
-
-
-
-
-
+Write-Host "启动失败 —— 看事件查看器里 combase.dll 那条；可加 -CleanData 重注册（会清数据）" -ForegroundColor Red
+exit 1

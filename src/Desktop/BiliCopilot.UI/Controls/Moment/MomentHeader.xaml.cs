@@ -64,9 +64,18 @@ public sealed partial class MomentHeader : MomentHeaderBase
         {
             var row = new Grid { ColumnSpacing = 10, Padding = new Thickness(0, 2, 0, 2) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-            // 头像在名字左边.
+            // 复选框在最左，然后头像，最后名字.
+            var box = new CheckBox
+            {
+                Tag = user.Id,
+                IsChecked = live.ClipCreatorIds.Contains(user.Id),
+                VerticalAlignment = VerticalAlignment.Center,
+                MinWidth = 0,
+            };
+
             var avatar = new BasicCoverImage
             {
                 Width = 28,
@@ -77,18 +86,18 @@ public sealed partial class MomentHeader : MomentHeaderBase
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
-            var box = new CheckBox
+            var label = new TextBlock
             {
-                Content = user.Name,
-                Tag = user.Id,
-                IsChecked = live.ClipCreatorIds.Contains(user.Id),
+                Text = user.Name,
                 VerticalAlignment = VerticalAlignment.Center,
-                MinWidth = 0,
+                TextTrimming = TextTrimming.CharacterEllipsis,
             };
 
-            row.Children.Add(avatar);
-            Grid.SetColumn(box, 1);
             row.Children.Add(box);
+            Grid.SetColumn(avatar, 1);
+            row.Children.Add(avatar);
+            Grid.SetColumn(label, 2);
+            row.Children.Add(label);
             checks.Add((user.Id, box));
             panel.Children.Add(row);
         }
