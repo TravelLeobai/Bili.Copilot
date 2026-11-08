@@ -176,6 +176,11 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     public bool IsReplay => !IsLive && !IsClip;
 
     /// <summary>
+    /// 标题最多显示几行：直播卡两行，回放卡一行.
+    /// </summary>
+    public int TitleMaxLines => IsLive ? 2 : 1;
+
+    /// <summary>
     /// 直播房间号（直播卡片才有）.
     /// </summary>
     public long RoomId { get; set; }
@@ -207,6 +212,7 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         }
     }
 }
+
 
 
 
