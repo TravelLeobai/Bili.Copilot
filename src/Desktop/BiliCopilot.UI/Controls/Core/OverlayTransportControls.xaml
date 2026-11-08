@@ -456,6 +456,18 @@
                         <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
                     </Button>
                 </StackPanel>
+                <!--  直播专用弹幕开关：右侧互动面板里的那个已经撤掉，统一由这里控制  -->
+                <ToggleButton
+                    x:Name="LiveDanmakuToggleButton"
+                    Margin="0,0,8,0"
+                    AutomationProperties.Name="{ext:Locale Name=DanmakuSwitch}"
+                    Content="弹"
+                    FontSize="12"
+                    FontWeight="Black"
+                    IsChecked="{x:Bind ViewModel.IsLiveDanmakuVisible, Mode=TwoWay}"
+                    Style="{StaticResource TogglePlayerIconButtonStyle}"
+                    ToolTipService.ToolTip="{ext:Locale Name=DanmakuSwitch}"
+                    Visibility="{x:Bind local:OverlayTransportControls.GetLiveOnly(ViewModel.IsLive), Mode=OneWay}" />
                 <Button
                     x:Name="CompactOverlayButton"
                     Margin="0,0,8,0"

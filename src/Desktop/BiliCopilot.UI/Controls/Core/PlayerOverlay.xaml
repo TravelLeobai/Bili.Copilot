@@ -471,6 +471,18 @@
                                 Foreground="White"
                                 Text="{x:Bind ViewModel.CacheSpeedText, Mode=OneWay}"
                                 Visibility="{x:Bind ViewModel.CacheSpeedText, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+                            <!--  直播专用：原画 / 线路选择，从右侧互动面板挪到这里  -->
+                            <DropDownButton
+                                x:Name="LiveStreamSelector"
+                                Margin="12,0,0,0"
+                                Padding="10,4,10,4"
+                                VerticalAlignment="Center"
+                                Content="{x:Bind ViewModel.LiveQualityAndLineText, Mode=OneWay}"
+                                Visibility="{x:Bind local:PlayerOverlay.GetLiveSelectorVisibility(ViewModel.IsLive), Mode=OneWay}">
+                                <DropDownButton.Flyout>
+                                    <MenuFlyout Opening="OnLiveStreamFlyoutOpening" />
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
                             <DropDownButton
                                 x:Name="SourceSelector"
                                 Margin="12,0,0,0"

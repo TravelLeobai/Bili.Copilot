@@ -375,8 +375,40 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     }
 
     /// <summary>
-    /// 直播弹幕浮层可见性.
+    /// 打开顶栏的直播线路菜单：每次打开都按当前流列表重建，切换后文案会跟着变.
     /// </summary>
+    /// <param name="sender">菜单.</param>
+    /// <param name="e">事件参数.</param>
+    private void OnLiveStreamFlyoutOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout || ViewModel is null)
+        {
+            return;
+        }
+
+        flyout.Items.Clear();
+        foreach (var option in ViewModel.LiveStreamOptions)
+        {
+            var item = new MenuFlyoutItem { Text = option.DisplayText };
+            var captured = option;
+            item.Click += (_, _) => ViewModel.SwitchLiveStreamCommand.Execute(captured);
+            flyout.Items.Add(item);
+        }
+
+        if (flyout.Items.Count == 0)
+        {
+            flyout.Items.Add(new MenuFlyoutItem { Text = "还没有可用线路", IsEnabled = false });
+        }
+    }
+
+    /// <summary>
+    /// 直播专用的"原画 / 线路"选择器：只在直播时出现在顶栏右侧.
+    /// </summary>
+    /// <param name="isLive">是否直播.</param>
+    /// <returns>可见性.</returns>
+    public static Visibility GetLiveSelectorVisibility(bool isLive)
+        => isLive ? Visibility.Visible : Visibility.Collapsed;
+
     /// <summary>
     /// 顶栏右侧那排按钮（画质 / CDN / 空降 / 置顶 / 设置）的可见性：
     /// 播放结束页会占满整屏，这排留着既没用又碍事，只在播放中显示.
@@ -404,6 +436,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     public static Visibility GetEndPanelVisibility(bool isEnded, bool isLive)
         => isEnded && !isLive ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// 直播弹幕浮层可见性.
+    /// </summary>
+    /// <param name="isLive">是否直播.</param>
+    /// <param name="isVisible">用户是否打开弹幕.</param>
+    /// <returns>可见性.</returns>
     public static Visibility GetLiveDanmakuVisibility(bool isLive, bool isVisible)
         => isLive && isVisible ? Visibility.Visible : Visibility.Collapsed;
     /// <summary>
@@ -457,5 +495,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
+
 
 

@@ -121,53 +121,57 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
                 TextBlock($"粉丝 {vm.LiveFansText}").FontSize(11).Opacity(0.7),
                 TextBlock($"已播 {vm.LiveUptimeText}").FontSize(11).Opacity(0.7)));
 
+        // 关注按钮复用视频页 UP 卡片那颗心（UpSectionControl 里的同款）：
+        // 已关注是实心，未关注是空心；放在 UP 信息同一行最右边.
         var followHost = new XamlHostElement(
             () =>
             {
+                var icon = new FluentIcons.WinUI.SymbolIcon
+                {
+                    Symbol = FluentIcons.Common.Symbol.Heart,
+                    FontSize = 14,
+                    IconVariant = vm.IsLiveUserFollowed
+                        ? FluentIcons.Common.IconVariant.Filled
+                        : FluentIcons.Common.IconVariant.Regular,
+                };
                 var button = new Button
                 {
-                    Content = vm.FollowButtonText,
-                    Padding = new Thickness(10, 4, 10, 4),
+                    Content = icon,
+                    Padding = new Thickness(8),
                     IsEnabled = vm.LiveUser is not null,
+                    VerticalAlignment = VerticalAlignment.Center,
                 };
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(
+                    button,
+                    vm.IsLiveUserFollowed ? "已关注" : "关注");
                 button.Click += (_, _) => vm.ToggleLiveFollowCommand.Execute(default);
                 return button;
             },
             element =>
             {
                 var button = (Button)element;
-                button.Content = vm.FollowButtonText;
+                if (button.Content is FluentIcons.WinUI.SymbolIcon icon)
+                {
+                    icon.IconVariant = vm.IsLiveUserFollowed
+                        ? FluentIcons.Common.IconVariant.Filled
+                        : FluentIcons.Common.IconVariant.Regular;
+                }
+
                 button.IsEnabled = vm.LiveUser is not null;
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(
+                    button,
+                    vm.IsLiveUserFollowed ? "已关注" : "关注");
             })
             .WithKey("live-follow");
 
-        var qualityHost = new XamlHostElement(
-            () =>
-            {
-                var button = new DropDownButton
-                {
-                    Content = vm.LiveQualityAndLineText,
-                    Padding = new Thickness(10, 4, 10, 4),
-                };
-                button.Flyout = BuildQualityFlyout(vm);
-                return button;
-            },
-            element =>
-            {
-                var button = (DropDownButton)element;
-                button.Content = vm.LiveQualityAndLineText;
-                button.Flyout = BuildQualityFlyout(vm);
-            })
-            .WithKey("live-quality");
-
-        // 头像占左列，关注按钮压在头像下面；画质线路和关注按钮同一行.
+        // 一行：头像 | 名字与数据 | 关注（靠右）.
+        // 原画 / 线路选择挪到播放页右上角顶栏，这里不再放.
         return Grid(
-            new[] { GridSize.Auto, GridSize.Star() },
-            new[] { GridSize.Auto, GridSize.Auto },
-            avatar.Grid(row: 0, column: 0).Margin(0, 0, 0, 6),
-            nameBlock.Grid(row: 0, column: 1).Margin(10, 0, 0, 6),
-            followHost.Grid(row: 1, column: 0).HAlign(HorizontalAlignment.Center),
-            qualityHost.Grid(row: 1, column: 1).HAlign(HorizontalAlignment.Left).Margin(10, 0, 0, 0))
+            new[] { GridSize.Auto, GridSize.Star(), GridSize.Auto },
+            new[] { GridSize.Auto },
+            avatar.Grid(row: 0, column: 0),
+            nameBlock.Grid(row: 0, column: 1).Margin(10, 0, 8, 0),
+            followHost.Grid(row: 0, column: 2).HAlign(HorizontalAlignment.Right))
             .Padding(12, 10, 12, 8);
     }
 
@@ -333,16 +337,15 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
 
     private Element BuildFooter(PlayerViewModel vm)
     {
-        // 底栏：[弹][滤][礼][表情][输入 *][发送]，输入框吃掉中间所有宽度，整体撑满面板.
+        // 底栏：[滤][礼][表情][输入 *][发送]；弹幕开关挪到播放器底栏去了，这里不再重复.
         return Grid(
-            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
+            new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
             new[] { GridSize.Auto },
-            BuildDanmakuToggle(vm).Grid(row: 0, column: 0).Margin(0, 0, 6, 0),
-            BuildFilterButton(vm).Grid(row: 0, column: 1).Margin(0, 0, 6, 0),
-            BuildGiftButton(vm).Grid(row: 0, column: 2).Margin(0, 0, 6, 0),
-            BuildEmoteButton(vm).Grid(row: 0, column: 3).Margin(0, 0, 6, 0),
-            BuildInputBox(vm).Grid(row: 0, column: 4).Margin(0, 0, 6, 0),
-            BuildSendButton(vm).Grid(row: 0, column: 5))
+            BuildFilterButton(vm).Grid(row: 0, column: 0).Margin(0, 0, 6, 0),
+            BuildGiftButton(vm).Grid(row: 0, column: 1).Margin(0, 0, 6, 0),
+            BuildEmoteButton(vm).Grid(row: 0, column: 2).Margin(0, 0, 6, 0),
+            BuildInputBox(vm).Grid(row: 0, column: 3).Margin(0, 0, 6, 0),
+            BuildSendButton(vm).Grid(row: 0, column: 4))
             .Padding(12, 8, 12, 12);
     }
 
@@ -394,24 +397,6 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         toggle.Toggled += (_, _) => onChanged(toggle.IsOn);
         return toggle;
     }
-
-    private static Element BuildDanmakuToggle(PlayerViewModel vm)
-        => new XamlHostElement(
-            () =>
-            {
-                var button = new ToggleButton
-                {
-                    Content = "弹",
-                    Width = 32,
-                    Height = 32,
-                    Padding = new Thickness(0),
-                    IsChecked = vm.IsLiveDanmakuVisible,
-                };
-                button.Click += (_, _) => vm.SwitchLiveDanmakuCommand.Execute(default);
-                return button;
-            },
-            element => ((ToggleButton)element).IsChecked = vm.IsLiveDanmakuVisible)
-            .WithKey("live-danmaku-toggle");
 
     private Element BuildGiftButton(PlayerViewModel vm)
         => new XamlHostElement(
@@ -716,25 +701,6 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             .Padding(8, 6, 8, 6)
             .Margin(0, 0, 0, 6)
             .WithKey("live-guard-" + guard.UserName);
-
-    private MenuFlyout BuildQualityFlyout(PlayerViewModel vm)
-    {
-        var flyout = new MenuFlyout();
-        foreach (var option in vm.LiveStreamOptions)
-        {
-            var item = new MenuFlyoutItem { Text = option.DisplayText };
-            var captured = option;
-            item.Click += (_, _) => vm.SwitchLiveStreamCommand.Execute(captured);
-            flyout.Items.Add(item);
-        }
-
-        if (flyout.Items.Count == 0)
-        {
-            flyout.Items.Add(new MenuFlyoutItem { Text = "还没有可用线路", IsEnabled = false });
-        }
-
-        return flyout;
-    }
 
     private void ShowGiftFlyout(Button anchor)
     {
@@ -1189,6 +1155,8 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             : null;
     }
 }
+
+
 
 
 
