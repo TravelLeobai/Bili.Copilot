@@ -139,7 +139,7 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     /// <summary>
     /// 角标文案.
     /// </summary>
-    public string Badge { get; }
+    public string Badge { get; set; }
 
     /// <summary>
     /// 副标题.
@@ -150,6 +150,16 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     /// 是否是直播.
     /// </summary>
     public bool IsLive { get; }
+
+    /// <summary>
+    /// 是否是切片（用户指定的切片 UP 主投稿）.
+    /// </summary>
+    public bool IsClip { get; set; }
+
+    /// <summary>
+    /// 是否是直播回放.
+    /// </summary>
+    public bool IsReplay => !IsLive && !IsClip;
 
     /// <summary>
     /// 直播房间号（直播卡片才有）.
@@ -183,6 +193,8 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         }
     }
 }
+
+
 
 
 

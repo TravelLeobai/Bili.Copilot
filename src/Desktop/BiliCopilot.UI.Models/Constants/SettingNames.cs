@@ -211,8 +211,11 @@ public enum SettingNames
     LastReplyMessageKeys,
     LastLiveRoomIds,
     LastMomentSectionType,
+    LiveClipCreatorIds,
+    LiveClipCreatorNames,
     LiveDanmakuMedalFilter,
 }
+
 
 
 

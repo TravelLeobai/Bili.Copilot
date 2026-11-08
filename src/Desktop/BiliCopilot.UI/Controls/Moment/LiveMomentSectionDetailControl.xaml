@@ -49,15 +49,31 @@
                         MaxLines="1"
                         Text="{x:Bind AuthorName, Mode=OneWay}"
                         TextTrimming="CharacterEllipsis" />
+                    <!--  直播中：实心 accent；回放/切片：outline  -->
                     <Border
                         Grid.Column="2"
                         Padding="6,1"
                         VerticalAlignment="Center"
                         Background="{ThemeResource AccentFillColorDefaultBrush}"
-                        CornerRadius="4">
+                        CornerRadius="4"
+                        Visibility="{x:Bind IsLive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                         <TextBlock
                             FontSize="10"
                             Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                            Text="{x:Bind Badge, Mode=OneWay}" />
+                    </Border>
+                    <Border
+                        Grid.Column="2"
+                        Padding="5,0"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Visibility="{x:Bind IsLive, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+                        <TextBlock
+                            FontSize="10"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
                             Text="{x:Bind Badge, Mode=OneWay}" />
                     </Border>
                 </Grid>
@@ -108,6 +124,7 @@
     <Grid HorizontalAlignment="Stretch">
         <Grid.RowDefinitions>
             <RowDefinition Height="76" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -177,8 +194,23 @@
         </ScrollViewer>
 
         <!--  卡片区：列由代码按宽度生成，每列一个自动高度的 StackPanel（真瀑布流）  -->
-        <ScrollViewer
+        <!--  内容类型过滤：全部 / 直播 / 回放 / 切片，外加切片 UP 管理  -->
+        <StackPanel
             Grid.Row="1"
+            Margin="16,0,16,8"
+            Orientation="Horizontal"
+            Spacing="8">
+            <Button x:Name="FilterAllButton" Click="OnFilterButtonClick" Tag="All" Content="全部" />
+            <Button x:Name="FilterLiveButton" Click="OnFilterButtonClick" Tag="Live" Content="直播中" />
+            <Button x:Name="FilterReplayButton" Click="OnFilterButtonClick" Tag="Replay" Content="回放" />
+            <Button x:Name="FilterClipButton" Click="OnFilterButtonClick" Tag="Clip" Content="切片" />
+            <Button
+                Click="OnManageClipCreatorsClick"
+                Content="管理切片 UP" />
+        </StackPanel>
+
+        <ScrollViewer
+            Grid.Row="2"
             Padding="16,4,16,16"
             HorizontalScrollBarVisibility="Disabled"
             HorizontalScrollMode="Disabled"
@@ -190,3 +222,4 @@
         </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>
+

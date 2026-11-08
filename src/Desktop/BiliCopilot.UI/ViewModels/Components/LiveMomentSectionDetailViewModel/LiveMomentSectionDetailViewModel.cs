@@ -6,6 +6,7 @@ using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
+using BiliCopilot.UI.Toolkits;
 using Richasy.BiliKernel.Bili.Authorization;
 using Richasy.BiliKernel.Bili.Moment;
 using Richasy.BiliKernel.Bili.User;
@@ -28,6 +29,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 
     private readonly ILogger<LiveMomentSectionDetailViewModel> _logger;
     private readonly List<LiveSectionCardViewModel> _allCards = [];
+    private readonly Dictionary<string, string> _followedNames = [];
 
     private readonly IMomentDiscoveryService? _momentService;
 
@@ -53,6 +55,21 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     /// 过滤后要展示的卡片.
     /// </summary>
     public ObservableCollection<LiveSectionCardViewModel> Items { get; } = [];
+    /// <summary>
+    /// 用户指定的切片 UP 主 id.
+    /// </summary>
+    public HashSet<string> ClipCreatorIds { get; private set; } = [];
+
+    /// <summary>
+    /// 切片 UP 主 id → 名字（设置里回显用）.
+    /// </summary>
+    public Dictionary<string, string> ClipCreatorNames { get; private set; } = [];
+
+    /// <summary>
+    /// 内容类型过滤：全部 / 直播 / 回放 / 切片.
+    /// </summary>
+    [ObservableProperty]
+    private LiveFilterType _filterType = LiveFilterType.All;
 
     [ObservableProperty]
     private LiveSectionUperViewModel? _selectedUper;
@@ -103,6 +120,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             var relationship = this.Get<IRelationshipService>();
             var followedIds = await LiveFollowService.GetFollowedUserIdsAsync(relationship);
             _logger.LogInformation("直播分区：关注用户 {Count} 个", followedIds.Count);
+            RefreshFollowedNames(relationship);
 
             var lives = await LiveFollowService.GetLiveRoomsAsync(cookies, relationship);
             _logger.LogInformation("直播分区：在播 {Count} 个", lives.Count);
@@ -130,8 +148,25 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 
             _allCards.AddRange(replays);
 
+            // 切片 UP 主来自设置：他们的投稿标成"切片"，和回放区分开.
+            var clipSetting = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LiveClipCreatorIds, string.Empty);
+            ClipCreatorIds = clipSetting
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .ToHashSet();
+            foreach (var card in _allCards)
+            {
+                if (!card.IsLive && ClipCreatorIds.Contains(card.AuthorId))
+                {
+                    card.IsClip = true;
+                    card.Badge = "切片";
+                }
+            }
+
+            _logger.LogInformation("直播分区：切片 UP {Count} 个，命中切片 {Hit} 条", ClipCreatorIds.Count, _allCards.Count(p => p.IsClip));
+
             BuildUpers(_allCards);
-            SelectUper(Upers.FirstOrDefault());
+            SelectedUper ??= Upers.FirstOrDefault();
+            ApplyFilter();
             IsEmpty = _allCards.Count == 0;
         }
         catch (Exception ex)
@@ -144,6 +179,58 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             IsLoading = false;
         }
     }
+
+    /// <summary>
+    /// 拉一遍关注用户的名字，切片设置里要用真实昵称而不是只有 id.
+    /// </summary>
+    /// <param name="relationship">关注关系服务.</param>
+    private void RefreshFollowedNames(IRelationshipService relationship) => _ = LoadFollowedNamesAsync(relationship);
+
+    private async Task LoadFollowedNamesAsync(IRelationshipService relationship)
+    {
+        try
+        {
+            var groups = await relationship.GetMyFollowUserGroupsAsync();
+            if (groups is null)
+            {
+                return;
+            }
+
+            foreach (var group in groups)
+            {
+                var offset = 0;
+                for (var page = 0; page < 3; page++)
+                {
+                    var (users, next) = await relationship.GetMyFollowUserGroupDetailAsync(group.Id, offset);
+                    if (users is null || users.Count == 0)
+                    {
+                        break;
+                    }
+
+                    foreach (var user in users)
+                    {
+                        var id = user.Profile.User.Id;
+                        if (!string.IsNullOrEmpty(id))
+                        {
+                            _followedNames[id] = user.Profile.User.Name;
+                        }
+                    }
+
+                    offset = next;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "拉关注用户名失败（切片设置里只显示 id）");
+        }
+    }
+
+    /// <summary>
+    /// 关注用户列表（切片设置的选择来源）.
+    /// </summary>
+    /// <returns>id → 名字.</returns>
+    public IReadOnlyDictionary<string, string> GetFollowedUsers() => _followedNames;
 
     private void BuildUpers(List<LiveSectionCardViewModel> cards)
     {
@@ -158,6 +245,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 continue;
             }
 
+            _followedNames[card.AuthorId] = card.AuthorName;
             Upers.Add(new LiveSectionUperViewModel(card.AuthorId, card.AuthorName, card.Avatar, SelectUper));
         }
     }
@@ -179,10 +267,65 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         }
 
         SelectedUper = uper;
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// 切换内容类型过滤（全部 / 直播 / 回放 / 切片）.
+    /// </summary>
+    /// <param name="type">类型.</param>
+    public void SetFilterType(LiveFilterType type)
+    {
+        FilterType = type;
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// 设置切片 UP 主：持久化，并把他们的投稿标成"切片"放进列表.
+    /// </summary>
+    /// <param name="ids">UP 主 id 集合.</param>
+    public void SetClipCreators(IEnumerable<string> ids)
+    {
+        var set = ids.Where(p => !string.IsNullOrEmpty(p)).ToHashSet();
+        ClipCreatorIds = set;
+        ClipCreatorNames = set
+            .Where(p => _followedNames.ContainsKey(p))
+            .ToDictionary(p => p, p => _followedNames[p]);
+
+        SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LiveClipCreatorIds, string.Join(',', set));
+        SettingsToolkit.WriteLocalSetting(
+            Models.Constants.SettingNames.LiveClipCreatorNames,
+            JsonSerializer.Serialize(ClipCreatorNames));
+
+        foreach (var card in _allCards)
+        {
+            card.IsClip = !card.IsLive && set.Contains(card.AuthorId);
+            if (card.IsClip)
+            {
+                card.Badge = "切片";
+            }
+        }
+
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
         Items.Clear();
-        var source = uper.IsTotal
-            ? _allCards
-            : _allCards.Where(p => p.AuthorId == uper.UserId);
+        IEnumerable<LiveSectionCardViewModel> source = _allCards;
+        if (SelectedUper is { IsTotal: false })
+        {
+            source = source.Where(p => p.AuthorId == SelectedUper.UserId);
+        }
+
+        source = FilterType switch
+        {
+            LiveFilterType.Live => source.Where(p => p.IsLive),
+            LiveFilterType.Replay => source.Where(p => p.IsReplay),
+            LiveFilterType.Clip => source.Where(p => p.IsClip),
+            _ => source,
+        };
+
         foreach (var card in source)
         {
             Items.Add(card);
@@ -307,6 +450,10 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
+
+
+
 
 
 

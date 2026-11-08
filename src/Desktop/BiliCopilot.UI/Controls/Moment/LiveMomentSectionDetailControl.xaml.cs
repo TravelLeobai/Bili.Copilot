@@ -1,5 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
 using Richasy.WinUIKernel.Share.Base;
@@ -151,6 +152,87 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         }
     }
 
+    private void OnFilterButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is null || sender is not FrameworkElement element)
+        {
+            return;
+        }
+
+        var type = (element.Tag as string) switch
+        {
+            "Live" => LiveFilterType.Live,
+            "Replay" => LiveFilterType.Replay,
+            "Clip" => LiveFilterType.Clip,
+            _ => LiveFilterType.All,
+        };
+
+        ViewModel.SetFilterType(type);
+        UpdateFilterButtons();
+    }
+
+    private void UpdateFilterButtons()
+    {
+        var current = ViewModel?.FilterType ?? LiveFilterType.All;
+        Apply(FilterAllButton, current == LiveFilterType.All);
+        Apply(FilterLiveButton, current == LiveFilterType.Live);
+        Apply(FilterReplayButton, current == LiveFilterType.Replay);
+        Apply(FilterClipButton, current == LiveFilterType.Clip);
+
+        static void Apply(Button button, bool active)
+        {
+            if (button is null)
+            {
+                return;
+            }
+
+            button.FontWeight = active ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+            button.Opacity = active ? 1 : 0.7;
+        }
+    }
+
+    private async void OnManageClipCreatorsClick(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        var users = ViewModel.GetFollowedUsers();
+        var panel = new StackPanel { Spacing = 6 };
+        var checks = new List<(string Id, CheckBox Box)>();
+        foreach (var pair in users.OrderBy(p => p.Value, StringComparer.CurrentCulture))
+        {
+            var box = new CheckBox
+            {
+                Content = pair.Value,
+                IsChecked = ViewModel.ClipCreatorIds.Contains(pair.Key),
+                Tag = pair.Key,
+            };
+            checks.Add((pair.Key, box));
+            panel.Children.Add(box);
+        }
+
+        if (checks.Count == 0)
+        {
+            panel.Children.Add(new TextBlock { Text = "还没拿到关注列表，先刷新一下动态页。", Opacity = 0.7 });
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "选择做切片的 UP 主",
+            Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
+            PrimaryButtonText = "保存",
+            CloseButtonText = "取消",
+            XamlRoot = XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            ViewModel.SetClipCreators(checks.Where(p => p.Box.IsChecked == true).Select(p => p.Id));
+            UpdateFilterButtons();
+        }
+    }
     private void OnCardTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
         if (sender is FrameworkElement element && element.DataContext is LiveSectionCardViewModel card)
@@ -176,4 +258,6 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
+
 
