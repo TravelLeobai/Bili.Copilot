@@ -15,7 +15,8 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     private const double MinCardWidth = 240d;
     private const double CardGap = 16d;
     private const double SidePadding = 32d;
-    private const double CardHeight = 250d;
+    // 卡片内容约 236 高，加上容器 margin 的 16 才不会在底部被切.
+    private const double CardHeight = 272d;
     private double _lastSlotWidth;
 
     /// <summary>
@@ -26,6 +27,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        SizeChanged += (_, _) => UpdateCardSize();
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -34,8 +36,12 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         {
             UperView.SelectionChanged -= OnUperSelectionChanged;
             UperView.SelectionChanged += OnUperSelectionChanged;
+            ViewModel.Items.CollectionChanged -= OnItemsChanged;
+            ViewModel.Items.CollectionChanged += OnItemsChanged;
         }
 
+        // 首帧时 ItemsPanelRoot 可能还没建好、宽度也还没落定，排到下一个调度回合再算一次.
+        this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, UpdateCardSize);
         UpdateCardSize();
     }
 
@@ -45,7 +51,15 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         {
             UperView.SelectionChanged -= OnUperSelectionChanged;
         }
+
+        if (ViewModel is not null)
+        {
+            ViewModel.Items.CollectionChanged -= OnItemsChanged;
+        }
     }
+
+    private void OnItemsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => UpdateCardSize();
 
     private void OnUperSelectionChanged(ItemsView sender, ItemsViewSelectionChangedEventArgs args)
     {
@@ -121,3 +135,5 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
+

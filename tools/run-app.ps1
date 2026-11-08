@@ -56,7 +56,10 @@ if (Test-Path $packageDir) {
     foreach ($dir in $dataDirs) {
         $src = Join-Path $packageDir $dir
         if (Test-Path $src) {
-            Copy-Item $src (Join-Path $backup $dir) -Recurse -Force
+            $dest = Join-Path $backup $dir
+            # 用 robocopy 而不是 Copy-Item：Copy-Item -Force 会去复制 EFS 加密属性，
+            # 在 Temp 目录上直接报"无法加密指定的文件".
+            & robocopy $src $dest /E /COPY:DAT /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
         }
     }
 
@@ -75,7 +78,8 @@ if (Test-Path $backup) {
     foreach ($dir in $dataDirs) {
         $saved = Join-Path $backup $dir
         if (Test-Path $saved) {
-            Copy-Item $saved (Join-Path $packageDir $dir) -Recurse -Force
+            $dest = Join-Path $packageDir $dir
+            & robocopy $saved $dest /E /COPY:DAT /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
         }
     }
 
@@ -87,6 +91,22 @@ Start-Process "shell:AppsFolder\$aumid"
 Start-Sleep -Seconds 26
 
 $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue
+if (-not $app) {
+    # 崩在启动阶段（combase.dll + 0x80004003）多半是还原回来的 settings.dat 坏了 ——
+    # 用坏掉的设置文件，每次启动都会在同一个地方崩。把 Settings 挪走再试一次，
+    # 代价是登录态丢失，但至少能把应用启动起来.
+    Write-Host "启动失败，疑似还原的 settings.dat 损坏，清掉设置再试" -ForegroundColor Yellow
+    $brokenSettings = Join-Path $packageDir "Settings"
+    if (Test-Path $brokenSettings) {
+        Move-Item $brokenSettings (Join-Path $env:TEMP ("bili-settings-broken-" + (Get-Date -Format "HHmmss"))) -Force
+    }
+
+    Start-Sleep -Seconds 3
+    Start-Process "shell:AppsFolder\$aumid"
+    Start-Sleep -Seconds 26
+    $app = Get-Process -Name "BiliCopilot.UI" -ErrorAction SilentlyContinue
+}
+
 if ($app) {
     Write-Host "OK：进程 PID=$($app.Id)" -ForegroundColor Green
 }
@@ -94,5 +114,8 @@ else {
     Write-Host "启动失败 —— 去看事件查看器里 combase.dll 那条" -ForegroundColor Red
     exit 1
 }
+
+
+
 
 
