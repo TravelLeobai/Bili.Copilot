@@ -63,6 +63,7 @@ public sealed partial class NotificationViewModel : ViewModelBase
         await InitializeCommand.ExecuteAsync(default);
         TrySendVideoMomentNotificationsCommand.Execute(default);
         TrySendLiveStartNotificationsCommand.Execute(default);
+        TrySendReplyNotificationsCommand.Execute(default);
     }
 
     [RelayCommand]
@@ -81,6 +82,10 @@ public sealed partial class NotificationViewModel : ViewModelBase
         => TrySendVideoMomentNotificationsCommand.Execute(default);
 
     private void OnLiveTimerTick(object? sender, object e)
-        => TrySendLiveStartNotificationsCommand.Execute(default);
+    {
+        TrySendLiveStartNotificationsCommand.Execute(default);
+        TrySendReplyNotificationsCommand.Execute(default);
+    }
 }
+
 

@@ -207,9 +207,12 @@ public enum SettingNames
     MomentVideoLeftPaneRatio,
     LiveDanmakuLevelFilter,
     IsLiveStartNotificationEnabled,
+    IsReplyNotificationEnabled,
+    LastReplyMessageKeys,
     LastLiveRoomIds,
     LiveDanmakuMedalFilter,
 }
+
 
 
 

@@ -2145,6 +2145,9 @@
   <data name="VideoCount" xml:space="preserve">
     <value>视频数</value>
   </data>
+  <data name="ReplyNotification" xml:space="preserve">
+    <value>收到网友回复时通知</value>
+  </data>
   <data name="LiveStartNotification" xml:space="preserve">
     <value>关注主播开播提醒</value>
   </data>
@@ -3268,4 +3271,5 @@
     <value>左右拖动调整宽度；双击恢复默认；方向键微调</value>
   </data>
 </root>
+
 

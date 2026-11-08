@@ -62,6 +62,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         IsNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsNotificationEnabled, true);
         IsVideoMomentNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, true);
         IsLiveStartNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsLiveStartNotificationEnabled, true);
+        IsReplyNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsReplyNotificationEnabled, true);
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
@@ -514,6 +515,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnIsLiveStartNotificationEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.IsLiveStartNotificationEnabled, value);
+
+    partial void OnIsReplyNotificationEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.IsReplyNotificationEnabled, value);
 
     partial void OnBottomProgressVisibleChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.IsBottomProgressBarVisible, value);
@@ -1076,5 +1080,6 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     }
 
 }
+
 
 

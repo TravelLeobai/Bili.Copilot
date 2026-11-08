@@ -29,6 +29,12 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsEnabled="{x:Bind ViewModel.IsNotificationEnabled, Mode=OneWay}" IsOn="{x:Bind ViewModel.IsLiveStartNotificationEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard Header="{ext:Locale Name=ReplyNotification}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Comment" />
+                </base:SettingsCard.HeaderIcon>
+                <ToggleSwitch IsEnabled="{x:Bind ViewModel.IsNotificationEnabled, Mode=OneWay}" IsOn="{x:Bind ViewModel.IsReplyNotificationEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>

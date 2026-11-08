@@ -323,6 +323,17 @@ public sealed partial class PlayerViewModel
             LiveTitle = detail.Title;
         }
 
+        // 从开播通知点进来的快照只带房间号，主播信息是空的，面板会显示"未开播"；
+        // 用刚拿到的房间详情补全，省得再发一次请求.
+        if ((LiveUser is null || string.IsNullOrEmpty(LiveUser.Name)) && !string.IsNullOrEmpty(detail.AnchorName))
+        {
+            var avatar = Uri.TryCreate(detail.AnchorAvatar, UriKind.Absolute, out var avatarUri)
+                ? new Richasy.BiliKernel.Models.Appearance.BiliImage(avatarUri)
+                : default!;
+            LiveUser = new UserProfile(detail.AnchorUid.ToString(), detail.AnchorName, avatar);
+            logger.LogInformation("直播：用房间详情补全主播信息 {Name}", detail.AnchorName);
+        }
+
         LiveOnlineText = FormatCount(detail.Online);
         if (detail.FansCount > 0)
         {
