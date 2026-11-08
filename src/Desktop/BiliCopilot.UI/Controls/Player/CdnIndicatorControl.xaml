@@ -11,8 +11,7 @@
 
     <DropDownButton
         x:Name="RootButton"
-        Height="32"
-        Padding="8,0,8,0"
+        Padding="8,4"
         VerticalAlignment="Center"
         HorizontalContentAlignment="Stretch"
         VerticalContentAlignment="Center"
