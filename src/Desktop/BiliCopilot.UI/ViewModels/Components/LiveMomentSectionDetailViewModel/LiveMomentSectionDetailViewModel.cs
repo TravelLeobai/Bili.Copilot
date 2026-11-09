@@ -322,7 +322,9 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                         continue;
                     }
 
-                    result.Add(new LiveSectionCardViewModel(
+                    // 回放卡必须带上 BV 号：LiveSectionCardViewModel.Play() 里直播分支看 RoomId、
+                    // 回放分支看 Bvid，两个都空就只会弹个「加载中」然后什么都不发生.
+                    var replayCard = new LiveSectionCardViewModel(
                         title,
                         NormalizeCover(video.Identifier.Cover?.Uri?.ToString()),
                         moment.User?.Name ?? string.Empty,
@@ -330,7 +332,11 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                         keyword,
                         false,
                         "回放",
-                        moment.User?.Avatar?.Uri));
+                        moment.User?.Avatar?.Uri)
+                    {
+                        Bvid = video.Identifier.Id,
+                    };
+                    result.Add(replayCard);
                 }
 
                 if (view.HasMoreMoments != true)

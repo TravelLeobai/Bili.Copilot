@@ -128,11 +128,21 @@ public partial class App : Application
     {
         double[] itemWidths = [260d, 320d, 400d, 500d, 640d];
         var safePreset = Math.Clamp(preset, 0, itemWidths.Length - 1);
-        if (Current.Resources["MomentLayout"] is UniformGridLayout layout)
+
+        // 别用 Resources[...] 直接取值：键不存在时 ResourceDictionary 会抛，
+        // 而这个调用在 OnLaunched 里，一抛就是"启动即崩"。改成 TryGetValue + 兜住异常.
+        try
         {
-            var itemWidth = itemWidths[safePreset];
-            layout.MinItemWidth = itemWidth;
-            layout.MinItemHeight = itemWidth;
+            if (Current.Resources.TryGetValue("MomentLayout", out var value) && value is UniformGridLayout layout)
+            {
+                var itemWidth = itemWidths[safePreset];
+                layout.MinItemWidth = itemWidth;
+                layout.MinItemHeight = itemWidth;
+            }
+        }
+        catch (Exception ex)
+        {
+            Services.StartupTrace.Fail("ApplyMomentVideoLayoutPreset", ex);
         }
     }
 
@@ -520,6 +530,7 @@ public partial class App : Application
         }
     }
 }
+
 
 
 
