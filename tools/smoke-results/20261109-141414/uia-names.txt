@@ -1,0 +1,28 @@
+哔哩助理
+动漫
+动态
+精选推荐
+历史记录
+流行
+流行视频
+全区排行榜
+热门
+稍后再看
+设置
+视频
+刷新
+搜索
+推荐视频
+文章
+我的收藏
+消息
+影视
+直播
+植物大战僵尸旅行
+AppWindow Custom Title Bar
+Close
+ItemContainer
+Maximize
+Minimize
+ms-resource://CommunityToolkit.WinUI.Controls.Sizers/CommunityToolkit.WinUI.Controls.Sizers/Resources/WCT_SizerBase_AutomationName
+Non Client Input Sink Window
