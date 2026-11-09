@@ -135,9 +135,17 @@ public sealed class MomentWaterfall : Component
 
     private static void SyncColumn(StackPanel panel, IReadOnlyList<MomentItemViewModel> items)
     {
+        // 回收多余卡片时先解绑：让卡片里的图片控件把旧请求取消、旧源清掉，
+        // 否则这些卡片被复用给新数据时，会先闪一下上一个内容的图.
         while (panel.Children.Count > items.Count)
         {
-            panel.Children.RemoveAt(panel.Children.Count - 1);
+            var last = panel.Children.Count - 1;
+            if (panel.Children[last] is MomentCardControl stale)
+            {
+                stale.ViewModel = null;
+            }
+
+            panel.Children.RemoveAt(last);
         }
 
         for (var i = 0; i < items.Count; i++)
@@ -165,7 +173,19 @@ public sealed class MomentWaterfall : Component
                 }
             }
 
-            card.ViewModel = items[i];
+            // 身份比对：索引相同不等于同一条数据（插入/重排后索引会整体错位）。
+            // 换数据时先解绑再绑，避免旧图在新卡片上残留一瞬；内容没变就不动，
+            // 免得每次重排都重新请求一遍图片.
+            if (!ReferenceEquals(card.Tag, items[i]))
+            {
+                if (card.Tag is not null && !ReferenceEquals(card.ViewModel, items[i]))
+                {
+                    card.ViewModel = null;
+                }
+
+                card.Tag = items[i];
+                card.ViewModel = items[i];
+            }
         }
     }
 
@@ -180,3 +200,4 @@ public sealed class MomentWaterfall : Component
         return null;
     }
 }
+
