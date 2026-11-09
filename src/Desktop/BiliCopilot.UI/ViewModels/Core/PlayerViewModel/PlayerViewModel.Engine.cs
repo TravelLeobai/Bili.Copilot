@@ -251,6 +251,11 @@ public sealed partial class PlayerViewModel
 
     private async Task ApplyVolumeAsync(double volume)
     {
+        if (Player is null)
+        {
+            return;
+        }
+
         if (IsWebEngine && _webPlayer is not null)
         {
             Player?.UpdateWebVolume(volume);
@@ -263,6 +268,11 @@ public sealed partial class PlayerViewModel
 
     private async Task ApplySpeedAsync(double speed)
     {
+        if (Player is null)
+        {
+            return;
+        }
+
         if (IsWebEngine && _webPlayer is not null)
         {
             Player?.UpdateWebRate(speed);
@@ -275,6 +285,11 @@ public sealed partial class PlayerViewModel
 
     private async Task ApplySeekAsync(double position)
     {
+        if (Player is null)
+        {
+            return;
+        }
+
         if (IsWebEngine && _webPlayer is not null)
         {
             await _webPlayer.SeekAsync(position);
@@ -286,6 +301,13 @@ public sealed partial class PlayerViewModel
 
     private async Task ApplyPauseAsync()
     {
+        // 重建期间 Player 会被短暂置空：这时候按播放/暂停不能直接摸 Client，
+        // 否则就是在没有视频输出的 client 上操作，实测崩在原生层.
+        if (Player is null)
+        {
+            return;
+        }
+
         if (IsWebEngine && _webPlayer is not null)
         {
             await _webPlayer.PauseAsync();
@@ -297,6 +319,11 @@ public sealed partial class PlayerViewModel
 
     private async Task ApplyResumeAsync()
     {
+        if (Player is null)
+        {
+            return;
+        }
+
         if (IsWebEngine && _webPlayer is not null)
         {
             await _webPlayer.ResumeAsync();
@@ -346,3 +373,4 @@ public sealed partial class PlayerViewModel
         await Client!.SetCompactOverlayStateAsync(isCompactOverlay);
     }
 }
+

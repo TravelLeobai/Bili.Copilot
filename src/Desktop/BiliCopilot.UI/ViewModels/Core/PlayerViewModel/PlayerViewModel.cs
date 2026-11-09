@@ -369,19 +369,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 Services.PlayerLifecycle.Log("step", $"PlayerVM#{LifecycleId}", "surface-dispose-end");
                 Player = null;
 
-                // 同 client 上再建实例前，确认 mpv 已经把 vo/ao 交还：
-                // 只 dispose 不等到位就 new，实测新实例 InitializeAsync 会挂住（20 秒超时），
-                // 超时后回落网页播放器时又同时摸两套播放器，直接崩在原生层.
-                if (Client is not null)
-                {
-                    try
-                    {
-                        await Client.StopAsync();
-                    }
-                    catch
-                    {
-                    }
-                }
+                // 这里不要再调 Client.StopAsync()：surface 一旦 Dispose，client 已经没有 vo，
+                // 再 stop 会一直挂着不返回（实测：dispose:end 之后就再没有 create-player:start，
+                // 界面停在白屏，点播放键直接崩）.
 
                 await Task.Delay(800);
             }
