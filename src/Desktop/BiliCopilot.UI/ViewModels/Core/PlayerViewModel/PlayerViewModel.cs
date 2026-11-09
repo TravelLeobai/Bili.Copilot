@@ -52,10 +52,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         // 先把在飞的初始化/加载取消掉，再拆东西：反过来的话，那些 await 的续体
         // 会在 mpv 已经拆完之后继续跑，直接撞原生层（关窗即崩就是这么来的）.
-        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
+        // 这条链在 UI 线程发起、要拆 XAML/窗口，续体不能跑到线程池上.
+        await _lifetimeCts.CancelAsync();
         if (_initCts is not null)
         {
-            await _initCts.CancelAsync().ConfigureAwait(false);
+            await _initCts.CancelAsync();
         }
         var disposeWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "dispose");
         Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", "begin", withStack: true);
@@ -149,7 +150,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         // 上一轮初始化如果还在飞，先取消：不然两个初始化会同时往 Player 上写状态.
         if (_initCts is not null)
         {
-            await _initCts.CancelAsync().ConfigureAwait(false);
+            await _initCts.CancelAsync();
             _initCts.Dispose();
         }
 
@@ -171,7 +172,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             $"PlayerVM#{LifecycleId}",
             $"snapshot={currentId} prev={previousId} same={isSameMedia} sameVideo={sameVideo} reuse={reuse} hasPlayer={Player is not null} web={UseWebEngine}",
             withStack: true);
-        await InitializeCoreAsync(snapshot, reusePlayer: reuse, _initCts?.Token ?? default).ConfigureAwait(false);
+        // 初始化会创建播放器控件、改绑定属性，必须在 UI 线程上继续.
+        await InitializeCoreAsync(snapshot, reusePlayer: reuse, _initCts?.Token ?? default);
     }
     /// <summary>
     /// 从结束页切到另一个视频：复用现有 mpv 实例，只换解析器再重新加载媒体.
@@ -1596,6 +1598,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
 
 
