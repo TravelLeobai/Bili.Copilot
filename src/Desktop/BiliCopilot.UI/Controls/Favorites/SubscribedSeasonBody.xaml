@@ -22,34 +22,76 @@
                     Layout="{StaticResource VideoLayout}">
                     <repeater:AppRepeater.ItemTemplate>
                         <DataTemplate x:DataType="items:SeasonSubscriptionItemViewModel">
+                            <!--  版式照着收藏夹里的视频卡片来：封面 → 作者 → 标题 → 底部一行（左期数右更新时间）  -->
                             <Grid
                                 PointerReleased="OnSeasonCardPointerReleased"
                                 Tapped="OnSeasonCardTapped"
                                 Tag="{x:Bind}">
-                                <base:CardControl
-                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
-                                    VerticalAlignment="Top">
-                                    <Grid VerticalAlignment="Top">
+                                <base:CardControl AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
+                                    <Grid>
                                         <Grid.RowDefinitions>
-                                            <RowDefinition Height="140" />
-                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <controls:BasicCoverImage DecodeWidth="600" Source="{x:Bind CoverUri, Mode=OneWay}" />
-                                        <TextBlock
+
+                                        <!--  封面：左下角压一枚 UP 头像  -->
+                                        <Grid>
+                                            <controls:BasicCoverImage DecodeWidth="600" Source="{x:Bind CoverUri, Mode=OneWay}" />
+                                            <controls:BasicCoverImage
+                                                Width="24"
+                                                Height="24"
+                                                Margin="10"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Bottom"
+                                                CornerRadius="12"
+                                                DecodeWidth="80"
+                                                Source="{x:Bind AvatarUri, Mode=OneWay}" />
+                                        </Grid>
+
+                                        <Grid
                                             Grid.Row="1"
-                                            Margin="12,8,12,2"
-                                            FontSize="13"
-                                            MaxLines="2"
-                                            Text="{x:Bind Title, Mode=OneWay}"
-                                            TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap" />
-                                        <TextBlock
-                                            Grid.Row="2"
-                                            Margin="12,0,12,10"
-                                            FontSize="11"
-                                            Opacity="0.6"
-                                            Text="{x:Bind CountText, Mode=OneWay}" />
+                                            Padding="16,12,16,14"
+                                            RowSpacing="8">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+
+                                            <TextBlock
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                MaxLines="1"
+                                                Text="{x:Bind AuthorName, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock
+                                                Grid.Row="1"
+                                                MaxLines="2"
+                                                Text="{x:Bind Title, Mode=OneWay}"
+                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="Wrap" />
+
+                                            <Grid Grid.Row="2" ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Text="{x:Bind CountText, Mode=OneWay}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Text="{x:Bind UpdateText, Mode=OneWay}"
+                                                    Visibility="{x:Bind UpdateText, Mode=OneWay, Converter={StaticResource ObjectToVisibilityConverter}}" />
+                                            </Grid>
+                                        </Grid>
                                     </Grid>
                                 </base:CardControl>
                             </Grid>
@@ -67,5 +109,4 @@
         <base:LoadingWidget Text="加载中，请稍候" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
     </Grid>
 </local:SubscribedSeasonControlBase>
-
 

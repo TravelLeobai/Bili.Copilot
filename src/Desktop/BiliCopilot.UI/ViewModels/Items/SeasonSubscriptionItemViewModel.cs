@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.ViewModels.Core;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.WinUIKernel.Share.Base;
@@ -23,9 +24,10 @@ public sealed partial class SeasonSubscriptionItemViewModel : ViewModelBase<Vide
     {
         Title = string.IsNullOrEmpty(data.Title) ? "未命名合集" : data.Title;
         CoverUri = data.Cover?.Uri;
-        Avatar = data.User?.Avatar?.Uri;
+        AvatarUri = data.User?.Avatar?.Uri;
         AuthorName = data.User?.Name ?? string.Empty;
-        CountText = data.TotalCount > 0 ? $"共 {data.TotalCount} 个视频" : "合集";
+        CountText = data.TotalCount > 0 ? $"共 {data.TotalCount} 期视频" : "合集";
+        Services.StartupTrace.Mark("SeasonCard:avatar", $"{Title} user={data.User?.Name ?? "null"} avatar={data.User?.Avatar?.Uri?.ToString() ?? "null"}");
     }
 
     /// <summary>
@@ -39,9 +41,10 @@ public sealed partial class SeasonSubscriptionItemViewModel : ViewModelBase<Vide
     public Uri? CoverUri { get; }
 
     /// <summary>
-    /// 作者头像.
+    /// 作者头像。收藏接口有时不回头像，这时候用合集内第一个视频的 UP 头像补上.
     /// </summary>
-    public Uri? Avatar { get; }
+    [ObservableProperty]
+    private Uri? _avatarUri;
 
     /// <summary>
     /// 作者名.
@@ -49,9 +52,15 @@ public sealed partial class SeasonSubscriptionItemViewModel : ViewModelBase<Vide
     public string AuthorName { get; }
 
     /// <summary>
-    /// 视频数文案.
+    /// 期数文案.
     /// </summary>
     public string CountText { get; }
+
+    /// <summary>
+    /// 最近更新时间文案，拿不到就先空着.
+    /// </summary>
+    [ObservableProperty]
+    private string _updateText = string.Empty;
 
     /// <summary>
     /// 打开这个合集.
@@ -63,3 +72,5 @@ public sealed partial class SeasonSubscriptionItemViewModel : ViewModelBase<Vide
         navigation.NavigateToOver(typeof(SeasonDetailPage), Data);
     }
 }
+
+
