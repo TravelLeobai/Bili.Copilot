@@ -362,7 +362,22 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 Services.PlayerLifecycle.Log("detach", $"PlayerVM#{LifecycleId}", "dispose old surface", withStack: true);
                 await Player.DisposeAsync();
                 Player = null;
-                await Task.Delay(300);
+
+                // 同 client 上再建实例前，确认 mpv 已经把 vo/ao 交还：
+                // 只 dispose 不等到位就 new，实测新实例 InitializeAsync 会挂住（20 秒超时），
+                // 超时后回落网页播放器时又同时摸两套播放器，直接崩在原生层.
+                if (Client is not null)
+                {
+                    try
+                    {
+                        await Client.StopAsync();
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                await Task.Delay(800);
             }
 
             logger.LogInformation("初始化：创建播放器");
@@ -385,18 +400,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             }
             catch (TimeoutException)
             {
-                logger.LogWarning("mpv 播放器初始化超过 20 秒没返回，改用网页播放器");
-                var stuck = Player;
+                // 超时说明这个 mpv 实例卡在初始化里，状态不可信。
+                // 以前会立刻回落网页播放器并 Dispose 卡住的实例 —— 两套播放器同时活着，
+                // 一边在销毁 mpv 的 vo、一边在建 WebView2，实测直接崩在原生层（coreclr c0000005）。
+                // 现在只报告状态、不碰那个实例，让用户重开窗口，进程退出时一并回收.
+                logger.LogWarning("mpv 播放器初始化超过 20 秒没返回，放弃这轮播放");
+                Services.PlayerLifecycle.Log("create-player:timeout", $"PlayerVM#{LifecycleId}", "abandoned, no fallback, no dispose");
                 Player = null;
-                if (!await TryFallbackToWebEngineAsync())
-                {
-                    ErrorMessage = "播放器初始化超时，请重试";
-                    _ = DisposeStuckPlayerAsync(stuck);
-                    return;
-                }
-
-                logger.LogInformation("已回落到网页播放器（mpv 初始化超时）");
-                _ = DisposeStuckPlayerAsync(stuck);
+                IsConnecting = false;
+                ErrorMessage = "播放器初始化超时，请重开播放窗口";
+                return;
             }
             catch (Exception ex)
             {
@@ -1508,6 +1521,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
 
 

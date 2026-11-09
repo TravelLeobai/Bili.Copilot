@@ -145,10 +145,13 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         => SetCardLift(sender, false);
 
     /// <summary>
-    /// 悬停轻微上浮：只动 Translation，交给 XAML 里的 Vector3Transition 补间，
-    /// 不改布局尺寸，所以不会把瀑布流的排版顶歪.
+    /// 悬停轻微上浮.
+    /// 不能用 Translation / TranslationTransition：卡片的 CardControl 用了
+    /// ElementCompositionPreview.GetElementVisual，同一元素再碰这两个 API 会抛
+    /// UnauthorizedAccessException（实测直接崩在 PointerEntered 里）.
+    /// 改用传统 RenderTransform 平移，不动布局尺寸，也不碰合成层.
     /// </summary>
-    /// <param name="sender">卡片根 Border.</param>
+    /// <param name="sender">卡片根元素.</param>
     /// <param name="isHover">是否进入.</param>
     private static void SetCardLift(object sender, bool isHover)
     {
@@ -157,11 +160,18 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
             return;
         }
 
-        element.TranslationTransition ??= new Microsoft.UI.Xaml.Vector3Transition
+        if (element.RenderTransform is not Microsoft.UI.Xaml.Media.TranslateTransform transform)
         {
-            Duration = TimeSpan.FromMilliseconds(150),
-        };
-        element.Translation = isHover ? new System.Numerics.Vector3(0, -4, 16) : System.Numerics.Vector3.Zero;
+            transform = new Microsoft.UI.Xaml.Media.TranslateTransform();
+            element.RenderTransform = transform;
+        }
+
+        transform.Y = isHover ? -4 : 0;
+
+        if (element.RenderTransformOrigin != new Windows.Foundation.Point(0.5, 0.5))
+        {
+            element.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+        }
     }
     private void OnCardTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
