@@ -36,7 +36,29 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
     private int _version;
     private SelectorBar? _tabBar;
     private bool _suppressTabChange;
+
+    // 弹幕攒批用：间隔 250ms 刷一次，比"每条消息整页重建"省一个数量级.
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _versionTimer;
+    private bool _versionBumpPending;
     private TextBox? _liveInputBox;
+
+    // 会真正影响这个面板的属性（其余一律忽略，尤其是播放位置这类高频属性）.
+    private static readonly HashSet<string> PanelProperties = new(StringComparer.Ordinal)
+    {
+        nameof(PlayerViewModel.LiveTitle),
+        nameof(PlayerViewModel.LiveUser),
+        nameof(PlayerViewModel.LiveUserAvatarUrl),
+        nameof(PlayerViewModel.LiveOnlineText),
+        nameof(PlayerViewModel.LiveFansText),
+        nameof(PlayerViewModel.LiveUptimeText),
+        nameof(PlayerViewModel.LiveDanmakuInput),
+        nameof(PlayerViewModel.LiveStatusText),
+        nameof(PlayerViewModel.LiveQualityText),
+        nameof(PlayerViewModel.LiveLineText),
+        nameof(PlayerViewModel.LiveGoldText),
+        nameof(PlayerViewModel.LiveSilverText),
+        nameof(PlayerViewModel.LivePanelTab),
+    };
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveSidePanel"/> class.
@@ -58,27 +80,39 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         UseEffect(
             () =>
             {
-                void OnProperty(object? sender, PropertyChangedEventArgs e) => setVersion(++_version);
-                void OnCollection(object? sender, NotifyCollectionChangedEventArgs e)
+                // 只对「会影响这个面板」的属性重建.
+                // PlayerViewModel 上 PositionText 之类每帧都在变，跟着它整页重建会把
+                // 输入框一起重建掉（打字被吞），也是滚动卡顿的主要来源.
+                void OnProperty(object? sender, PropertyChangedEventArgs e)
                 {
-                    // 新弹幕进来后滚到底，老弹幕自然往上顶.
-                    if (ReferenceEquals(sender, vm.LiveInteractions))
+                    if (string.IsNullOrEmpty(e.PropertyName) || PanelProperties.Contains(e.PropertyName))
                     {
-                        ScrollToLatest();
+                        setVersion(++_version);
                     }
-
-                    setVersion(++_version);
                 }
+
+                // 弹幕每秒好几条，逐条整页重建太重：攒一小段再刷一次.
+                void OnInteractionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+                {
+                    ScrollToLatest();
+                    ScheduleVersionBump(setVersion);
+                }
+
+                void OnRankOrGuardChanged(object? sender, NotifyCollectionChangedEventArgs e)
+                    => setVersion(++_version);
+
                 vm.PropertyChanged += OnProperty;
-                vm.LiveInteractions.CollectionChanged += OnCollection;
-                vm.LiveRanks.CollectionChanged += OnCollection;
-                vm.LiveGuards.CollectionChanged += OnCollection;
+                vm.LiveInteractions.CollectionChanged += OnInteractionChanged;
+                vm.LiveRanks.CollectionChanged += OnRankOrGuardChanged;
+                vm.LiveGuards.CollectionChanged += OnRankOrGuardChanged;
                 return () =>
                 {
                     vm.PropertyChanged -= OnProperty;
-                    vm.LiveInteractions.CollectionChanged -= OnCollection;
-                    vm.LiveRanks.CollectionChanged -= OnCollection;
-                    vm.LiveGuards.CollectionChanged -= OnCollection;
+                    vm.LiveInteractions.CollectionChanged -= OnInteractionChanged;
+                    vm.LiveRanks.CollectionChanged -= OnRankOrGuardChanged;
+                    vm.LiveGuards.CollectionChanged -= OnRankOrGuardChanged;
+                    _versionTimer?.Stop();
+                    _versionTimer = null;
                 };
             },
             Array.Empty<object>());
@@ -241,6 +275,29 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
         _suppressTabChange = true;
         _tabBar.SelectedItem = target;
         _suppressTabChange = false;
+    }
+
+    private void ScheduleVersionBump(Action<int> setVersion)
+    {
+        if (_versionBumpPending)
+        {
+            return;
+        }
+
+        _versionBumpPending = true;
+        if (_versionTimer is null)
+        {
+            _versionTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+            _versionTimer.Interval = TimeSpan.FromMilliseconds(250);
+            _versionTimer.IsRepeating = false;
+            _versionTimer.Tick += (_, _) =>
+            {
+                _versionBumpPending = false;
+                setVersion(++_version);
+            };
+        }
+
+        _versionTimer.Start();
     }
 
     private Element BuildContent(PlayerViewModel vm)
@@ -1120,6 +1177,8 @@ public sealed class LiveSidePanel : Microsoft.UI.Reactor.Core.Component
             : null;
     }
 }
+
+
 
 
 
