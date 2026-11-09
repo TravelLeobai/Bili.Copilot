@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Common.AiInterestBanner"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ic="using:FluentIcons.WinUI">
+
+    <Border
+        x:Name="RootBorder"
+        Margin="16,8,16,4"
+        Padding="14,10"
+        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+        CornerRadius="10"
+        Visibility="Collapsed">
+        <Grid ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <ic:SymbolIcon
+                x:Name="Icon"
+                VerticalAlignment="Top"
+                FontSize="16"
+                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                Symbol="Sparkle" />
+            <TextBlock
+                x:Name="TextLabel"
+                Grid.Column="1"
+                VerticalAlignment="Top"
+                FontSize="13"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                TextWrapping="Wrap" />
+        </Grid>
+    </Border>
+</UserControl>

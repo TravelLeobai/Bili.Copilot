@@ -28,6 +28,7 @@ public sealed class ViewLaterShell : Component
     private readonly ViewLaterPageViewModel _viewModel;
     private readonly ViewLaterHeader _header = new();
     private readonly ViewLaterBody _body = new();
+    private readonly Controls.Common.AiInterestBanner _banner = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ViewLaterShell"/> class.
@@ -41,10 +42,11 @@ public sealed class ViewLaterShell : Component
 
         return Grid(
             [GridSize.Star()],
-            [GridSize.Px(56), GridSize.Px(1), GridSize.Star()],
+            [GridSize.Px(56), GridSize.Px(1), GridSize.Auto, GridSize.Star()],
             Host(_header, control => control.ViewModel = _viewModel).Grid(row: 0),
             Divider().Grid(row: 1),
-            Host(_body, control => control.ViewModel = _viewModel).Grid(row: 2));
+            Host(_banner, control => _ = control.RefreshAsync("viewlater", _viewModel.Videos, null)).Grid(row: 2),
+            Host(_body, control => control.ViewModel = _viewModel).Grid(row: 3));
     }
 
     internal static Element Host<T>(T control, Action<T> apply, object? state = null)
@@ -70,6 +72,7 @@ public sealed class HistoryShell : Component
 {
     private readonly HistoryPageViewModel _viewModel;
     private readonly HistoryHeader _header = new();
+    private readonly Controls.Common.AiInterestBanner _banner = new();
     private readonly HistoryVideoSearchSection _searchSection = new();
     private readonly VideoHistorySection _videoSection = new();
     private readonly LiveHistorySection _liveSection = new();
@@ -103,10 +106,17 @@ public sealed class HistoryShell : Component
 
         return Grid(
             [GridSize.Star()],
-            [GridSize.Px(56), GridSize.Px(1), GridSize.Star()],
+            [GridSize.Px(56), GridSize.Px(1), GridSize.Auto, GridSize.Star()],
             ViewLaterShell.Host(_header, control => control.ViewModel = vm, vm).Grid(row: 0),
             ViewLaterShell.Divider().Grid(row: 1),
-            content.Grid(row: 2));
+            ViewLaterShell.Host(
+                _banner,
+                control => _ = control.RefreshAsync(
+                    "history",
+                    vm.SelectedSection is VideoHistorySectionDetailViewModel videoSection ? videoSection.Items : [],
+                    null),
+                vm).Grid(row: 2),
+            content.Grid(row: 3));
     }
 }
 
@@ -400,3 +410,5 @@ public sealed class LivePartitionShell : Component
         return button;
     }
 }
+
+

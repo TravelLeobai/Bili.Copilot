@@ -1,0 +1,12 @@
+版本 : 1.0.0.9
+哔哩助理
+请使用移动客户端扫描下方的二维码登录
+刷新
+探索视频应用桌面交互的新可能
+网页登录
+阅读文档
+AppWindow Custom Title Bar
+Close
+Maximize
+Minimize
+Non Client Input Sink Window
