@@ -83,8 +83,15 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     [RelayCommand]
     internal Task InitializeAsync(MediaSnapshot snapshot)
-        => InitializeCoreAsync(snapshot, reusePlayer: CanReusePlayer());
-
+    {
+        // 同一个视频（重载 / 重播 / 切清晰度）才复用；换视频一律走重建.
+        // 复用换掉片源时 mpv 的 vo 会 init 失败（VoInitFailed），接着回落网页播放器，
+        // 最后变成"有画面没声音"，实测就是这么一路坏下去的.
+        var previousId = GetSnapshotMediaId(_snapshot);
+        var currentId = GetSnapshotMediaId(snapshot);
+        var isSameMedia = !string.IsNullOrEmpty(previousId) && previousId == currentId;
+        return InitializeCoreAsync(snapshot, reusePlayer: isSameMedia && CanReusePlayer());
+    }
     /// <summary>
     /// 从结束页切到另一个视频：复用现有 mpv 实例，只换解析器再重新加载媒体.
     /// 重建实例正是白屏卡死的根源；重播按钮稳，也是因为它全程没碰播放器实例.
@@ -99,6 +106,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// 播放列表 / 合集 / 分 P / 结束页推荐全走这条判断：重建实例会白屏卡死.
     /// </summary>
     /// <returns>能否复用.</returns>
+    private static string GetSnapshotMediaId(MediaSnapshot? snapshot)
+        => snapshot?.Video?.Identifier.Id
+        ?? snapshot?.Live?.Identifier.Id
+        ?? snapshot?.Episode?.Identifier.Id
+        ?? string.Empty;
+
     private bool CanReusePlayer()
         => !UseWebEngine
         && !_forceWebFallback
@@ -283,12 +296,28 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         else
         {
             // 重载时必须先把上一个播放器放掉：MpvPlayer 共用同一个 mpv client，
-            // 旧实例留着会和新实例抢同一路视频输出，表现就是"有声音、画面不动".
+            // 旧实例留着会和新实例抢同一路视频输出.
+            // 同窗口换视频时旧实例的 vo/ao 还挂在窗口和音频设备上，新实例一初始化就
+            // VoInitFailed（显示异常 → 回落网页 → 最后变成没声音），所以先停干净、
+            // 放掉实例，再等 mpv 真正释放输出，才建新实例.
             if (Player is not null)
             {
                 Player.PropertyChanged -= OnPlayerPropertyChanged;
+                if (Client is not null)
+                {
+                    try
+                    {
+                        await Client.PauseAsync();
+                        await Client.StopAsync();
+                    }
+                    catch
+                    {
+                    }
+                }
+
                 await Player.DisposeAsync();
                 Player = null;
+                await Task.Delay(300);
             }
 
             logger.LogInformation("初始化：创建播放器");
@@ -1428,6 +1457,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
+
 
 
 

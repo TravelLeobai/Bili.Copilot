@@ -69,9 +69,34 @@ public sealed partial class PlayerViewModel
 
             _webPlayer.CookieString = this.Get<IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
 
+            // 回落前必须把 mpv 实例停掉并释放：它还占着音频设备，
+            // 只换 PlayerSurface 的话网页播放器有画面但没声音（实测就是这个症状）.
             if (Player is not null)
             {
                 Player.PropertyChanged -= OnPlayerPropertyChanged;
+                if (Client is not null)
+                {
+                    try
+                    {
+                        await Client.PauseAsync();
+                        await Client.StopAsync();
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                try
+                {
+                    await Player.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "回落网页播放器时释放 mpv 实例失败");
+                }
+
+                Player = null;
+                await Task.Delay(200);
             }
 
             Player = new PlayerSurface(_webPlayer);
