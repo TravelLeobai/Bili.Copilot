@@ -402,6 +402,60 @@ public sealed partial class PlayerViewModel
             logger.LogError(ex, "Restore playback enhancements failed");
         }
     }
+    /// <summary>
+    /// 载入完成后强制再应用一次记住的着色器与超分.
+    /// 「记住着色器与超分设置」原来只在 mpv 客户端初始化时恢复一次，
+    /// 换视频（复用播放器或重建实例）走的是另一条路径，等于没恢复。
+    /// 这里在每次媒体加载完之后补一遍；开关关掉时什么都不做.
+    /// </summary>
+    /// <returns>任务.</returns>
+    internal async Task ReapplyRememberedEnhancementsAsync()
+    {
+        if (Client is null || IsLive || Player is null || Player.IsWebEngine)
+        {
+            return;
+        }
+
+        if (!SettingsToolkit.ReadLocalSetting(SettingNames.RememberPlaybackEnhancements, true))
+        {
+            return;
+        }
+
+        Anime4KMode = ReadEnhancement(SettingNames.Anime4KMode, Anime4KMode.None);
+        ArtCNNMode = ReadEnhancement(SettingNames.ArtCNNMode, ArtCNNMode.None);
+        Nnedi3Mode = ReadEnhancement(SettingNames.Nnedi3Mode, Nnedi3Mode.None);
+        RavuMode = ReadEnhancement(SettingNames.RavuMode, RavuMode.None);
+        VsrScale = ReadEnhancement(SettingNames.NvidiaVsrScale, VsrScale.None);
+
+        try
+        {
+            var shaders = GetCombinedShaders();
+            if (shaders.Length > 0)
+            {
+                await Client.SetShadersAsync(shaders);
+            }
+
+            CheckClearShaderEnabled();
+
+            if (VsrScale != VsrScale.None)
+            {
+                await ApplyVsrAsync(VsrScale);
+            }
+
+            logger.LogInformation(
+                "载入后重放着色器/超分：Anime4K={Anime4K} ArtCNN={ArtCNN} NNEDI3={Nnedi3} RAVU={Ravu} VSR={Vsr}",
+                Anime4KMode,
+                ArtCNNMode,
+                Nnedi3Mode,
+                RavuMode,
+                VsrScale);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "载入后重放着色器/超分失败");
+        }
+    }
+
     private void OnClientCacheStateChanged(object? sender, MpvCacheStateEventArgs e)
         => CacheStateChanged?.Invoke(this, e);
 
@@ -1424,6 +1478,7 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
 
 
 

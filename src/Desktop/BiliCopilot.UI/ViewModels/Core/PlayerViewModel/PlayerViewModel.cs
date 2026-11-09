@@ -400,6 +400,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             {
                 await LoadWebMediaAsync();
             }
+            // 媒体加载完之后强制重放一次记住的着色器与超分：
+            // 「记住」原来只在 mpv 客户端初始化时生效，换视频走不到那段，表现为开关没作用.
+            await ReapplyRememberedEnhancementsAsync();
+
         }
         catch (Exception ex)
         {
