@@ -34,6 +34,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// </summary>
     private bool _disposed;
 
+    // 关闭窗口 / 换视频时先把在飞的初始化取消掉：否则它会在对象已经 teardown 之后
+    // 继续做 await 后面的活（改属性、碰 mpv），这正是「关窗即崩」的来源.
+    private CancellationTokenSource _lifetimeCts = new();
+    private CancellationTokenSource? _initCts;
+
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
@@ -44,8 +49,17 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
 
         _disposed = true;
+
+        // 先把在飞的初始化/加载取消掉，再拆东西：反过来的话，那些 await 的续体
+        // 会在 mpv 已经拆完之后继续跑，直接撞原生层（关窗即崩就是这么来的）.
+        await _lifetimeCts.CancelAsync().ConfigureAwait(false);
+        if (_initCts is not null)
+        {
+            await _initCts.CancelAsync().ConfigureAwait(false);
+        }
         var disposeWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "dispose");
         Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", "begin", withStack: true);
+
         Danmaku.ClearAll();
         _nativeMp?.Dispose();
         _nativeMp = null;
@@ -78,17 +92,34 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             Connector.PropertiesUpdated -= OnConnectorPropertiesUpdated;
         }
 
+        // 顺序很重要：先拆 PlayerSurface（它持有 vo/窗口输出），再拆 Client。
+        // 反过来做过——先 dispose client 再 dispose surface——surface 释放时会去碰
+        // 一个已经拆掉的 client，表现就是关窗卡住或直接崩.
+        if (Player is not null)
+        {
+            Player.PropertyChanged -= OnPlayerPropertyChanged;
+            try
+            {
+                await Player.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex)
+            {
+                Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", $"surface dispose failed: {ex.GetType().Name}");
+            }
+        }
+
         if (Client?.IsDisposed == false)
         {
             Client.ErrorOccurred -= OnClientErrorOccurred;
             Client.CacheStateChanged -= OnClientCacheStateChanged;
-            await Client.DisposeAsync();
-        }
-
-        if (Player is not null)
-        {
-            Player.PropertyChanged -= OnPlayerPropertyChanged;
-            await Player.DisposeAsync();
+            try
+            {
+                await Client.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex)
+            {
+                Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", $"client dispose failed: {ex.GetType().Name}");
+            }
         }
 
         if (Window?.IsDisposed == false)
@@ -98,12 +129,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             await Window.DisposeAsync();
         }
 
+        _initCts?.Dispose();
+        _initCts = null;
+        _lifetimeCts.Dispose();
+
         this.Get<AppViewModel>().Players.Remove(this);
         Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "dispose", disposeWatch);
     }
 
     [RelayCommand]
-    internal Task InitializeAsync(MediaSnapshot snapshot)
+    internal async Task InitializeAsync(MediaSnapshot snapshot)
     {
         // 每次开始播放都重新给 mpv 一次机会：_forceWebFallback 一旦置位（回落成功）
         // 就再也没有复位点，不重置的话这个播放器窗口里后续每个视频都会一直用网页引擎，
@@ -111,25 +146,32 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _forceWebFallback = false;
         _mpvInitFailed = false;
 
-        // 复用条件：同一个视频（同 BV / 同剧集）。分P 换集也算同一个视频 ——
-        // 实测在同一个 mpv client 上销毁旧实例再建新实例，新实例 InitializeAsync 会挂在
-        // 原生层直接崩（日志停在 create-player:start，没有 end）。分P 只换 cid，
-        // 换 resolver + 重新 load 就够，不需要重建实例.
+        // 上一轮初始化如果还在飞，先取消：不然两个初始化会同时往 Player 上写状态.
+        if (_initCts is not null)
+        {
+            await _initCts.CancelAsync().ConfigureAwait(false);
+            _initCts.Dispose();
+        }
+
+        _initCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCts.Token);
+        // 复用条件：只要现有 mpv 实例还能用就复用，换视频（合集/播放列表的下一个）也一样.
         var previousId = GetSnapshotMediaId(_snapshot);
         var currentId = GetSnapshotMediaId(snapshot);
+
+        // 实测同一个 client 上 dispose 旧实例再 new，新实例 InitializeAsync 会挂满 20 秒
+        // 甚至直接崩，所以一律走复用，靠 UpdateResolvers + 重新 load 换片源.
         var sameVideo = IsSameVideo(_snapshot, snapshot);
         var isSameMedia = !string.IsNullOrEmpty(previousId) && previousId == currentId;
 
-        // 只要现有 mpv 实例还能用就复用，换视频（合集/播放列表的下一个）也一样：
-        // 实测同一个 client 上 dispose 旧实例再 new，新实例 InitializeAsync 会挂满 20 秒超时
-        // （更早的版本是直接崩）。mpv 本身支持换文件，不需要重建实例.
+        // 换视频（合集/播放列表的下一个）也走复用：mpv 支持换文件，重建实例必挂.
         var reuse = CanReusePlayer();
+
         Services.PlayerLifecycle.Log(
             "init",
             $"PlayerVM#{LifecycleId}",
             $"snapshot={currentId} prev={previousId} same={isSameMedia} sameVideo={sameVideo} reuse={reuse} hasPlayer={Player is not null} web={UseWebEngine}",
             withStack: true);
-        return InitializeCoreAsync(snapshot, reusePlayer: reuse);
+        await InitializeCoreAsync(snapshot, reusePlayer: reuse, _initCts?.Token ?? default).ConfigureAwait(false);
     }
     /// <summary>
     /// 从结束页切到另一个视频：复用现有 mpv 实例，只换解析器再重新加载媒体.
@@ -138,7 +180,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// <param name="snapshot">新视频快照.</param>
     /// <returns>任务.</returns>
     internal Task InitializeWithReuseAsync(MediaSnapshot snapshot)
-        => InitializeCoreAsync(snapshot, reusePlayer: true);
+        => InitializeCoreAsync(snapshot, reusePlayer: true, _initCts?.Token ?? default);
 
     /// <summary>
     /// 已经有可用 mpv 实例时，切视频一律复用，不重建.
@@ -191,7 +233,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         && !_mpvInitFailed
         && Player is { IsWebEngine: false, Mpv: not null };
 
-    private async Task InitializeCoreAsync(MediaSnapshot snapshot, bool reusePlayer)
+    private async Task InitializeCoreAsync(MediaSnapshot snapshot, bool reusePlayer, CancellationToken cancellationToken = default)
     {
         IsLive = snapshot.Type == BiliMediaType.Live;
         _snapshot = snapshot;
@@ -402,7 +444,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 // 再 stop 会一直挂着不返回（实测：dispose:end 之后就再没有 create-player:start，
                 // 界面停在白屏，点播放键直接崩）.
 
-                await Task.Delay(800);
+                await Task.Delay(800, cancellationToken);
             }
 
             logger.LogInformation("初始化：创建播放器");
@@ -419,7 +461,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             {
                 // mpv 建实例偶尔会卡死（同一窗口里连着换视频时实测过，45 秒都不返回，
                 // 界面就一直白屏+连接中）。给个上限，超时就走网页播放器，别让用户干等.
-                await Player.InitializeAsync().WaitAsync(TimeSpan.FromSeconds(20));
+                await Player.InitializeAsync().WaitAsync(TimeSpan.FromSeconds(20), cancellationToken);
                 logger.LogInformation("初始化：播放器就绪");
                 Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "create-player", createWatch, $"mpv={Player?.GetHashCode():X}");
             }
@@ -434,6 +476,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 Player = null;
                 IsConnecting = false;
                 ErrorMessage = "播放器初始化超时，请重开播放窗口";
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                // 窗口关了 / 已经开始下一个视频：这是正常取消，不是失败，
+                // 不能回落网页播放器，也不该写错误提示.
+                logger.LogInformation("初始化被取消（窗口关闭或换了新视频）");
+                Services.PlayerLifecycle.Log("create-player:cancelled", $"PlayerVM#{LifecycleId}", "lifetime token cancelled");
                 return;
             }
             catch (Exception ex)
@@ -1546,6 +1596,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
+
+
+
+
 
 
 

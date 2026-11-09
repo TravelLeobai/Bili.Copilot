@@ -12,7 +12,7 @@
   <Identity
     Name="Richasy.BiliCopilot.Dev"
     Publisher="CN=Richasy"
-    Version="1.0.0.5" />
+    Version="1.0.0.7" />
 
   <mp:PhoneIdentity PhoneProductId="db73c7b4-f2cf-4fdc-96e5-a386308a42e9" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
@@ -23,8 +23,8 @@
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Universal" MinVersion="1.0.0.5" MaxVersionTested="10.0.22621.0" />
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="1.0.0.5" MaxVersionTested="10.0.22621.0" />
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="1.0.0.7" MaxVersionTested="10.0.22621.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="1.0.0.7" MaxVersionTested="10.0.22621.0" />
   </Dependencies>
 
   <Resources>
@@ -72,5 +72,7 @@
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
+
+
 
 

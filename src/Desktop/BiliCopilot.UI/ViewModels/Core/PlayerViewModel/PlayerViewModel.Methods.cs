@@ -630,6 +630,28 @@ public sealed partial class PlayerViewModel
 
     private async void OnWindowDestroying(AppWindow sender, object args)
     {
+        try
+        {
+            await HandleWindowDestroyingAsync();
+        }
+        catch (Exception ex)
+        {
+            // async void 里抛出去就是未处理异常，直接结束进程：必须自己兜.
+            Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", $"window destroying failed: {ex.GetType().Name} {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// 关闭播放窗口的收尾顺序（对照 BiliFluent 的 PlayerWindow / 播放会话定的）：
+    /// 1. 先把主窗口还回来（用户看到的应该是主窗口，不是一块黑屏）；
+    /// 2. 再取消在飞的初始化并拆播放器；
+    /// 3. 集成模式下最后才关主窗口。
+    /// 这里不复制它「每次关闭都销毁 mpv 实例」的策略：本项目切视频要靠复用实例才不崩，
+    /// 只有窗口真的没了才拆.
+    /// </summary>
+    /// <returns>任务.</returns>
+    private async Task HandleWindowDestroyingAsync()
+    {
         var appVM = this.Get<AppViewModel>();
         var hideMainWindowOnPlay = SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true);
         if (hideMainWindowOnPlay && !UseIntegrationOperation)
@@ -1489,6 +1511,7 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
 
 
 
