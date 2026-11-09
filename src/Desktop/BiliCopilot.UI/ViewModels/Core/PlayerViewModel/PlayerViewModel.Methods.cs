@@ -617,6 +617,19 @@ public sealed partial class PlayerViewModel
             TrackWatchedVideo();
         }
 
+        // 播放器一进入播放态、时长也读到了，说明画面/声音已经起来，这时收掉"连接中".
+        // 原来只在初始化流程的 finally 里关，而 finally 前面还排着字幕、弹幕、统计这些
+        // await，提示框会多挂好几秒，看着像加载卡住了.
+        if (e.PropertyName == nameof(Player.PlaybackState)
+            && IsConnecting
+            && Player is not null
+            && Player.Duration > 1
+            && Player.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Paused)
+        {
+            StopConnectWatchdog();
+            IsConnecting = false;
+        }
+
         if (e.PropertyName == nameof(Player.Position))
         {
             IsPreviewProgressChanging = false;
