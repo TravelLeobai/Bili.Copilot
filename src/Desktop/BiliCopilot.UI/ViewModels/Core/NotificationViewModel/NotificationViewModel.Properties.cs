@@ -15,8 +15,10 @@ public sealed partial class NotificationViewModel
 
     private DispatcherTimer _timer;
     private DispatcherTimer _liveTimer;
+    private DispatcherTimer _seasonTimer;
     private bool _isTileSupport;
 
     private List<string> _momentIds;
 }
+
 

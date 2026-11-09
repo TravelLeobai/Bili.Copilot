@@ -29,6 +29,14 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsEnabled="{x:Bind ViewModel.IsNotificationEnabled, Mode=OneWay}" IsOn="{x:Bind ViewModel.IsLiveStartNotificationEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard
+                Description="订阅的合集里出现新视频时提醒"
+                Header="订阅合集更新提醒">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Collections" />
+                </base:SettingsCard.HeaderIcon>
+                <ToggleSwitch IsEnabled="{x:Bind ViewModel.IsNotificationEnabled, Mode=OneWay}" IsOn="{x:Bind ViewModel.IsSeasonUpdateNotificationEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=ReplyNotification}">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="Comment" />

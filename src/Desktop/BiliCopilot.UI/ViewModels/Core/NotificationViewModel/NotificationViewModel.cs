@@ -60,10 +60,24 @@ public sealed partial class NotificationViewModel : ViewModelBase
             _liveTimer.Start();
         }
 
+        // 合集更新不用那么急，十分钟看一眼就够了.
+        if (_seasonTimer is null)
+        {
+            _seasonTimer = new DispatcherTimer();
+            _seasonTimer.Interval = TimeSpan.FromMinutes(10);
+            _seasonTimer.Tick += OnSeasonTimerTick;
+        }
+
+        if (!_seasonTimer.IsEnabled)
+        {
+            _seasonTimer.Start();
+        }
+
         await InitializeCommand.ExecuteAsync(default);
         TrySendVideoMomentNotificationsCommand.Execute(default);
         TrySendLiveStartNotificationsCommand.Execute(default);
         TrySendReplyNotificationsCommand.Execute(default);
+        TrySendSeasonUpdateNotificationsCommand.Execute(default);
     }
 
     [RelayCommand]
@@ -86,6 +100,10 @@ public sealed partial class NotificationViewModel : ViewModelBase
         TrySendLiveStartNotificationsCommand.Execute(default);
         TrySendReplyNotificationsCommand.Execute(default);
     }
+
+    private void OnSeasonTimerTick(object? sender, object e)
+        => TrySendSeasonUpdateNotificationsCommand.Execute(default);
 }
+
 
 

@@ -215,7 +215,10 @@ public enum SettingNames
     LiveClipCreatorIds,
     LiveClipCreatorNames,
     LiveDanmakuMedalFilter,
+    IsSeasonUpdateNotificationEnabled,
+    LastSeasonVideoIds,
 }
+
 
 
 

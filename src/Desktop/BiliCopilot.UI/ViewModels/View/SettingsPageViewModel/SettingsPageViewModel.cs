@@ -63,6 +63,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         IsVideoMomentNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, true);
         IsLiveStartNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsLiveStartNotificationEnabled, true);
         IsReplyNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsReplyNotificationEnabled, true);
+        IsSeasonUpdateNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsSeasonUpdateNotificationEnabled, true);
         NoP2P = SettingsToolkit.ReadLocalSetting(SettingNames.PlayWithoutP2P, false);
         CdnServer = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, Toolkits.PlayUrlOptimizer.DefaultCdnHost);
         PreferWebEngine = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerEngine, PlayerEngineType.Mpv) == PlayerEngineType.Web;
@@ -519,6 +520,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnIsReplyNotificationEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.IsReplyNotificationEnabled, value);
+
+    partial void OnIsSeasonUpdateNotificationEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.IsSeasonUpdateNotificationEnabled, value);
 
     partial void OnBottomProgressVisibleChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.IsBottomProgressBarVisible, value);
@@ -1084,6 +1088,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     }
 
 }
+
 
 
 
