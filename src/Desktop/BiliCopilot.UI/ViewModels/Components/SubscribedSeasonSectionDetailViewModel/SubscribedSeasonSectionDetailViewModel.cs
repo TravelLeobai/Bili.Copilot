@@ -10,6 +10,7 @@ using Richasy.BiliKernel.Models.Media;
 using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
 using System.Collections.ObjectModel;
+using BiliCopilot.UI.Services;
 using System.Globalization;
 
 namespace BiliCopilot.UI.ViewModels.Components;
@@ -113,6 +114,23 @@ public sealed partial class SubscribedSeasonSectionDetailViewModel : ViewModelBa
                 {
                     item.AvatarUri = videos[0].Publisher?.User?.Avatar?.Uri;
                 }
+
+                // 合集列表接口经常只给名字不给头像，退回收藏夹详情（folder info 里有 upper.face）.
+                if (item.AvatarUri is null)
+                {
+                    try
+                    {
+                        var detail = await _service
+                            .GetVideoFavoriteFolderDetailAsync(item.Data, 0)
+                            .ConfigureAwait(false);
+                        item.AvatarUri = detail.Detail?.Folder?.User?.Avatar?.Uri;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                Services.StartupTrace.Mark("SeasonCard:resolve-avatar", $"{item.Title} avatar={item.AvatarUri?.ToString() ?? "null"}");
                 var latest = videos?
                     .Where(p => p.PublishTime is not null)
                     .Select(p => p.PublishTime!.Value)
@@ -146,6 +164,10 @@ public sealed partial class SubscribedSeasonSectionDetailViewModel : ViewModelBa
         IsEmpty = Items.Count == 0;
     }
 }
+
+
+
+
 
 
 

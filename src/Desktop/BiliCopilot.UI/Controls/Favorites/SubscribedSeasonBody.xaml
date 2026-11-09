@@ -15,7 +15,7 @@
 
     <Grid>
         <ScrollViewer>
-            <Grid Margin="0,16,0,24">
+            <Grid Margin="20,16,20,24">
                 <repeater:AppRepeater
                     x:Name="SeasonRepeater"
                     ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}"
@@ -36,16 +36,25 @@
 
                                         <!--  封面：左下角压一枚 UP 头像  -->
                                         <Grid>
-                                            <controls:BasicCoverImage DecodeWidth="600" Source="{x:Bind CoverUri, Mode=OneWay}" />
                                             <controls:BasicCoverImage
-                                                Width="24"
-                                                Height="24"
+                                                CornerRadius="4,4,0,0"
+                                                DecodeWidth="600"
+                                                Source="{x:Bind CoverUri, Mode=OneWay}" />
+                                            <Border
+                                                Width="28"
+                                                Height="28"
                                                 Margin="10"
                                                 HorizontalAlignment="Left"
                                                 VerticalAlignment="Bottom"
-                                                CornerRadius="12"
-                                                DecodeWidth="80"
-                                                Source="{x:Bind AvatarUri, Mode=OneWay}" />
+                                                Background="Transparent"
+                                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="14">
+                                                <controls:BasicCoverImage
+                                                    CornerRadius="12"
+                                                    DecodeWidth="80"
+                                                    Source="{x:Bind AvatarUri, Mode=OneWay}" />
+                                            </Border>
                                         </Grid>
 
                                         <Grid
@@ -109,4 +118,6 @@
         <base:LoadingWidget Text="加载中，请稍候" Visibility="{x:Bind ViewModel.IsLoading, Mode=OneWay}" />
     </Grid>
 </local:SubscribedSeasonControlBase>
+
+
 
