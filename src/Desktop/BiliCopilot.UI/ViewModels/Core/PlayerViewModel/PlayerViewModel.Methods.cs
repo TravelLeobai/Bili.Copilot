@@ -617,17 +617,32 @@ public sealed partial class PlayerViewModel
             TrackWatchedVideo();
         }
 
-        // 播放器一进入播放态、时长也读到了，说明画面/声音已经起来，这时收掉"连接中".
-        // 原来只在初始化流程的 finally 里关，而 finally 前面还排着字幕、弹幕、统计这些
-        // await，提示框会多挂好几秒，看着像加载卡住了.
+        // mpv 的属性变更不保证在 UI 线程上抛，而 IsConnecting 绑着 XAML 的 Visibility，
+        // 跨线程直接改会碰 UI（实测闪退：事件日志 coreclr / Xaml.Controls + c0000005），
+        // 所以统一回 UI 线程处理.
         if (e.PropertyName == nameof(Player.PlaybackState)
             && IsConnecting
             && Player is not null
             && Player.Duration > 1
             && Player.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Paused)
         {
-            StopConnectWatchdog();
-            IsConnecting = false;
+            var dispatcher = this.Get<Microsoft.UI.Dispatching.DispatcherQueue>();
+            if (dispatcher.HasThreadAccess)
+            {
+                StopConnectWatchdog();
+                IsConnecting = false;
+            }
+            else
+            {
+                dispatcher.TryEnqueue(() =>
+                {
+                    if (IsConnecting)
+                    {
+                        StopConnectWatchdog();
+                        IsConnecting = false;
+                    }
+                });
+            }
         }
 
         if (e.PropertyName == nameof(Player.Position))
@@ -1409,6 +1424,7 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
 
 
 

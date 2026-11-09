@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-11-09T14:14:14.2475646+08:00",
+  "build": "skipped(-NoBuild)",
+  "deploy": "ok: E:\\Documents\\deepseek-harness\\default-workspace\\bili-copilot-v2\\src\\_build\\x64\\Debug\\BiliCopilot.UI\\bin (v1.0.0.9)",
+  "launch1": "ok: pid=51988",
+  "launch2": "ok: pid=37336",
+  "ui": "ok: nav=搜索|动态|直播|设置 interaction=skipped(no-pattern)",
+  "gitSha": "3a3036a",
+  "version": "1.0.0.9",
+  "resultDir": "E:\\Documents\\deepseek-harness\\default-workspace\\bili-copilot-v2\\tools\\smoke-results\\20261109-141414"
+}
