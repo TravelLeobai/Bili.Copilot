@@ -203,7 +203,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             try
             {
+                        Services.PlayerLifecycle.Log("step", $"PlayerVM#{LifecycleId}", "pause");
                 await Client.PauseAsync();
+                        Services.PlayerLifecycle.Log("step", $"PlayerVM#{LifecycleId}", "stop");
                 await Client.StopAsync();
             }
             catch
@@ -352,7 +354,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 {
                     try
                     {
+                        Services.PlayerLifecycle.Log("step", $"PlayerVM#{LifecycleId}", "pause");
                         await Client.PauseAsync();
+                        Services.PlayerLifecycle.Log("step", $"PlayerVM#{LifecycleId}", "stop");
                         await Client.StopAsync();
                     }
                     catch
@@ -360,7 +364,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                     }
                 }
                 Services.PlayerLifecycle.Log("detach", $"PlayerVM#{LifecycleId}", "dispose old surface", withStack: true);
+                Services.PlayerLifecycle.Log("step", $"PlayerVM#{LifecycleId}", "surface-dispose-begin");
                 await Player.DisposeAsync();
+                Services.PlayerLifecycle.Log("step", $"PlayerVM#{LifecycleId}", "surface-dispose-end");
                 Player = null;
 
                 // 同 client 上再建实例前，确认 mpv 已经把 vo/ao 交还：
