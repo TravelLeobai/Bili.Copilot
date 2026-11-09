@@ -612,39 +612,34 @@ public sealed partial class PlayerViewModel
 
     private async void OnPlayerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // mpv 的属性变更不保证在 UI 线程上抛。这个方法体里全是 UI 操作
+        // （PositionText、Chapters、IsEnd、IsConnecting 都直连 XAML），
+        // 在回调线程上跑会随机 c0000005 闪退，所以入口统一回流到 UI 线程，
+        // 后面的逻辑就都当自己在 UI 线程上写.
+        var dispatcher = this.Get<Microsoft.UI.Dispatching.DispatcherQueue>();
+        if (!dispatcher.HasThreadAccess)
+        {
+            dispatcher.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => OnPlayerPropertyChanged(sender, e));
+            return;
+        }
+
         if (e.PropertyName is nameof(Player.Position) or nameof(Player.PlaybackState))
         {
             TrackWatchedVideo();
         }
 
-        // mpv 的属性变更不保证在 UI 线程上抛，而 IsConnecting 绑着 XAML 的 Visibility，
-        // 跨线程直接改会碰 UI（实测闪退：事件日志 coreclr / Xaml.Controls + c0000005），
-        // 所以统一回 UI 线程处理.
+        // 播放器一进入播放态、时长也读到了，说明画面/声音已经起来，这时收掉"连接中".
+        // 原来只在初始化流程的 finally 里关，而 finally 前面还排着字幕、弹幕、统计这些
+        // await，提示框会多挂好几秒，看着像加载卡住了.
         if (e.PropertyName == nameof(Player.PlaybackState)
             && IsConnecting
             && Player is not null
             && Player.Duration > 1
             && Player.PlaybackState is MpvPlayerState.Playing or MpvPlayerState.Paused)
         {
-            var dispatcher = this.Get<Microsoft.UI.Dispatching.DispatcherQueue>();
-            if (dispatcher.HasThreadAccess)
-            {
-                StopConnectWatchdog();
-                IsConnecting = false;
-            }
-            else
-            {
-                dispatcher.TryEnqueue(() =>
-                {
-                    if (IsConnecting)
-                    {
-                        StopConnectWatchdog();
-                        IsConnecting = false;
-                    }
-                });
-            }
+            StopConnectWatchdog();
+            IsConnecting = false;
         }
-
         if (e.PropertyName == nameof(Player.Position))
         {
             IsPreviewProgressChanging = false;
