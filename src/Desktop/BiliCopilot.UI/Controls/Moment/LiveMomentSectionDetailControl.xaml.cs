@@ -123,6 +123,27 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         }
     }
 
+    private void OnCardPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetCardLift(sender, true);
+
+    private void OnCardPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        => SetCardLift(sender, false);
+
+    /// <summary>
+    /// 悬停轻微上浮：只动 Translation，交给 XAML 里的 Vector3Transition 补间，
+    /// 不改布局尺寸，所以不会把瀑布流的排版顶歪.
+    /// </summary>
+    /// <param name="sender">卡片根 Border.</param>
+    /// <param name="isHover">是否进入.</param>
+    private static void SetCardLift(object sender, bool isHover)
+    {
+        if (sender is not UIElement element)
+        {
+            return;
+        }
+
+        element.Translation = isHover ? new System.Numerics.Vector3(0, -4, 16) : System.Numerics.Vector3.Zero;
+    }
     private void OnCardTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
         if (sender is FrameworkElement element && element.DataContext is LiveSectionCardViewModel card)
@@ -148,4 +169,6 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
+
 

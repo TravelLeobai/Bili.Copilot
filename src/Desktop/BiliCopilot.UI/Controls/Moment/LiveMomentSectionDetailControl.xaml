@@ -15,109 +15,122 @@
           放在内层 Grid.Resources 会取不到（之前卡片整片空白就是这个原因）  -->
     <local:LiveSectionControlBase.Resources>
         <DataTemplate x:Key="LiveCardTemplate" x:DataType="items:LiveSectionCardViewModel">
-            <Grid
-                MinHeight="240"
+            <!--  和视频卡片对齐：描边 + 悬停轻微上浮。上浮交给 TranslationTransition，离开时归零  -->
+            <Border
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
                 CornerRadius="8"
+                PointerEntered="OnCardPointerEntered"
+                PointerExited="OnCardPointerExited"
                 Tapped="OnCardTapped">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="126" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
+                <Border.TranslationTransition>
+                    <Vector3Transition Duration="0:0:0.15" />
+                </Border.TranslationTransition>
+                <Grid MinHeight="240">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="126" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <!--  作者行：头像 + 名字 + 右侧角标（右边距 12，和头像左边距一致）  -->
-                <Grid
-                    Margin="12,10,12,6"
-                    ColumnSpacing="10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <controls:BasicCoverImage
-                        Width="32"
-                        Height="32"
-                        CornerRadius="16"
-                        DecodeWidth="100"
-                        Source="{x:Bind Avatar, Mode=OneWay}" />
+                    <!--  作者行：头像 + 名字 + 右侧角标（右边距 12，和头像左边距一致）  -->
+                    <Grid
+                        Margin="12,10,12,6"
+                        ColumnSpacing="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <controls:BasicCoverImage
+                            Width="32"
+                            Height="32"
+                            CornerRadius="16"
+                            DecodeWidth="100"
+                            Source="{x:Bind Avatar, Mode=OneWay}" />
+                        <TextBlock
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            FontSize="13"
+                            MaxLines="1"
+                            Text="{x:Bind AuthorName, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis" />
+                        <!--  直播中：实心 accent；回放/切片：outline  -->
+                        <Border
+                            Grid.Column="2"
+                            Padding="6,1"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                            CornerRadius="4"
+                            Visibility="{x:Bind IsLive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <TextBlock
+                                FontSize="10"
+                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                Text="{x:Bind Badge, Mode=OneWay}" />
+                        </Border>
+                        <Border
+                            Grid.Column="2"
+                            Padding="5,0"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Visibility="{x:Bind IsLive, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
+                            <TextBlock
+                                FontSize="10"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                Text="{x:Bind Badge, Mode=OneWay}" />
+                        </Border>
+                    </Grid>
+
+                    <!--  封面  -->
+                    <Grid Grid.Row="1">
+                        <controls:BasicCoverImage DecodeWidth="600" Source="{x:Bind CoverUri, Mode=OneWay}" />
+                    </Grid>
+
                     <TextBlock
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
+                        Grid.Row="2"
+                        Margin="12,8,12,4"
                         FontSize="13"
-                        MaxLines="1"
-                        Text="{x:Bind AuthorName, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis" />
-                    <!--  直播中：实心 accent；回放/切片：outline  -->
-                    <Border
-                        Grid.Column="2"
-                        Padding="6,1"
-                        VerticalAlignment="Center"
-                        Background="{ThemeResource AccentFillColorDefaultBrush}"
-                        CornerRadius="4"
-                        Visibility="{x:Bind IsLive, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        MaxLines="{x:Bind TitleMaxLines, Mode=OneWay}"
+                        Text="{x:Bind Title, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap" />
+
+                    <!--  底部：只保留用浏览器打开  -->
+                    <Grid
+                        Grid.Row="3"
+                        Margin="12,0,8,8"
+                        ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock
-                            FontSize="10"
-                            Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                            Text="{x:Bind Badge, Mode=OneWay}" />
-                    </Border>
-                    <Border
-                        Grid.Column="2"
-                        Padding="5,0"
-                        VerticalAlignment="Center"
-                        Background="Transparent"
-                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
-                        BorderThickness="1"
-                        CornerRadius="4"
-                        Visibility="{x:Bind IsLive, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
-                        <TextBlock
-                            FontSize="10"
-                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                            Text="{x:Bind Badge, Mode=OneWay}" />
-                    </Border>
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Opacity="0.6"
+                            Text="{x:Bind Detail, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis" />
+                        <!--  不用播放器那套固定深色样式：改走系统主题色，深浅色下都跟着变  -->
+                        <Button
+                            Grid.Column="1"
+                            Padding="6"
+                            AutomationProperties.Name="在浏览器中打开"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="OnOpenInBrowserClick"
+                            CornerRadius="6"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            ToolTipService.ToolTip="在浏览器中打开">
+                            <ic:SymbolIcon FontSize="14" Symbol="Globe" />
+                        </Button>
+                    </Grid>
                 </Grid>
-
-                <!--  封面  -->
-                <Grid Grid.Row="1">
-                    <controls:BasicCoverImage DecodeWidth="600" Source="{x:Bind CoverUri, Mode=OneWay}" />
-                </Grid>
-
-                <TextBlock
-                    Grid.Row="2"
-                    Margin="12,8,12,4"
-                    FontSize="13"
-                    MaxLines="{x:Bind TitleMaxLines, Mode=OneWay}"
-                    Text="{x:Bind Title, Mode=OneWay}"
-                    TextTrimming="CharacterEllipsis"
-                    TextWrapping="Wrap" />
-
-                <!--  底部：只保留用浏览器打开  -->
-                <Grid
-                    Grid.Row="3"
-                    Margin="12,0,8,8"
-                    ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        Opacity="0.6"
-                        Text="{x:Bind Detail, Mode=OneWay}"
-                        TextTrimming="CharacterEllipsis" />
-                    <Button
-                        Grid.Column="1"
-                        Padding="6"
-                        AutomationProperties.Name="在浏览器中打开"
-                        Click="OnOpenInBrowserClick"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
-                        ToolTipService.ToolTip="在浏览器中打开">
-                        <ic:SymbolIcon FontSize="14" Symbol="Globe" />
-                    </Button>
-                </Grid>
-            </Grid>
+            </Border>
         </DataTemplate>
     </local:LiveSectionControlBase.Resources>
 
