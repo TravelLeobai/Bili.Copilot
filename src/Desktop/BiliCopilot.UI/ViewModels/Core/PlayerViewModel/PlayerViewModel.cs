@@ -83,7 +83,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     [RelayCommand]
     internal Task InitializeAsync(MediaSnapshot snapshot)
-        => InitializeCoreAsync(snapshot, reusePlayer: false);
+        => InitializeCoreAsync(snapshot, reusePlayer: CanReusePlayer());
 
     /// <summary>
     /// 从结束页切到另一个视频：复用现有 mpv 实例，只换解析器再重新加载媒体.
@@ -94,10 +94,21 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     internal Task InitializeWithReuseAsync(MediaSnapshot snapshot)
         => InitializeCoreAsync(snapshot, reusePlayer: true);
 
+    /// <summary>
+    /// 已经有可用 mpv 实例时，切视频一律复用，不重建.
+    /// 播放列表 / 合集 / 分 P / 结束页推荐全走这条判断：重建实例会白屏卡死.
+    /// </summary>
+    /// <returns>能否复用.</returns>
+    private bool CanReusePlayer()
+        => !UseWebEngine
+        && !_forceWebFallback
+        && !_mpvInitFailed
+        && Player is { IsWebEngine: false, Mpv: not null };
+
     private async Task InitializeCoreAsync(MediaSnapshot snapshot, bool reusePlayer)
     {
-        _snapshot = snapshot;
         IsLive = snapshot.Type == BiliMediaType.Live;
+        _snapshot = snapshot;
         HookCdnStatus();
         ResetEndScreen();
         _sponsorSegments = Array.Empty<SponsorSegment>();
@@ -1417,6 +1428,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
 
 
