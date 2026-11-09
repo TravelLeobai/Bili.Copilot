@@ -10,23 +10,14 @@ namespace BiliCopilot.UI.Controls;
 
 public sealed partial class BasicCoverImage : ImageExBase
 {
-    // 解码尺寸档位：同档位的图共用一份磁盘缓存和解码结果，
-    // 档位不散就不会出现「一张图七八种尺寸」的重复下载。
-    private static readonly int[] DecodeBuckets = [32, 48, 64, 96, 128, 192, 256, 320, 384, 480, 600];
+    // 解码宽度档位：同档位共用一份磁盘缓存与解码结果，不散成一堆相近尺寸.
+    private static readonly int[] DecodeBuckets = [64, 96, 128, 160, 200, 256, 320, 400, 480, 600, 720, 960, 1280];
 
     private readonly static BasicScaleEffect _scaleEffect = new();
 
     private readonly System.Diagnostics.Stopwatch _loadStopwatch = new();
 
     private bool _isNormalizingSource;
-
-    // XAML 里写的 DecodeWidth 现在当作「上限」：真实解码宽度按控件实际渲染宽度 × 缩放算，
-    // 但不超过这个上限。这样 600 的封面卡在小列里不会白解一张 600 宽的图，
-    // 高 DPI 下 100 的头像也不会因为不够而糊。
-    private double _maxDecodeWidth;
-
-    // 只在「尺寸明显变化」时才换解码宽度，否则每次布局微调都会丢掉已有解码结果、重新请求.
-    private const double DecodeChangeThreshold = 0.25;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasicCoverImage"/> class.
@@ -53,11 +44,10 @@ public sealed partial class BasicCoverImage : ImageExBase
 
         RegisterPropertyChangedCallback(DecodeWidthProperty, (_, _) => NormalizeSource());
 
-        // 布局给了真实尺寸之后再决定解码宽度：XAML 里那个值只作为上限.
-        SizeChanged += (_, e) => ApplyAutoDecodeWidth(e.NewSize.Width);
-
-        // 缩略图地址是按「逻辑宽度」拼的，窗口缩放/DPI 变化后要重算一次.
-        Loaded += (_, _) => ApplyAutoDecodeWidth(ActualWidth);
+        // 布局给到真实宽度后再看够不够：只在不足时抬高解码宽度.
+        // 只抬不降 —— 往下调会把服务端缩略图钉在很小的尺寸上，放大后就是马赛克.
+        SizeChanged += (_, e) => RaiseDecodeWidthIfNeeded(e.NewSize.Width);
+        Loaded += (_, _) => RaiseDecodeWidthIfNeeded(ActualWidth);
     }
 
     protected override string GetCacheSubFolder()
@@ -90,50 +80,36 @@ public sealed partial class BasicCoverImage : ImageExBase
     }
 
     /// <summary>
-    /// 按控件实际渲染尺寸（含 DPI 缩放）决定解码宽度，并吸附到档位。
+    /// 实际渲染需要的像素 = 渲染宽度 × DPI 缩放；比当前解码宽度大就抬到最近的档位.
+    /// 只抬不降：降了会让服务端缩略图变小，之后放大显示就是马赛克.
     /// </summary>
     /// <param name="renderedWidth">控件渲染宽度（逻辑像素）.</param>
-    private void ApplyAutoDecodeWidth(double renderedWidth)
+    private void RaiseDecodeWidthIfNeeded(double renderedWidth)
     {
-        if (renderedWidth <= 1)
+        if (renderedWidth <= 1 || DecodeWidth <= 0)
         {
             return;
-        }
-
-        // XAML 里没有显式给值时，_maxDecodeWidth 是 0：用当前默认当上限.
-        if (_maxDecodeWidth <= 0)
-        {
-            _maxDecodeWidth = DecodeWidth > 0 ? DecodeWidth : 600;
         }
 
         var scale = XamlRoot?.RasterizationScale ?? 1d;
         var needed = renderedWidth * scale;
-
-        // 不放大到上限以上：上限代表这块图最多需要多少像素.
-        var target = Math.Min(needed, _maxDecodeWidth);
-
-        // 预估误差允许 25%：低于这个差值就不动，避免反复重新解码.
-        var bucket = PickBucket(target);
-        var current = DecodeWidth;
-        if (current > 0 && Math.Abs(bucket - current) <= current * DecodeChangeThreshold)
+        if (needed <= DecodeWidth + 1)
         {
             return;
         }
 
-        DecodeWidth = bucket;
-    }
-
-    private static double PickBucket(double target)
-    {
         foreach (var bucket in DecodeBuckets)
         {
-            if (bucket >= target)
+            if (bucket >= needed)
             {
-                return bucket;
+                if (bucket > DecodeWidth)
+                {
+                    DecodeWidth = bucket;
+                }
+
+                return;
             }
         }
-
-        return DecodeBuckets[^1];
     }
 
     private void DrawBlurImage(
@@ -161,11 +137,6 @@ public sealed partial class BasicCoverImage : ImageExBase
         if (_isNormalizingSource)
         {
             return;
-        }
-
-        if (_maxDecodeWidth <= 0 && DecodeWidth > 0)
-        {
-            _maxDecodeWidth = DecodeWidth;
         }
 
         var current = Source;
