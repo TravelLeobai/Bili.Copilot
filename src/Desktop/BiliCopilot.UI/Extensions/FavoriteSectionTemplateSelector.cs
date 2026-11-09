@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.Components;
 
@@ -11,6 +11,11 @@ internal sealed partial class FavoriteSectionTemplateSelector : DataTemplateSele
     public DataTemplate VideoTempalte { get; set; }
 
     public DataTemplate UgcTemplate { get; set; }
+
+    /// <summary>
+    /// 订阅合集模板.
+    /// </summary>
+    public DataTemplate SubscriptionTemplate { get; set; }
 
     protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
     {
@@ -26,7 +31,12 @@ internal sealed partial class FavoriteSectionTemplateSelector : DataTemplateSele
         {
             return UgcTemplate;
         }
+        else if (item is SubscribedSeasonSectionDetailViewModel)
+        {
+            return SubscriptionTemplate;
+        }
 
         return default;
     }
 }
+

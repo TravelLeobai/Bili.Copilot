@@ -6,6 +6,7 @@
     xmlns:components="using:BiliCopilot.UI.ViewModels.Components"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ext="using:BiliCopilot.UI.Extensions"
+    xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Favorites"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -20,10 +21,28 @@
         <DataTemplate x:Key="UgcTemplate" x:DataType="components:UgcSeasonFavoriteSectionDetailViewModel">
             <local:UgcFavoriteHeader ViewModel="{x:Bind}" />
         </DataTemplate>
-        <ext:FavoriteSectionTemplateSelector
+        <DataTemplate x:Key="SubscriptionTemplate" x:DataType="components:SubscribedSeasonSectionDetailViewModel">
+            <Grid Margin="16,0,0,0" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ic:SymbolIcon
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Symbol="Collections" />
+                <TextBlock
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    FontSize="15"
+                    FontWeight="SemiBold"
+                    Text="订阅合集" />
+            </Grid>
+        </DataTemplate>        <ext:FavoriteSectionTemplateSelector
             x:Key="Selector"
             PgcTemplate="{StaticResource PgcTemplate}"
             UgcTemplate="{StaticResource UgcTemplate}"
+            SubscriptionTemplate="{StaticResource SubscriptionTemplate}"
             VideoTempalte="{StaticResource VideoTemplate}" />
     </UserControl.Resources>
 
@@ -34,3 +53,4 @@
             Style="{StaticResource AppContentControlStyle}" />
     </Grid>
 </local:FavoritesPageControlBase>
+

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.Toolkits;
@@ -81,6 +81,10 @@ public sealed partial class FavoritesPageViewModel : LayoutPageViewModelBase
         {
             sectionSettingValue = $"ugc_{ugcVM.Data.Id}";
         }
+        else if (vm is SubscribedSeasonSectionDetailViewModel)
+        {
+            sectionSettingValue = "season_sub";
+        }
 
         SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastSelectedFavoriteSection, sectionSettingValue);
         CurrentSection = vm;
@@ -120,6 +124,15 @@ public sealed partial class FavoritesPageViewModel : LayoutPageViewModelBase
                 SelectSection(section);
             }
         }
+        else if (lastSelectedSection == "season_sub")
+        {
+            var section = Sections.OfType<SubscribedSeasonSectionDetailViewModel>().FirstOrDefault();
+            if (section is not null)
+            {
+                isSelected = true;
+                SelectSection(section);
+            }
+        }
         else if (lastSelectedSection.StartsWith("ugc"))
         {
             var id = lastSelectedSection.Replace("ugc_", string.Empty);
@@ -142,6 +155,18 @@ public sealed partial class FavoritesPageViewModel : LayoutPageViewModelBase
         try
         {
             var (groups, defaultGroup) = await _service.GetVideoFavoriteGroupsAsync();
+
+            // 订阅合集（IsUgcSeason）不单独占一条侧栏：全部收进一个「订阅合集」分区，
+            // 点进去看到的才是合集卡片。位置放在追番、追剧后面.
+            var seasonFolders = groups
+                .SelectMany(p => p.Folders)
+                .Where(p => p.IsUgcSeason == true)
+                .ToList();
+            if (seasonFolders.Count > 0)
+            {
+                Sections.Add(new SubscribedSeasonSectionDetailViewModel(seasonFolders, _service));
+            }
+
             var defaultGroupVM = new VideoFavoriteSectionDetailViewModel(defaultGroup.Folder, _service);
             defaultGroupVM.InjectFirstPageData(defaultGroup);
             Sections.Add(defaultGroupVM);
@@ -150,10 +175,12 @@ public sealed partial class FavoritesPageViewModel : LayoutPageViewModelBase
             {
                 foreach (var folder in group.Folders)
                 {
-                    var folderVM = folder.IsUgcSeason == true
-                        ? (IFavoriteSectionDetailViewModel)new UgcSeasonFavoriteSectionDetailViewModel(folder, _service)
-                        : new VideoFavoriteSectionDetailViewModel(folder, _service);
-                    Sections.Add(folderVM);
+                    if (folder.IsUgcSeason == true)
+                    {
+                        continue;
+                    }
+
+                    Sections.Add(new VideoFavoriteSectionDetailViewModel(folder, _service));
                 }
             }
         }
@@ -163,3 +190,4 @@ public sealed partial class FavoritesPageViewModel : LayoutPageViewModelBase
         }
     }
 }
+

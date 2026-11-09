@@ -20,10 +20,13 @@
         <DataTemplate x:Key="UgcTemplate" x:DataType="components:UgcSeasonFavoriteSectionDetailViewModel">
             <local:UgcFavoriteBody ViewModel="{x:Bind}" />
         </DataTemplate>
-        <ext:FavoriteSectionTemplateSelector
+        <DataTemplate x:Key="SubscriptionTemplate" x:DataType="components:SubscribedSeasonSectionDetailViewModel">
+            <local:SubscribedSeasonBody ViewModel="{x:Bind}" />
+        </DataTemplate>        <ext:FavoriteSectionTemplateSelector
             x:Key="Selector"
             PgcTemplate="{StaticResource PgcTemplate}"
             UgcTemplate="{StaticResource UgcTemplate}"
+            SubscriptionTemplate="{StaticResource SubscriptionTemplate}"
             VideoTempalte="{StaticResource VideoTemplate}" />
     </UserControl.Resources>
 
@@ -34,3 +37,4 @@
             Style="{StaticResource AppContentControlStyle}" />
     </Grid>
 </local:FavoritesPageControlBase>
+
