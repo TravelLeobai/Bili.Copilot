@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
@@ -64,8 +64,11 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
 
         if (next is VideoPart part)
         {
-            _snapshot.PreferPart = part;
-            Parent.InitializeCommand.Execute(_snapshot);
+            // 不能就地改 _snapshot.PreferPart 再重新初始化：PlayerViewModel 判断"是不是同一个视频"
+            // 靠比较快照里的媒体 id，改同一个对象的话前后永远相等，于是走了复用 mpv 的分支，
+            // 换了 cid 的片源在旧 vo 上重新 init 会失败 —— 表现就是点「下一集」白屏卡死.
+            // 这里另起一个快照，让前后两个快照各自的 part 能被识别出来.
+            Parent.InitializeCommand.Execute(CreateSnapshotForPart(part));
             return;
         }
         else if (next is VideoInformation video)
@@ -91,9 +94,8 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
 
         if (next is VideoPart part)
         {
-            _snapshot.PreferPart = part;
-            _snapshot.StartPosition = 0;
-            Parent.InitializeCommand.Execute(_snapshot);
+            // 同上：另起快照，别就地改 _snapshot.
+            Parent.InitializeCommand.Execute(CreateSnapshotForPart(part));
             return;
         }
         else if (next is VideoInformation video)
@@ -103,6 +105,21 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
 
         await Task.CompletedTask;
     }
+
+    /// <summary>
+    /// 用当前视频信息另起一个快照，只换分P，其余（播放列表、私密播放、类型）原样带过去.
+    /// </summary>
+    /// <param name="part">目标分P.</param>
+    /// <returns>新快照.</returns>
+    private MediaSnapshot CreateSnapshotForPart(VideoPart part)
+        => new(_snapshot.Video!, _snapshot.IsPrivate)
+        {
+            PreferPart = part,
+            Playlist = _snapshot.Playlist,
+            Type = _snapshot.Type,
+            PreferQuality = _snapshot.PreferQuality,
+            StartPosition = 0,
+        };
 
     [RelayCommand]
     private void OpenPanel()
@@ -185,3 +202,5 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
         PropertiesUpdated?.Invoke(this, args);
     }
 }
+
+

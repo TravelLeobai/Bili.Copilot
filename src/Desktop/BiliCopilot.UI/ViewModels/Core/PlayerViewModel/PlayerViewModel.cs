@@ -140,10 +140,21 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// </summary>
     /// <returns>能否复用.</returns>
     private static string GetSnapshotMediaId(MediaSnapshot? snapshot)
-        => snapshot?.Video?.Identifier.Id
-        ?? snapshot?.Live?.Identifier.Id
-        ?? snapshot?.Episode?.Identifier.Id
-        ?? string.Empty;
+    {
+        if (snapshot is null)
+        {
+            return string.Empty;
+        }
+
+        // 分P 必须算进身份：同一个 BV 换一集是不同片源（cid 变了），
+        // 只比 BV 号会被判成"同一个视频"而去复用 mpv，换源时 vo 重新 init 失败 —— 白屏卡死.
+        var id = snapshot.Video?.Identifier.Id
+            ?? snapshot.Live?.Identifier.Id
+            ?? snapshot.Episode?.Identifier.Id
+            ?? string.Empty;
+        var part = snapshot.PreferPart?.Identifier.Id;
+        return string.IsNullOrEmpty(part) ? id : $"{id}#{part}";
+    }
 
     private bool CanReusePlayer()
         => !UseWebEngine
@@ -1497,6 +1508,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
 
 
