@@ -35,6 +35,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
     /// </summary>
     public MainWindow()
     {
+        Services.StartupTrace.Mark("MainWindow:ctor:begin");
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         Title = ResourceToolkit.GetLocalizedString(StringNames.AppName);
@@ -48,13 +49,18 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         var mainFrame = new BiliCopilot.UI.Controls.MainFrame();
         var overlayFrame = new BiliCopilot.UI.Controls.OverlayFrame();
         navigationViewModel.Initialize(null, mainFrame, overlayFrame);
+        Services.StartupTrace.Mark("MainWindow:ctor:navigation-init-done");
         _shell = new MainShell(navigationViewModel, mainFrame, overlayFrame, this.Get<BiliCopilot.UI.ViewModels.Components.AccountViewModel>());
         _shellHost = new ReactorHostControl();
         RootGrid.Children.Insert(0, _shellHost);
+        Services.StartupTrace.Mark("MainWindow:ctor:host-added");
         _shellHost.Mount(_shell);
+        Services.StartupTrace.Mark("MainWindow:ctor:shell-mounted");
         _shellHost.Loaded += OnShellHostLoaded;
         ApplyBackdropSetting(SettingsToolkit.ReadLocalSetting(SettingNames.EnableAcrylicBackdrop, true));
+        Services.StartupTrace.Mark("MainWindow:ctor:selected-item:begin");
         SelectedItem();
+        Services.StartupTrace.Mark("MainWindow:ctor:selected-item:exit");
         Activated += OnActivated;
         Closed += OnClosed;
     }
@@ -286,6 +292,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         }
     }
 }
+
 
 
 

@@ -18,6 +18,7 @@ namespace BiliCopilot.UI.Reactor;
 public sealed class MomentShell : Component
 {
     private readonly MomentPageViewModel _viewModel;
+    private bool _renderMarked;
     private readonly MomentHeader _header = new();
     private readonly VideoMomentSectionDetailControl _videoControl = new();
     private readonly ComprehensiveMomentSectionDetailControl _comprehensiveControl = new();
@@ -43,6 +44,12 @@ public sealed class MomentShell : Component
     /// <inheritdoc/>
     public override Element Render()
     {
+        if (!_renderMarked)
+        {
+            _renderMarked = true;
+            Services.StartupTrace.Mark("MomentShell:first-render");
+        }
+
         var vm = UseObservableTree(_viewModel);
         var section = vm.SelectedSection;
         var isVideo = section is VideoMomentSectionDetailViewModel;
@@ -109,6 +116,8 @@ public sealed class MomentShell : Component
             children.ToArray());
     }
 }
+
+
 
 
 

@@ -83,11 +83,19 @@ public sealed class MainShell : Component
     /// <summary>
     /// 标题栏元素，供窗口设置拖拽区域.
     /// </summary>
+    private static bool _firstRenderMarked;
+
     public FrameworkElement? TitleBarElement => _titleBarRef?.Current;
 
     /// <inheritdoc/>
     public override Element Render()
     {
+        if (!_firstRenderMarked)
+        {
+            _firstRenderMarked = true;
+            Services.StartupTrace.Mark("MainShell:first-render");
+        }
+
         var (isPaneOpen, setIsPaneOpen) = UseState(true);
         _togglePaneAction = () =>
         {
@@ -392,6 +400,8 @@ public sealed class MainShell : Component
         item?.NavigateCommand.Execute(default);
     }
 }
+
+
 
 
 

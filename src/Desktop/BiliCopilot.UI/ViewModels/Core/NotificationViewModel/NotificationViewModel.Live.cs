@@ -49,7 +49,7 @@ public sealed partial class NotificationViewModel
             }
 
             var currentIds = rooms.Select(p => p.RoomId.ToString()).ToList();
-            var previousRaw = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LastLiveRoomIds, string.Empty);
+            var previousRaw = Services.AppStateStore.GetString(Models.Constants.SettingNames.LastLiveRoomIds.ToString());
             var previousIds = string.IsNullOrEmpty(previousRaw)
                 ? []
                 : previousRaw.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -86,7 +86,7 @@ public sealed partial class NotificationViewModel
     }
 
     private void SaveLiveRoomIds(List<string> ids)
-        => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastLiveRoomIds, string.Join(',', ids));
+        => Services.AppStateStore.Set(Models.Constants.SettingNames.LastLiveRoomIds.ToString(), string.Join(',', ids));
 
     private static void ShowLiveStartToast(LiveRoomBrief room)
     {
@@ -312,5 +312,7 @@ public sealed partial class NotificationViewModel
 
     private sealed record LiveRoomBrief(long RoomId, long UserId, string UserName, string Title, string Face);
 }
+
+
 
 

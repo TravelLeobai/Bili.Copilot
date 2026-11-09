@@ -45,13 +45,14 @@ public sealed partial class MomentPageViewModel : ViewModelBase
         // 记住上次停在哪一段：老设置只有"是不是视频"，用新键存完整的段类型.
         // 直播段（Live）故意不参与恢复：这一段只要出问题，启动就会崩在它里面，
         // 连主界面都进不来 —— 之前就是被这个坑反复挡住.
-        var lastType = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LastMomentSectionType, -1);
-        var isLastVideoSection = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LastMomentSectionIsVideo, true);
+        var lastType = Services.AppStateStore.GetInt(Models.Constants.SettingNames.LastMomentSectionType.ToString(), -1);
+        var isLastVideoSection = Services.AppStateStore.GetBool(Models.Constants.SettingNames.LastMomentSectionIsVideo.ToString(), true);
         var section = lastType == (int)Models.Constants.MomentSectionType.Video || lastType == (int)Models.Constants.MomentSectionType.Comprehensive
             ? Sections.FirstOrDefault(p => (int)p.SectionType == lastType)
             : isLastVideoSection ? Sections.First() : Sections.Last();
         SelectSectionCommand.Execute(section ?? Sections.First());
         this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, () => Initialized?.Invoke(this, EventArgs.Empty));
+        Services.StartupTrace.Mark("MomentPage:Initialize:exit");
     }
 
     [RelayCommand]
@@ -65,8 +66,8 @@ public sealed partial class MomentPageViewModel : ViewModelBase
         SelectedSection = section;
         OnPropertyChanged(nameof(IsLiveSectionSelected));
         var isVideo = section is VideoMomentSectionDetailViewModel;
-        SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastMomentSectionIsVideo, isVideo);
-        SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastMomentSectionType, (int)section.SectionType);
+        Services.AppStateStore.Set(Models.Constants.SettingNames.LastMomentSectionIsVideo.ToString(), isVideo);
+        Services.AppStateStore.Set(Models.Constants.SettingNames.LastMomentSectionType.ToString(), (int)section.SectionType);
         SelectedSection.InitializeCommand.Execute(default);
     }
 
@@ -95,6 +96,7 @@ public sealed partial class MomentPageViewModel : ViewModelBase
     public void SetVideoOpenedMarkStyle(Models.Constants.MomentVideoOpenedMarkStyle style)
         => Sections?.OfType<VideoMomentSectionDetailViewModel>().FirstOrDefault()?.SetOpenedMarkStyle(style);
 }
+
 
 
 

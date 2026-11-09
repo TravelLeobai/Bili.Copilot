@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Pages;
@@ -26,6 +26,7 @@ public sealed partial class StartupWindow : WindowBase
     public StartupWindow()
     {
         InitializeComponent();
+        Services.StartupTrace.Mark("StartupWindow:ctor:begin");
         IsMaximizable = false;
         IsMinimizable = false;
         IsResizable = false;
@@ -37,6 +38,13 @@ public sealed partial class StartupWindow : WindowBase
         Title = ResourceToolkit.GetLocalizedString(StringNames.AppName);
 
         this.CenterOnScreen();
+        Services.StartupTrace.Mark("StartupWindow:shown");
+        this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
+            Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => Services.StartupTrace.MarkReady());
+
+        // 登录窗口也算"启动成功"：Token 读不出来时应用就走这条路，
+        // 不能让它被当成"没起来".
         this.SetIcon("Assets/logo.ico");
         this.SetTitleBar(TitleBar);
         this.Get<AppViewModel>().Windows.Add(this);

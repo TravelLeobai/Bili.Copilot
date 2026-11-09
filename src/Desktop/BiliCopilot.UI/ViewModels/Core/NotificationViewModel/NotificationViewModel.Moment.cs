@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
@@ -115,7 +115,7 @@ public sealed partial class NotificationViewModel
     /// </summary>
     private void LoadLastTenMomentIds()
     {
-        var lastTenMomentIds = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LastTenMomentIds, string.Empty);
+        var lastTenMomentIds = Services.AppStateStore.GetString(Models.Constants.SettingNames.LastTenMomentIds.ToString());
         if (string.IsNullOrEmpty(lastTenMomentIds))
         {
             _momentIds = new List<string>();
@@ -129,7 +129,7 @@ public sealed partial class NotificationViewModel
     {
         _momentIds = momentIds;
         var lastTenMomentIds = string.Join(',', momentIds);
-        SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastTenMomentIds, lastTenMomentIds);
+        Services.AppStateStore.Set(Models.Constants.SettingNames.LastTenMomentIds.ToString(), lastTenMomentIds);
     }
 
     private void UpdateMomentTiles(List<MomentInformation> moments)
@@ -186,3 +186,5 @@ public sealed partial class NotificationViewModel
         }
     }
 }
+
+

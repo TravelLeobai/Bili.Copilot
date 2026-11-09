@@ -43,7 +43,7 @@ public sealed partial class NotificationViewModel
 
             var current = messages.Take(10).ToList();
             var currentKeys = current.Select(BuildReplyKey).ToList();
-            var previousRaw = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.LastReplyMessageKeys, string.Empty);
+            var previousRaw = Services.AppStateStore.GetString(Models.Constants.SettingNames.LastReplyMessageKeys.ToString());
             var previousKeys = string.IsNullOrEmpty(previousRaw)
                 ? []
                 : previousRaw.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
@@ -84,7 +84,7 @@ public sealed partial class NotificationViewModel
     }
 
     private void SaveReplyKeys(List<string> keys)
-        => SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.LastReplyMessageKeys, string.Join(',', keys));
+        => Services.AppStateStore.Set(Models.Constants.SettingNames.LastReplyMessageKeys.ToString(), string.Join(',', keys));
 
     /// <summary>
     /// 回复消息未必带稳定 id，用"发布时间 + 首个回复者 + 内容"算个短摘要当去重键.
@@ -126,4 +126,6 @@ public sealed partial class NotificationViewModel
         }
     }
 }
+
+
 

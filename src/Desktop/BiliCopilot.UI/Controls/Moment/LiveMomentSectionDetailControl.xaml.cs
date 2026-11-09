@@ -26,13 +26,16 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     /// </summary>
     public LiveMomentSectionDetailControl()
     {
+        Services.StartupTrace.Mark("LiveCard:ctor:begin");
         InitializeComponent();
+        Services.StartupTrace.Mark("LiveCard:ctor:end");
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        Services.StartupTrace.Mark("LiveCard:loaded", $"items={ViewModel?.Items.Count ?? -1}");
         UpdateItemWidth();
 
         // 首帧尺寸可能还是 0，下一轮调度再算一次；顺手把滚动偏移归零，
@@ -81,6 +84,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
                 return;
             }
 
+            Services.StartupTrace.Mark("LiveCard:item-width", $"{_lastItemWidth} -> {cardWidth}");
             _lastItemWidth = cardWidth;
             CardLayout.MinItemWidth = cardWidth;
         }
@@ -144,3 +148,4 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
