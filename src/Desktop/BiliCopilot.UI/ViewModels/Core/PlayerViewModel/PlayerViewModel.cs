@@ -28,9 +28,22 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// </summary>
     internal int LifecycleId { get; } = Services.PlayerLifecycle.NextId();
 
+    /// <summary>
+    /// 是否已经释放过：Dispose 有三条调用路径（整体释放、重建前释放、超时释放），
+    /// 没有这道闸门时同一个 PlayerSurface 可能被释放两次.
+    /// </summary>
+    private bool _disposed;
+
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        if (_disposed)
+        {
+            Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", "skipped (already disposed)");
+            return;
+        }
+
+        _disposed = true;
         var disposeWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "dispose");
         Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", "begin", withStack: true);
         Danmaku.ClearAll();
@@ -92,6 +105,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     [RelayCommand]
     internal Task InitializeAsync(MediaSnapshot snapshot)
     {
+        // 每次开始播放都重新给 mpv 一次机会：_forceWebFallback 一旦置位（回落成功）
+        // 就再也没有复位点，不重置的话这个播放器窗口里后续每个视频都会一直用网页引擎，
+        // 表现是"换视频后没有 mpv 的画质/着色器/超分".
+        _forceWebFallback = false;
+        _mpvInitFailed = false;
+
         // 同一个视频（重载 / 重播 / 切清晰度）才复用；换视频一律走重建.
         // 复用换掉片源时 mpv 的 vo 会 init 失败（VoInitFailed），接着回落网页播放器，
         // 最后变成"有画面没声音"，实测就是这么一路坏下去的.

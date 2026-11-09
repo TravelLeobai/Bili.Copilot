@@ -475,6 +475,7 @@
                             <DropDownButton
                                 x:Name="LiveStreamSelector"
                                 Height="32"
+                                AutomationProperties.Name="直播画质与线路"
                                 Margin="12,0,0,0"
                                 Padding="8,0,8,0"
                                 VerticalAlignment="Center"
@@ -488,6 +489,7 @@
                             <DropDownButton
                                 x:Name="SourceSelector"
                                 Height="32"
+                                AutomationProperties.Name="画质与播放线路"
                                 Margin="12,0,0,0"
                                 Padding="8,0,8,0"
                                 VerticalAlignment="Center"
@@ -600,6 +602,7 @@
                             <Button
                                 x:Name="HeaderSettingButton"
                                 Width="32"
+                                AutomationProperties.Name="播放器设置"
                                 Height="32"
                                 Margin="8,0,0,0"
                                 Padding="0"
