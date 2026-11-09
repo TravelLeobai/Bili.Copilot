@@ -175,10 +175,55 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     }
     private void OnCardTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
     {
-        if (sender is FrameworkElement element && element.DataContext is LiveSectionCardViewModel card)
+        // x:Bind 模板里元素不一定带 DataContext，用 Tag="{x:Bind}" 直接拿到条目 VM.
+        var card = ResolveCard(sender);
+        Services.StartupTrace.Mark("LiveCard:tapped", card?.Title ?? "no-vm");
+        card?.PlayCommand.Execute(default);
+    }
+
+    private void OnCardPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        var card = ResolveCard(sender);
+        Services.StartupTrace.Mark("LiveCard:pointer-released", card?.Title ?? "no-vm");
+        card?.PlayCommand.Execute(default);
+    }
+
+    private static LiveSectionCardViewModel? ResolveCard(object sender)
+    {
+        if (sender is FrameworkElement element)
         {
-            card.PlayCommand.Execute(default);
+            if (element.Tag is LiveSectionCardViewModel tagged)
+            {
+                return tagged;
+            }
+
+            if (element.DataContext is LiveSectionCardViewModel fromContext)
+            {
+                return fromContext;
+            }
+
+            // 事件从内层元素冒泡上来时，往上找带 VM 的祖先.
+            var parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element);
+            while (parent is not null)
+            {
+                if (parent is FrameworkElement parentElement)
+                {
+                    if (parentElement.Tag is LiveSectionCardViewModel parentTagged)
+                    {
+                        return parentTagged;
+                    }
+
+                    if (parentElement.DataContext is LiveSectionCardViewModel parentContext)
+                    {
+                        return parentContext;
+                    }
+                }
+
+                parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent);
+            }
         }
+
+        return null;
     }
 
     private async void OnOpenInBrowserClick(object sender, RoutedEventArgs e)
@@ -198,6 +243,8 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
+
 
 
 

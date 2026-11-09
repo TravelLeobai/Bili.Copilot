@@ -1,12 +1,15 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Richasy.BiliKernel.Models.Appearance;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.BiliKernel.Models.User;
+using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
 
 namespace BiliCopilot.UI.ViewModels.Items;
@@ -197,6 +200,17 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
     private void Play()
     {
         var player = this.Get<AppViewModel>();
+
+        // 打开播放器要等一下（解析地址、建 mpv），先把「加载中」提示挂出来，
+        // 用的是和别处一致的 TipPopup 效果.
+        try
+        {
+            player.ShowTipCommand.Execute((ResourceToolkit.GetLocalizedString(StringNames.LoadingAndWait), InfoType.Loading));
+        }
+        catch
+        {
+        }
+
         if (IsLive)
         {
             var identifier = new MediaIdentifier(RoomId.ToString(), Title, default);
@@ -212,6 +226,9 @@ public sealed partial class LiveSectionCardViewModel : ViewModelBase
         }
     }
 }
+
+
+
 
 
 

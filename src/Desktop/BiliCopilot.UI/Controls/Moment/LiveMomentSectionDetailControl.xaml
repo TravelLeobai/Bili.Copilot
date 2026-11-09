@@ -21,10 +21,14 @@
                   全都套这一层，直播卡也照这个来，样式才和它们对齐  -->
             <base:CardControl
                 MinHeight="240"
+                AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
                 PointerEntered="OnCardPointerEntered"
-                PointerExited="OnCardPointerExited"
-                Tapped="OnCardTapped">
-                <Grid>
+                PointerExited="OnCardPointerExited">
+                <Grid
+                    MinHeight="240"
+                    PointerReleased="OnCardPointerReleased"
+                    Tapped="OnCardTapped"
+                    Tag="{x:Bind}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="126" />
@@ -229,5 +233,8 @@
         </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>
+
+
+
 
 
