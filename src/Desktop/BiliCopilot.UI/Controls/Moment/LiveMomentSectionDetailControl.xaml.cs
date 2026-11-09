@@ -142,6 +142,10 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
             return;
         }
 
+        element.TranslationTransition ??= new Microsoft.UI.Xaml.Vector3Transition
+        {
+            Duration = TimeSpan.FromMilliseconds(150),
+        };
         element.Translation = isHover ? new System.Numerics.Vector3(0, -4, 16) : System.Numerics.Vector3.Zero;
     }
     private void OnCardTapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
@@ -169,6 +173,8 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
+
 
 
 
