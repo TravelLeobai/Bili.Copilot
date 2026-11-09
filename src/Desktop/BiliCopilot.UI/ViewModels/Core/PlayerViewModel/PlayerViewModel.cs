@@ -119,7 +119,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         var currentId = GetSnapshotMediaId(snapshot);
         var sameVideo = IsSameVideo(_snapshot, snapshot);
         var isSameMedia = !string.IsNullOrEmpty(previousId) && previousId == currentId;
-        var reuse = sameVideo && CanReusePlayer();
+
+        // 只要现有 mpv 实例还能用就复用，换视频（合集/播放列表的下一个）也一样：
+        // 实测同一个 client 上 dispose 旧实例再 new，新实例 InitializeAsync 会挂满 20 秒超时
+        // （更早的版本是直接崩）。mpv 本身支持换文件，不需要重建实例.
+        var reuse = CanReusePlayer();
         Services.PlayerLifecycle.Log(
             "init",
             $"PlayerVM#{LifecycleId}",
@@ -1542,6 +1546,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
 
 
