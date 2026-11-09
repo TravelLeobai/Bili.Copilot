@@ -77,6 +77,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         AdCloudUrl = SettingsToolkit.ReadLocalSetting(SettingNames.AdCloudUrl, string.Empty);
         AiAdEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdEnabled, false);
         AiInterestEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AiInterestEnabled, true);
+        AiInterestMaxLength = Services.AiInterestAnalyzer.MaximumLength;
         AiAdEndpoint = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdEndpoint, string.Empty);
         AiAdKey = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdKey, string.Empty);
         AiAdModel = SettingsToolkit.ReadLocalSetting(SettingNames.AiAdModel, string.Empty);
@@ -661,6 +662,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     partial void OnAiInterestEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.AiInterestEnabled, value);
 
+    partial void OnAiInterestMaxLengthChanged(int value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.AiInterestMaxLength, Math.Clamp(value, 20, 200));
+
     partial void OnAiAdEnabledChanged(bool value)
     => SettingsToolkit.WriteLocalSetting(SettingNames.AiAdEnabled, value);
 
@@ -1080,6 +1084,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     }
 
 }
+
 
 
 

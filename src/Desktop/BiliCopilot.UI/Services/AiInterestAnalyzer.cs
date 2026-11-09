@@ -24,6 +24,19 @@ internal static class AiInterestAnalyzer
         => SettingsToolkit.ReadLocalSetting(SettingNames.AiInterestEnabled, true);
 
     /// <summary>
+    /// 结论正文的字数上限（设置页可调，默认 60 字）.
+    /// 提示词要求按标记输出，解析时再按这个上限硬裁一次，模型不听话时也不会跑偏.
+    /// </summary>
+    public static int MaximumLength
+    {
+        get
+        {
+            var value = SettingsToolkit.ReadLocalSetting(SettingNames.AiInterestMaxLength, 60);
+            return Math.Clamp(value, 20, 200);
+        }
+    }
+
+    /// <summary>
     /// 接口与密钥是否已经配好（没配就直接跳过，不发请求）.
     /// </summary>
     public static bool IsConfigured
@@ -72,14 +85,14 @@ internal static class AiInterestAnalyzer
 
         var selected = samples.Take(12).ToList();
         var covers = _visionUnsupported ? [] : await CollectCoversAsync(selected, logger).ConfigureAwait(false);
-
-        var result = await RequestAsync(endpoint, key, model, selected, covers, logger).ConfigureAwait(false);
+        var limit = MaximumLength;
+        var result = await RequestAsync(endpoint, key, model, selected, covers, limit, logger).ConfigureAwait(false);
         if (result is null && covers.Count > 0)
         {
             // 模型不支持图片时退回纯文本再试一次.
             logger?.LogInformation("兴趣分析含图片失败，改用纯文本重试");
             _visionUnsupported = true;
-            result = await RequestAsync(endpoint, key, model, selected, [], logger).ConfigureAwait(false);
+            result = await RequestAsync(endpoint, key, model, selected, [], limit, logger).ConfigureAwait(false);
         }
 
         return result;
@@ -91,11 +104,12 @@ internal static class AiInterestAnalyzer
         string model,
         IReadOnlyList<InterestSample> samples,
         IReadOnlyList<string> covers,
+        int limit,
         ILogger? logger)
     {
         try
         {
-            var body = BuildRequestBody(model, samples, covers);
+            var body = BuildRequestBody(model, samples, covers, limit);
             using var request = new HttpRequestMessage(HttpMethod.Post, NormalizeUrl(endpoint))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -122,11 +136,11 @@ internal static class AiInterestAnalyzer
             var message = choices[0].GetProperty("message");
             var content = ReadContent(message);
 
-            content = ExtractSummary(content);
+            content = ExtractSummary(content, limit);
             if (content.Length < 20)
             {
                 // 推理模型只把标记写进 content、正文留在 reasoning_content 里.
-                content = ExtractSummary(ReadString(message, "reasoning_content"));
+                content = ExtractSummary(ReadString(message, "reasoning_content"), limit);
             }
             if (string.IsNullOrWhiteSpace(content))
             {
@@ -147,16 +161,20 @@ internal static class AiInterestAnalyzer
     /// <summary>
     /// 手工拼请求体：裁剪构建里 JsonSerializer 不可用.
     /// </summary>
-    private static string BuildRequestBody(string model, IReadOnlyList<InterestSample> samples, IReadOnlyList<string> covers)
+    private static string BuildRequestBody(string model, IReadOnlyList<InterestSample> samples, IReadOnlyList<string> covers, int limit)
     {
         var builder = new StringBuilder();
         builder.Append("{\"model\":\"").Append(Escape(model)).Append("\",\"temperature\":0.4,\"messages\":[");
 
-        // 系统提示.
+        // 系统提示：严格限定输出格式，正文只放在 <<<兴趣>>> ... <<<END>>> 之间.
         builder.Append("{\"role\":\"system\",\"content\":\"")
-            .Append(Escape("你是视频平台的内容分析师。根据用户最近看过的视频（标题、封面、简介），用一段 80~120 字的中文概括他最近的内容偏好。"
-                + "要具体到题材、作者类型和风格倾向，不要罗列视频名，不要空话套话，不要分点。"
-                + "先在心里想清楚，然后另起一行，以「【结论】」开头只写这一段话，不要再写其他内容。"))
+            .Append(Escape("你是视频平台的内容分析师。根据用户最近看过的视频（标题、封面、简介），概括他最近的内容偏好。"
+                + $"输出必须严格按下面的格式，只允许一段话，不超过 {limit} 个汉字：\n"
+                + "<<<兴趣>>>\n"
+                + "（只在这里写那一段话）\n"
+                + "<<<END>>>\n"
+                + "规则：不要写解释、不要写标题、不要分点、不要罗列视频名、不要加引号或 Markdown；"
+                + "除这两个标记和中间那段话之外，不要输出任何其他字符。"))
             .Append("\"},");
 
         var text = new StringBuilder("最近看过的视频：\n");
@@ -289,9 +307,10 @@ internal static class AiInterestAnalyzer
     }
 
     /// <summary>
-    /// 从模型输出里抽结论段：优先取「【结论】」之后的最后一段，其次取最后一段非思维过程文字.
+    /// 从模型输出里抽正文：优先严格取标记「兴趣」块之间的内容；
+    /// 模型没按格式来时，退回「【结论】」/「结论：」之后的文字；最后按字数上限硬裁.
     /// </summary>
-    private static string ExtractSummary(string raw)
+    private static string ExtractSummary(string raw, int limit)
     {
         var text = raw.Trim();
         if (string.IsNullOrEmpty(text))
@@ -299,6 +318,23 @@ internal static class AiInterestAnalyzer
             return string.Empty;
         }
 
+        // 1) 严格格式：只认标记之间的内容.
+        const string startMarker = "<<<兴趣>>>";
+        const string endMarker = "<<<END>>>";
+        var start = text.IndexOf(startMarker, StringComparison.Ordinal);
+        if (start >= 0)
+        {
+            var bodyStart = start + startMarker.Length;
+            var end = text.IndexOf(endMarker, bodyStart, StringComparison.Ordinal);
+            var body = end > bodyStart ? text[bodyStart..end] : text[bodyStart..];
+            var normalized = Normalize(body);
+            if (normalized.Length > 0)
+            {
+                return TrimToLimit(normalized, limit);
+            }
+        }
+
+        // 2) 兼容旧格式.
         var markerIndex = text.LastIndexOf("【结论】", StringComparison.Ordinal);
         if (markerIndex >= 0)
         {
@@ -315,19 +351,48 @@ internal static class AiInterestAnalyzer
 
         // 推理模型会把英文思考混进正文：按句子筛，只留以中文为主的那些.
         var sentences = SplitSentences(text);
-        var selected = sentences.Where(p => CountChinese(p) >= 8 && CountChinese(p) * 2 >= p.Length).ToList();
+        var selected = sentences.Where(p => CountChinese(p) >= 6 && CountChinese(p) * 2 >= p.Length).ToList();
         var result = selected.Count > 0 ? string.Concat(selected) : text;
+        return TrimToLimit(Normalize(result), limit);
+    }
 
-        result = result.Trim().Trim('"', '“', '”', '`', '「', '」').Trim();
+    /// <summary>
+    /// 清掉模型附带的 Markdown / 引号 / 多余空行，只留纯文本.
+    /// </summary>
+    /// <param name="text">原始文本.</param>
+    /// <returns>纯文本.</returns>
+    private static string Normalize(string text)
+    {
+        var value = text.Replace("\r", "\n").Trim();
+        // 去掉行首的列表符和标题符.
+        var lines = value.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim().TrimStart('-', '*', '#', '>', ' ').Trim())
+            .Where(p => p.Length > 0);
+        value = string.Join(string.Empty, lines);
+        return value.Trim().Trim('"', '“', '”', '`', '「', '」', '《', '》').Trim();
+    }
 
-        // 按句号收口，别在半句话处截断.
-        if (result.Length > 200)
+    /// <summary>
+    /// 按字数上限裁剪：优先在句号/逗号处收口，避免半句话.
+    /// </summary>
+    /// <param name="text">文本.</param>
+    /// <param name="limit">上限.</param>
+    /// <returns>裁剪后的文本.</returns>
+    private static string TrimToLimit(string text, int limit)
+    {
+        if (text.Length <= limit)
         {
-            var cut = result.LastIndexOfAny(['。', '！', '？', '…'], 199);
-            result = cut > 60 ? result[..(cut + 1)] : result[..200];
+            return text;
         }
 
-        return result;
+        var window = text[..limit];
+        var cut = window.LastIndexOfAny(['。', '！', '？', '…', '；']);
+        if (cut < limit / 2)
+        {
+            cut = window.LastIndexOfAny(['，', '、', ',']);
+        }
+
+        return cut >= limit / 2 ? text[..(cut + 1)].Trim() : window.Trim() + "…";
     }
 
     private static IEnumerable<string> SplitSentences(string text)
@@ -378,3 +443,5 @@ internal static class AiInterestAnalyzer
 /// <param name="Description">简介片段.</param>
 /// <param name="CoverUrl">封面地址.</param>
 public sealed record InterestSample(string Title, string Author, string Description, string CoverUrl);
+
+

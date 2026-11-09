@@ -209,6 +209,13 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     private bool _aiInterestEnabled = true;
 
+
+    /// <summary>
+    /// AI 分析正文的字数上限（20~200）.
+    /// </summary>
+    [ObservableProperty]
+    private int _aiInterestMaxLength = 60;
+
     [ObservableProperty]
     private bool _aiAutoSave = true;
 

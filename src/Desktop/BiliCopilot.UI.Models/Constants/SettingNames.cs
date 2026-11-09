@@ -19,6 +19,7 @@ public enum SettingNames
     BiliJumpEnabled,
     AiAdEnabled,
     AiInterestEnabled,
+    AiInterestMaxLength,
     AiAdEndpoint,
     AiAdKey,
     AiAdModel,
@@ -215,6 +216,7 @@ public enum SettingNames
     LiveClipCreatorNames,
     LiveDanmakuMedalFilter,
 }
+
 
 
 

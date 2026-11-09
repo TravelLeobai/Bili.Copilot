@@ -97,6 +97,18 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AiInterestEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard Description="写进提示词里，同时解析时按这个上限硬裁（20~200 字）" Header="分析正文长度上限">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TextFont" />
+                </base:SettingsCard.HeaderIcon>
+                <NumberBox
+                    MinWidth="140"
+                    Maximum="200"
+                    Minimum="20"
+                    SmallChange="10"
+                    SpinButtonPlacementMode="Compact"
+                    Value="{x:Bind ViewModel.AiInterestMaxLength, Mode=TwoWay}" />
+            </base:SettingsCard>
             <base:SettingsCard Description="用大模型读字幕判断广告位置（OpenAI 兼容接口）" Header="AI 识别广告">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="Sparkle" />
@@ -216,3 +228,4 @@
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>
+
