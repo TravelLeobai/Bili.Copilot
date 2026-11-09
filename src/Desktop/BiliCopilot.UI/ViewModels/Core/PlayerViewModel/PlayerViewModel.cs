@@ -111,17 +111,19 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _forceWebFallback = false;
         _mpvInitFailed = false;
 
-        // 同一个视频（重载 / 重播 / 切清晰度）才复用；换视频一律走重建.
-        // 复用换掉片源时 mpv 的 vo 会 init 失败（VoInitFailed），接着回落网页播放器，
-        // 最后变成"有画面没声音"，实测就是这么一路坏下去的.
+        // 复用条件：同一个视频（同 BV / 同剧集）。分P 换集也算同一个视频 ——
+        // 实测在同一个 mpv client 上销毁旧实例再建新实例，新实例 InitializeAsync 会挂在
+        // 原生层直接崩（日志停在 create-player:start，没有 end）。分P 只换 cid，
+        // 换 resolver + 重新 load 就够，不需要重建实例.
         var previousId = GetSnapshotMediaId(_snapshot);
         var currentId = GetSnapshotMediaId(snapshot);
+        var sameVideo = IsSameVideo(_snapshot, snapshot);
         var isSameMedia = !string.IsNullOrEmpty(previousId) && previousId == currentId;
-        var reuse = isSameMedia && CanReusePlayer();
+        var reuse = sameVideo && CanReusePlayer();
         Services.PlayerLifecycle.Log(
             "init",
             $"PlayerVM#{LifecycleId}",
-            $"snapshot={currentId} same={isSameMedia} reuse={reuse} hasPlayer={Player is not null} web={UseWebEngine}",
+            $"snapshot={currentId} prev={previousId} same={isSameMedia} sameVideo={sameVideo} reuse={reuse} hasPlayer={Player is not null} web={UseWebEngine}",
             withStack: true);
         return InitializeCoreAsync(snapshot, reusePlayer: reuse);
     }
@@ -139,6 +141,29 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// 播放列表 / 合集 / 分 P / 结束页推荐全走这条判断：重建实例会白屏卡死.
     /// </summary>
     /// <returns>能否复用.</returns>
+    /// <summary>
+    /// 两个快照是不是同一个视频（同 BV / 同剧集），忽略分P.
+    /// 分P 换集靠这个判定走复用，避免在同一个 mpv client 上重建实例.
+    /// </summary>
+    /// <param name="previous">上一个快照.</param>
+    /// <param name="current">新快照.</param>
+    /// <returns>是否同一个视频.</returns>
+    private static bool IsSameVideo(MediaSnapshot? previous, MediaSnapshot? current)
+    {
+        if (previous is null || current is null)
+        {
+            return false;
+        }
+
+        var previousId = previous.Video?.Identifier.Id
+            ?? previous.Live?.Identifier.Id
+            ?? previous.Episode?.Identifier.Id;
+        var currentId = current.Video?.Identifier.Id
+            ?? current.Live?.Identifier.Id
+            ?? current.Episode?.Identifier.Id;
+        return !string.IsNullOrEmpty(previousId) && previousId == currentId;
+    }
+
     private static string GetSnapshotMediaId(MediaSnapshot? snapshot)
     {
         if (snapshot is null)
@@ -1517,6 +1542,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
 
 
 
