@@ -57,6 +57,10 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         _shellHost.Mount(_shell);
         Services.StartupTrace.Mark("MainWindow:ctor:shell-mounted");
         _shellHost.Loaded += OnShellHostLoaded;
+
+        // Reactor 宿主与窗口的生命周期：用来区分「Reactor 重新渲染」和「XAML 控件被重造」.
+        Services.PlayerLifecycle.Log("attach", "ReactorHost(MainShell)", $"hwnd={AppWindow.Id.Value}");
+        _shellHost.Unloaded += (_, __) => Services.PlayerLifecycle.Log("detach", "ReactorHost(MainShell)", "Unloaded", withStack: true);
         ApplyBackdropSetting(SettingsToolkit.ReadLocalSetting(SettingNames.EnableAcrylicBackdrop, true));
         Services.StartupTrace.Mark("MainWindow:ctor:selected-item:begin");
         SelectedItem();
@@ -312,6 +316,7 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         }
     }
 }
+
 
 
 

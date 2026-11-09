@@ -23,9 +23,16 @@ namespace BiliCopilot.UI.ViewModels.Core;
 /// </summary>
 public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<PlayerViewModel> logger) : ViewModelBase, IAsyncDisposable
 {
+    /// <summary>
+    /// 这个视图模型的实例号：用来区分「换视频重建 mpv」和「整个播放器被换掉」.
+    /// </summary>
+    internal int LifecycleId { get; } = Services.PlayerLifecycle.NextId();
+
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
+        var disposeWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "dispose");
+        Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", "begin", withStack: true);
         Danmaku.ClearAll();
         _nativeMp?.Dispose();
         _nativeMp = null;
@@ -79,6 +86,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
 
         this.Get<AppViewModel>().Players.Remove(this);
+        Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "dispose", disposeWatch);
     }
 
     [RelayCommand]
@@ -90,7 +98,13 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         var previousId = GetSnapshotMediaId(_snapshot);
         var currentId = GetSnapshotMediaId(snapshot);
         var isSameMedia = !string.IsNullOrEmpty(previousId) && previousId == currentId;
-        return InitializeCoreAsync(snapshot, reusePlayer: isSameMedia && CanReusePlayer());
+        var reuse = isSameMedia && CanReusePlayer();
+        Services.PlayerLifecycle.Log(
+            "init",
+            $"PlayerVM#{LifecycleId}",
+            $"snapshot={currentId} same={isSameMedia} reuse={reuse} hasPlayer={Player is not null} web={UseWebEngine}",
+            withStack: true);
+        return InitializeCoreAsync(snapshot, reusePlayer: reuse);
     }
     /// <summary>
     /// 从结束页切到另一个视频：复用现有 mpv 实例，只换解析器再重新加载媒体.
@@ -291,6 +305,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             // 后面再让现有播放器重新加载媒体。重建实例就是白屏卡死的根源，重播按钮能稳
             // 也是因为它全程没碰播放器实例.
             logger.LogInformation("初始化：复用现有 mpv（不重建实例）");
+            Services.PlayerLifecycle.Log("reuse", $"PlayerVM#{LifecycleId}", $"mpv stays, surface regenerated? no, id={Player?.GetHashCode():X}");
             Player.Mpv.UpdateResolvers(_sourceResolver, _historyResolver);
         }
         else
@@ -314,13 +329,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                     {
                     }
                 }
-
+                Services.PlayerLifecycle.Log("detach", $"PlayerVM#{LifecycleId}", "dispose old surface", withStack: true);
                 await Player.DisposeAsync();
                 Player = null;
                 await Task.Delay(300);
             }
 
             logger.LogInformation("初始化：创建播放器");
+            var createWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "create-player");
             Player = new PlayerSurface(new Richasy.MpvKernel.Player.MpvPlayer(
                 Client!,
                 _sourceResolver,
@@ -335,6 +351,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 // 界面就一直白屏+连接中）。给个上限，超时就走网页播放器，别让用户干等.
                 await Player.InitializeAsync().WaitAsync(TimeSpan.FromSeconds(20));
                 logger.LogInformation("初始化：播放器就绪");
+                Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "create-player", createWatch, $"mpv={Player?.GetHashCode():X}");
             }
             catch (TimeoutException)
             {
@@ -1461,6 +1478,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 }
+
+
 
 
 
