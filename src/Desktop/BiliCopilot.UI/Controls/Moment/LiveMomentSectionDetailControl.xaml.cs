@@ -53,6 +53,21 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
                 {
                     // 归零失败不影响使用.
                 }
+
+                // 首帧时 ItemsRepeater 还没把卡片放出来，归零会落在空内容上；
+                // 再等两个调度周期补一次，否则第一行的作者行还是会被切掉.
+                var again = this.Get<Microsoft.UI.Dispatching.DispatcherQueue>();
+                _ = System.Threading.Tasks.Task.Delay(150).ContinueWith(
+                    _ => again.TryEnqueue(() =>
+                    {
+                        try
+                        {
+                            CardScroller?.ChangeView(null, 0, null, true);
+                        }
+                        catch
+                        {
+                        }
+                    }));
             });
     }
 
@@ -173,6 +188,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 public abstract class LiveSectionControlBase : LayoutUserControlBase<LiveMomentSectionDetailViewModel>
 {
 }
+
 
 
 

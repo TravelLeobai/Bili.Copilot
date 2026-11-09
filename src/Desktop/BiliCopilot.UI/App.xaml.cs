@@ -270,6 +270,24 @@ public partial class App : Application
     /// <summary>
     /// 启动成功（窗口激活后调用）：清掉启动标记.
     /// </summary>
+    /// <summary>
+    /// 记下 LocalState 路径，供"启动成功"通知复用.
+    /// </summary>
+    private static string _localFolder = string.Empty;
+
+    /// <summary>
+    /// 窗口内容挂载成功时调用：立刻清掉启动标记.
+    /// 不等那 6 秒延迟——开发时脚本经常在 6 秒内把进程杀掉，守卫会误以为启动失败，
+    /// 下一轮就把 Settings 挪走，表现就是偏好（比如亚克力背景）被重置.
+    /// </summary>
+    internal static void NotifyStartupReady()
+    {
+        if (!string.IsNullOrEmpty(_localFolder))
+        {
+            MarkStartupSucceeded(_localFolder);
+        }
+    }
+
     private static void MarkStartupSucceeded(string localFolder)
     {
         try
@@ -296,9 +314,12 @@ public partial class App : Application
     /// </summary>
     /// <param name="localFolder">LocalState 目录.</param>
     private void ScheduleStartupMark(string localFolder)
-        => _dispatcherQueue.TryEnqueue(
+    {
+        _localFolder = localFolder;
+        _dispatcherQueue.TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () => _ = System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(6)).ContinueWith(_ => MarkStartupSucceeded(localFolder)));
+    }
 
     private void InitializeTrayIcon()
     {
@@ -499,6 +520,7 @@ public partial class App : Application
         }
     }
 }
+
 
 
 

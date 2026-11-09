@@ -83,6 +83,19 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
     public void ApplyBackdropSetting(bool enabled)
     {
         SystemBackdrop = enabled ? new DesktopAcrylicBackdrop() : null;
+
+        // 亚克力没生效基本是三个原因：设置项被重置成 false、系统关了"透明效果"、
+        // 或者窗口内容把背景整个盖住了。把判断结果记一笔，排查不用猜.
+        var transparency = false;
+        try
+        {
+            transparency = new Windows.UI.ViewManagement.UISettings().AdvancedEffectsEnabled;
+        }
+        catch
+        {
+        }
+
+        Services.StartupTrace.Mark("MainWindow:backdrop", $"acrylic={enabled} transparency={transparency} backdrop={SystemBackdrop?.GetType().Name ?? "null"}");
     }
 
     private void SelectedItem()
@@ -108,6 +121,10 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         // 首屏内容挂上来 = 启动成功。不能等 Window.Activated：
         // 从自动化/后台方式拉起时窗口可能一直不激活，那样永远等不到激活事件.
         BiliCopilot.UI.Services.StartupTrace.Mark("MainWindow:shell-loaded");
+
+        // 内容挂上了就等于启动成功：立刻清启动守卫，别等 6 秒延迟——
+        // 那 6 秒里被杀掉的话，守卫会误判启动失败，下一轮把 Settings 挪走、偏好全丢.
+        BiliCopilot.UI.App.NotifyStartupReady();
         this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () => BiliCopilot.UI.Services.StartupTrace.MarkReady());
@@ -133,6 +150,9 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         }
 
         BiliCopilot.UI.Services.StartupTrace.Mark("MainWindow:first-activated");
+
+        // 亚克力在内容还没铺开时设上去会被后面的图层盖掉，首帧激活后再设一次.
+        ApplyBackdropSetting(SettingsToolkit.ReadLocalSetting(SettingNames.EnableAcrylicBackdrop, true));
         MoveAndResize();
         this.Get<ILogger<App>>().LogInformation($"App version: {this.Get<IAppToolkit>().GetPackageVersion()}");
         var localTheme = SettingsToolkit.ReadLocalSetting(SettingNames.AppTheme, ElementTheme.Default);
@@ -292,6 +312,10 @@ public sealed partial class MainWindow : WindowBase, ITipWindow
         }
     }
 }
+
+
+
+
 
 
 
