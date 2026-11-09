@@ -1,0 +1,10 @@
+{
+  "rounds": 3,
+  "createCount": 3,
+  "disposeCount": 3,
+  "skippedDispose": 0,
+  "leaked": 0,
+  "createMsAvg": 690.0,
+  "createMsMax": 1070.0,
+  "resultDir": "E:\\Documents\\deepseek-harness\\default-workspace\\bili-copilot-v2\\tools\\stress-results\\20261109-202540"
+}

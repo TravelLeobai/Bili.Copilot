@@ -100,7 +100,9 @@ public sealed partial class PlayerViewModel
 
             // mpv 的 "Device lost / DXGI_ERROR_DEVICE_RESET" 是 Client 这一层打出来的（不是 MpvPlayer），
             // 所以 client 的 logger 也得包上，否则恢复逻辑收不到信号.
+            var clientWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "create-mpv-client");
             Client = await MpvClient.CreateAsync(mpvPath, options, logger: new MpvLogWatcher(logger, OnMpvSuspectLog));
+            Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "create-mpv-client", clientWatch);
             Client.ErrorOccurred += OnClientErrorOccurred;
             Client.CacheStateChanged += OnClientCacheStateChanged;
             SetSubtitleDelaySecondsCommand.Execute(SubtitleDelaySeconds);
@@ -461,6 +463,15 @@ public sealed partial class PlayerViewModel
 
     private async void OnClientErrorOccurred(object? sender, MpvError e)
     {
+        // mpv 的错误回调可能比 Player 实例活得久：重建路径里中间有 Player = null 的窗口期，
+        // 这期间抛上来的错误会让下面的 Player.Duration 直接空引用（表现为 c0000005 闪退）.
+        var player = Player;
+        if (player is null || _disposed)
+        {
+            Services.PlayerLifecycle.Log("error", $"PlayerVM#{LifecycleId}", $"mpv error {e} ignored (no player)");
+            return;
+        }
+
         if (e == MpvError.TlsError)
         {
             if (!_isTlsFailed)
@@ -476,7 +487,7 @@ public sealed partial class PlayerViewModel
             // 视频输出初始化失败时，先回退着色器/超分并重建输出，避免一直白屏.
             await RecoverPlaybackEnhancementsAsync();
         }
-        else if (Player.Duration < 1)
+        else if (player.Duration < 1)
         {
             if (!_isBroken)
             {
@@ -490,12 +501,12 @@ public sealed partial class PlayerViewModel
                     logger.LogInformation("播放失败，切换 CDN 节点到 {Host}", nextHost);
                 }
 
-                await Player.ReplayAsync();
+                await player.ReplayAsync();
                 return;
             }
 
             // 重试仍然失败，回落到网页播放器（Shaka）.
-            if (await TryFallbackToWebEngineAsync(Player.Position))
+            if (await TryFallbackToWebEngineAsync(player.Position))
             {
                 return;
             }
@@ -516,7 +527,7 @@ public sealed partial class PlayerViewModel
                 _ => default,
             };
 
-            if (!string.IsNullOrEmpty(errorContent) && (Player.Duration < 1 || e == MpvError.PassthroughFormatUnsupported))
+            if (!string.IsNullOrEmpty(errorContent) && (player.Duration < 1 || e == MpvError.PassthroughFormatUnsupported))
             {
                 ErrorMessage = errorContent;
             }
@@ -1478,6 +1489,8 @@ public sealed partial class PlayerViewModel
                                  Nnedi3Mode != Nnedi3Mode.None;
     }
 }
+
+
 
 
 

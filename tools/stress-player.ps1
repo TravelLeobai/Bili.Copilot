@@ -99,6 +99,25 @@ function Invoke-Search([string]$keyword) {
         if ($all[$i].Current.ControlType.ProgrammaticName -eq "ControlType.Edit") { $edit = $all[$i]; break }
     }
 
+    # 应用会恢复上次停留的页面（可能是动态/直播），那里没有搜索框：先点「搜索」回首页.
+    if (-not $edit) {
+        for ($i = 0; $i -lt $all.Count; $i++) {
+            $e = $all[$i]
+            if ($e.Current.Name -eq "搜索" -and $e.Current.ControlType.ProgrammaticName -eq "ControlType.ListItem") {
+                $r = $e.Current.BoundingRectangle
+                [StressNative]::Click([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+                break
+            }
+        }
+
+        Start-Sleep -Seconds 3
+        $root = [System.Windows.Automation.AutomationElement]::FromHandle($h)
+        $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+        for ($i = 0; $i -lt $all.Count; $i++) {
+            if ($all[$i].Current.ControlType.ProgrammaticName -eq "ControlType.Edit") { $edit = $all[$i]; break }
+        }
+    }
+
     if (-not $edit) { return $false }
 
     $edit.SetFocus()
@@ -247,4 +266,5 @@ if ($summary.leaked -ne 0) {
 
 Write-Host "全部通过：create 与 dispose 配对，无泄漏" -ForegroundColor Green
 exit 0
+
 
