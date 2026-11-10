@@ -24,7 +24,6 @@ public sealed partial class SeasonSubscriptionItemViewModel : ViewModelBase<Vide
     {
         Title = string.IsNullOrEmpty(data.Title) ? "未命名合集" : data.Title;
         CoverUri = data.Cover?.Uri;
-        AvatarUri = data.User?.Avatar?.Uri;
         AuthorName = data.User?.Name ?? string.Empty;
         CountText = data.TotalCount > 0 ? $"共 {data.TotalCount} 期视频" : "合集";
         Services.StartupTrace.Mark("SeasonCard:avatar", $"{Title} user={data.User?.Name ?? "null"} avatar={data.User?.Avatar?.Uri?.ToString() ?? "null"}");
@@ -39,12 +38,6 @@ public sealed partial class SeasonSubscriptionItemViewModel : ViewModelBase<Vide
     /// 封面.
     /// </summary>
     public Uri? CoverUri { get; }
-
-    /// <summary>
-    /// 作者头像。收藏接口有时不回头像，这时候用合集内第一个视频的 UP 头像补上.
-    /// </summary>
-    [ObservableProperty]
-    private Uri? _avatarUri;
 
     /// <summary>
     /// 作者名.
@@ -72,5 +65,6 @@ public sealed partial class SeasonSubscriptionItemViewModel : ViewModelBase<Vide
         navigation.NavigateToOver(typeof(SeasonDetailPage), Data);
     }
 }
+
 
 

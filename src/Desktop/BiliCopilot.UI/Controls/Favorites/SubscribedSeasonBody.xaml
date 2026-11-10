@@ -34,28 +34,11 @@
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
-                                        <!--  封面：左下角压一枚 UP 头像  -->
-                                        <Grid>
-                                            <controls:BasicCoverImage
-                                                CornerRadius="4,4,0,0"
-                                                DecodeWidth="600"
-                                                Source="{x:Bind CoverUri, Mode=OneWay}" />
-                                            <Border
-                                                Width="28"
-                                                Height="28"
-                                                Margin="10"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Bottom"
-                                                Background="Transparent"
-                                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                                BorderThickness="1"
-                                                CornerRadius="14">
-                                                <controls:BasicCoverImage
-                                                    CornerRadius="12"
-                                                    DecodeWidth="80"
-                                                    Source="{x:Bind AvatarUri, Mode=OneWay}" />
-                                            </Border>
-                                        </Grid>
+                                        <!--  封面  -->
+                                        <controls:BasicCoverImage
+                                            CornerRadius="4,4,0,0"
+                                            DecodeWidth="600"
+                                            Source="{x:Bind CoverUri, Mode=OneWay}" />
 
                                         <Grid
                                             Grid.Row="1"

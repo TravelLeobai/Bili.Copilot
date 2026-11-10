@@ -111,13 +111,6 @@ public sealed partial class SubscribedSeasonSectionDetailViewModel : ViewModelBa
             {
                 var (videos, _, _) = await _service.GetUgcSeasonVideosAsync(item.Data, 0).ConfigureAwait(false);
 
-                // 头像必须是「合集创建者本人」的。
-                // 之前直接拿合集内第一个视频的发布者，联合投稿时那就是合作者的头像 —— 所以显示成了别人。
-                // 顺序：列表里的 upper → 用户接口按 mid 查 → 收藏夹详情里的 upper.face →
-                // 合集内与创建者同 id 的发布者 → 最后才退到第一个视频的发布者.
-                await ResolveOwnerAvatarAsync(item, videos).ConfigureAwait(false);
-                Services.StartupTrace.Mark("SeasonCard:resolve-avatar", $"{item.Title} avatar={item.AvatarUri?.ToString() ?? "null"}");
-
                 var latest = videos?
                     .Where(p => p.PublishTime is not null)
                     .Select(p => p.PublishTime!.Value)
@@ -140,82 +133,6 @@ public sealed partial class SubscribedSeasonSectionDetailViewModel : ViewModelBa
 
         await Task.WhenAll(tasks);
     }
-
-    /// <summary>
-    /// 解析合集创建者的头像。合集列表接口经常只给名字不给头像，
-    /// 而合集内第一条视频的发布者可能是联合投稿的合作者——直接拿来用就会显示成别人的头像.
-    /// </summary>
-    /// <param name="item">合集卡片.</param>
-    /// <param name="videos">合集内第一页视频.</param>
-    /// <returns>任务.</returns>
-    private async Task ResolveOwnerAvatarAsync(SeasonSubscriptionItemViewModel item, IReadOnlyList<VideoInformation>? videos)
-    {
-        if (item.AvatarUri is not null)
-        {
-            return;
-        }
-
-        var ownerId = item.Data.User?.Id;
-        var ownerName = item.Data.User?.Name;
-
-        // 1. 用 mid 查用户信息，这才是本人头像.
-        if (!string.IsNullOrEmpty(ownerId))
-        {
-            try
-            {
-                var userService = this.Get<IUserService>();
-                var profile = await userService.GetUserInformationAsync(ownerId).ConfigureAwait(false);
-                if (profile?.Profile?.User?.Avatar?.Uri is { } avatarUri)
-                {
-                    item.AvatarUri = avatarUri;
-                    return;
-                }
-            }
-            catch
-            {
-            }
-        }
-
-        // 2. 收藏夹详情里的 upper.face.
-        try
-        {
-            var detail = await _service.GetVideoFavoriteFolderDetailAsync(item.Data, 0).ConfigureAwait(false);
-            if (detail.Detail?.Folder?.User?.Avatar?.Uri is { } detailAvatar)
-            {
-                item.AvatarUri = detailAvatar;
-                return;
-            }
-
-            ownerId ??= detail.Detail?.Folder?.User?.Id;
-            ownerName ??= detail.Detail?.Folder?.User?.Name;
-        }
-        catch
-        {
-        }
-
-        if (videos is not { Count: > 0 })
-        {
-            return;
-        }
-
-        // 3. 合集内找同一个人（联合投稿时有用）：先按 id，再按名字.
-        var publisher = !string.IsNullOrEmpty(ownerId)
-            ? videos.Select(p => p.Publisher?.User).FirstOrDefault(u => u is not null && u.Id == ownerId)
-            : null;
-        publisher ??= !string.IsNullOrEmpty(ownerName)
-            ? videos.Select(p => p.Publisher?.User).FirstOrDefault(u => u is not null && u.Name == ownerName)
-            : null;
-
-        if (publisher?.Avatar?.Uri is { } matchedAvatar)
-        {
-            item.AvatarUri = matchedAvatar;
-            return;
-        }
-
-        // 4. 都失败才退到第一个视频的发布者.
-        item.AvatarUri = videos[0].Publisher?.User?.Avatar?.Uri;
-    }
-
     private void Fill(IReadOnlyList<VideoFavoriteFolder> seasons)
     {
         foreach (var season in seasons)
@@ -226,6 +143,7 @@ public sealed partial class SubscribedSeasonSectionDetailViewModel : ViewModelBa
         IsEmpty = Items.Count == 0;
     }
 }
+
 
 
 
