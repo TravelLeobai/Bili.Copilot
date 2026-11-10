@@ -225,24 +225,18 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         // 这里只在「面板收起、内容铺满」时补一块，避开窗口的最小化/关闭按钮.
         // AppTitleBar 内部会为窗口按钮预留一段（实测约 210 物理像素/140 DIP），
         // 展开时面板已经占掉右边，这段预留是多余的：用负边距抵消掉，让按钮贴到面板左边缘.
-        if (isLive && !narrow && !collapsed)
-        {
-            HeaderBarHost.Margin = new Thickness(0, 0, -160, 0);
-        }
-        else if (isLive)
-        {
-            HeaderBarHost.Margin = new Thickness(0, 0, 170, 0);
-        }
-        else
-        {
-            HeaderBarHost.Margin = new Thickness(0);
-        }
+        // 顶栏那层渐变必须铺满整行，不能跟着 ContentHost 缩，否则右侧会缺一块白.
+        // 做法：把顶栏用负边距拉回整宽，按钮组再按让位宽度左移.
+        var contentInset = isLive && !narrow && !collapsed ? panelWidth : 0d;
+        HeaderBarHost.Margin = new Thickness(0, 0, -contentInset, 0);
+        // AppTitleBar 内部给窗口按钮预留约 160：拿走一部分就正好贴到面板左边缘.
+        FooterContainer.Margin = new Thickness(0, 0, Math.Max(0, contentInset - 160), 0);
 
         // 顶栏右侧按钮：窄版整排隐藏；宽版与底栏用同一个让位值（面板宽 + 间距），
         // 折叠时面板只剩一根展开条，改用 170 兜底，免得按钮贴到窗口的最小化/关闭上.
         FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
 
-        FooterContainer.Margin = new Thickness(0);
+
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -588,6 +582,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
 
 
 
