@@ -19,6 +19,8 @@ public sealed partial class LiveSidePanelHost : UserControl
     private PlayerViewModel? _mountedViewModel;
     private bool _isCollapsed;
     private bool _isCompact;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _insetTimer;
+    private int _insetRetryLeft;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveSidePanelHost"/> class.
@@ -58,8 +60,58 @@ public sealed partial class LiveSidePanelHost : UserControl
 
     private void OnHostSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // 窗口尺寸变化后 mpv 会被重置成铺满，这里按当前折叠状态再让一次.
+        // 窗口尺寸变化后 mpv 会被重置成铺满，这里按当前状态再让一次；
+        // 它是在缩放结束后才重置，所以再补一次延迟应用，否则松手后画面会消失.
         ApplySurfaceInset();
+        ScheduleInsetRetry();
+    }
+
+    /// <summary>
+    /// 缩放结束后再应用一次画面让位：mpv 在窗口尺寸稳定后会把自己铺满，
+    /// 只应用一次会被它覆盖（表现就是拖完窗口画面只剩一条）.
+    /// </summary>
+    private void ScheduleInsetRetry()
+    {
+        _insetTimer ??= DispatcherQueue.CreateTimer();
+        _insetTimer.Interval = TimeSpan.FromMilliseconds(220);
+        _insetTimer.IsRepeating = true;
+        _insetTimer.Tick -= OnInsetTimerTick;
+        _insetTimer.Tick += OnInsetTimerTick;
+        // mpv 在缩放结束后才把自己铺满，单次重试会被它盖掉，连补几次直到稳定.
+        _insetRetryLeft = 5;
+        _insetTimer.Start();
+    }
+
+    private void OnInsetTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+    {
+        ApplySurfaceInset();
+        _insetRetryLeft--;
+        if (_insetRetryLeft <= 0)
+        {
+            sender.Stop();
+        }
+    }
+
+    private void OnCompactStreamFlyoutOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout || ViewModel is null)
+        {
+            return;
+        }
+
+        flyout.Items.Clear();
+        foreach (var option in ViewModel.LiveStreamOptions)
+        {
+            var item = new MenuFlyoutItem { Text = option.DisplayText };
+            var captured = option;
+            item.Click += (_, _) => ViewModel.SwitchLiveStreamCommand.Execute(captured);
+            flyout.Items.Add(item);
+        }
+
+        if (flyout.Items.Count == 0)
+        {
+            flyout.Items.Add(new MenuFlyoutItem { Text = "还没有可用线路", IsEnabled = false });
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -96,13 +148,18 @@ public sealed partial class LiveSidePanelHost : UserControl
     {
         _isCompact = compact;
         ApplyCompactState();
+        CompactActions.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
         RefreshInset();
     }
 
     /// <summary>
     /// 让外层改完高度后重新算一次让位.
     /// </summary>
-    public void RefreshInset() => ApplySurfaceInset();
+    public void RefreshInset()
+    {
+        ApplySurfaceInset();
+        ScheduleInsetRetry();
+    }
 
     private void ApplyCompactState()
     {
@@ -191,3 +248,4 @@ public sealed partial class LiveSidePanelHost : UserControl
     private void OnRefreshClick(object sender, RoutedEventArgs e)
         => ViewModel?.RefreshLiveInfoCommand.Execute(default);
 }
+

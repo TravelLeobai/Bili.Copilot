@@ -135,6 +135,9 @@ public sealed partial class PlayerViewModel
         OnPropertyChanged(nameof(IsVodTimelineVisible));
         OnPropertyChanged(nameof(IsCatchUpButtonVisible));
         OnPropertyChanged(nameof(LivePanelInsetThickness));
+            // 覆盖层底部控制栏/进度条用的是 LivePanelAvoidanceThickness，
+            // 不通知它的话宽窗下控制栏右侧那排按钮会被面板压住.
+            OnPropertyChanged(nameof(LivePanelAvoidanceThickness));
         if (!value)
         {
             // 离开直播时把让位清零，别把点播界面也挤窄.
