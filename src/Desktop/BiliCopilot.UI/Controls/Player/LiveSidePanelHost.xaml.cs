@@ -244,7 +244,7 @@ public sealed partial class LiveSidePanelHost : UserControl
         // 用 ActualWidth 会在紧凑/宽版切换瞬间取到过期或拉伸后的宽度，导致整块覆盖层被挤窄.
         // 比覆盖层让位再少 8：画面往面板底下压一点，盖住接缝（否则 mpv 按 378、
         // 覆盖层按实测宽度算，两者差值会露出白条）.
-        var inset = _isCollapsed ? 0d : Math.Max(0d, Services.MpvSurfaceService.LivePanelWidth - 8d);
+        var inset = _isCollapsed ? 0d : Math.Max(0d, Services.MpvSurfaceService.LivePanelWidth - 20d);
         Services.MpvSurfaceService.ApplyInset(handle, inset, 0, scale);
 
         // 让覆盖层（进度条、按钮、右上角控件）也跟着缩，避免被面板压住.
@@ -259,6 +259,7 @@ public sealed partial class LiveSidePanelHost : UserControl
     private void OnRefreshClick(object sender, RoutedEventArgs e)
         => ViewModel?.RefreshLiveInfoCommand.Execute(default);
 }
+
 
 
 
