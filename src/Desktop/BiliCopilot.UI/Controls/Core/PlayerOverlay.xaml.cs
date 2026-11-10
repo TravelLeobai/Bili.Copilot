@@ -189,17 +189,18 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             return;
         }
 
-        // 宽窗且面板展开：顶栏右侧按钮停在面板左边，别被面板盖住；
-        // 窄窗面板在底部，顶栏保持原样（-140 是给窗口按钮让位的）.
-        var panelOnRight = ViewModel.IsLive && !ViewModel.IsLivePanelNarrow && ViewModel.LivePanelInset > 1;
-        FooterContainer.Margin = panelOnRight
-            ? new Thickness(0, 0, Math.Max(0, ViewModel.LivePanelInset - 8), 0)
+        // 窄版：视频区右上那排按钮整排隐藏（窄窗塞不下，也不该压画面）.
+        // 宽版：让内层 Grid 的右侧让位生效，这里不再叠 -140，否则按钮会错位。
+        var narrow = ViewModel.IsLivePanelNarrow;
+        FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
+        FooterContainer.Margin = ViewModel.IsLive && !narrow && ViewModel.LivePanelInset > 1
+            ? new Thickness(0)
             : new Thickness(0, 0, -140, 0);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(ViewModel.IsLive) or nameof(ViewModel.LivePanelInset))
+        if (e.PropertyName is nameof(ViewModel.IsLive) or nameof(ViewModel.LivePanelInset) or nameof(ViewModel.IsLivePanelNarrow))
         {
             ApplyLiveHeaderAlignment();
         }
