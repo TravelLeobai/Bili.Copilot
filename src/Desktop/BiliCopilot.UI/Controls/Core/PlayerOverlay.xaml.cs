@@ -91,6 +91,14 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         });
     }
 
+    /// <summary>
+    /// 直播时不显示 CDN 节点指示器.
+    /// </summary>
+    /// <param name="isLive">是否直播.</param>
+    /// <returns>可见性.</returns>
+    internal static Visibility GetCdnVisibility(bool isLive)
+        => isLive ? Visibility.Collapsed : Visibility.Visible;
+
     internal static Visibility GetSkipPromptVisibility(bool isVisible)
         => isVisible ? Visibility.Visible : Visibility.Collapsed;
 
@@ -190,12 +198,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
 
         // 窄版：视频区右上那排按钮整排隐藏（窄窗塞不下，也不该压画面）.
-        // 宽版：让内层 Grid 的右侧让位生效，这里不再叠 -140，否则按钮会错位。
+        // 宽版：顶栏整条按面板宽度缩进来，右侧按钮才不会跑到面板底下.
         var narrow = ViewModel.IsLivePanelNarrow;
+        var panelOnRight = ViewModel.IsLive && !narrow && ViewModel.LivePanelInset > 1;
         FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-        FooterContainer.Margin = ViewModel.IsLive && !narrow && ViewModel.LivePanelInset > 1
-            ? new Thickness(0)
-            : new Thickness(0, 0, -140, 0);
+        HeaderBarHost.Margin = panelOnRight ? new Thickness(0, 0, ViewModel.LivePanelInset, 0) : new Thickness(0);
+        FooterContainer.Margin = panelOnRight ? new Thickness(0) : new Thickness(0, 0, -140, 0);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
