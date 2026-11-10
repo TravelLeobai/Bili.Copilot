@@ -209,7 +209,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         var narrow = ViewModel?.IsLivePanelNarrow == true;
 
         // 面板还没测量出来时用常量兜底（面板本身写死 360 宽 + 18 间距）.
-        var panelWidth = LivePanelControl.ActualWidth > 1 ? LivePanelControl.ActualWidth : 378d;
+        var panelWidth = LivePanelControl.EffectiveWidth;
         var panelHeight = LivePanelControl.ActualHeight > 1 ? LivePanelControl.ActualHeight : 0d;
 
         // 内层容器（进度条、控制栏、顶栏用它让位）：宽版让右，窄版让底.
@@ -217,12 +217,17 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             ? new Thickness(0)
             : (narrow ? new Thickness(0, 0, 0, panelHeight) : new Thickness(0, 0, panelWidth + 16, 0));
 
+        // 顶栏和底部控制栏都在 ContentHost 里，已经跟着上面那次让位缩进；
+        // 这里只在「面板收起、内容铺满」时补一块，避开窗口的最小化/关闭按钮.
+        var panelReserved = isLive && !narrow ? Math.Max(panelWidth + 16, 0) : 0d;
+        HeaderBarHost.Margin = panelReserved > 0
+            ? new Thickness(0)
+            : new Thickness(0, 0, 170, 0);
+
         // 顶栏右侧按钮：窄版整排隐藏；宽版与底栏用同一个让位值（面板宽 + 间距），
         // 折叠时面板只剩一根展开条，改用 170 兜底，免得按钮贴到窗口的最小化/关闭上.
         FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-        HeaderBarHost.Margin = isLive && !narrow
-            ? new Thickness(0, 0, Math.Max(panelWidth + 16, 170), 0)
-            : new Thickness(0, 0, isLive ? 170 : 0, 0);
+
         FooterContainer.Margin = new Thickness(0);
     }
 
@@ -569,6 +574,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
 
 
 

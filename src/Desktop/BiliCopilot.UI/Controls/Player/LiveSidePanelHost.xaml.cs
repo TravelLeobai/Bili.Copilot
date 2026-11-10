@@ -19,6 +19,17 @@ public sealed partial class LiveSidePanelHost : UserControl
     private PlayerViewModel? _mountedViewModel;
     private bool _isCollapsed;
     private bool _isCompact;
+
+    /// <summary>
+    /// 面板是否处于折叠态（只剩右侧展开条）.
+    /// </summary>
+    public bool IsCollapsed => _isCollapsed;
+
+    /// <summary>
+    /// 面板实际占用的宽度：折叠时为 0，展开时取实测宽度（量不到就用 378 兜底）.
+    /// </summary>
+    public double EffectiveWidth
+        => _isCollapsed ? 0d : (ActualWidth > 1 ? ActualWidth : 378d);
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _insetTimer;
     private int _insetRetryLeft;
 
@@ -246,5 +257,6 @@ public sealed partial class LiveSidePanelHost : UserControl
     private void OnRefreshClick(object sender, RoutedEventArgs e)
         => ViewModel?.RefreshLiveInfoCommand.Execute(default);
 }
+
 
 
