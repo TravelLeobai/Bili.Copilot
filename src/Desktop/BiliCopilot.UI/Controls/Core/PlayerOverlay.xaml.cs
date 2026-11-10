@@ -67,12 +67,6 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         ViewModel.SetLivePanelNarrow(narrow, ActualWidth, ActualHeight);
         LivePanelControl.Height = narrow ? ViewModel.LivePanelBottomInset : double.NaN;
         LivePanelControl.SetCompact(narrow && ViewModel.IsLive);
-        // 窄版弹幕只画在视频区里，别落到下面的直播面板上.
-        if (LiveDanmakuOverlayControl is not null)
-        {
-            var videoHeight = Math.Max(0d, ActualHeight - (narrow ? ViewModel.LivePanelBottomInset : 0d));
-            LiveDanmakuOverlayControl.Height = narrow ? Math.Max(120d, videoHeight - 70d) : 220d;
-        }
         LivePanelControl.RefreshInset();
         ApplyLiveHeaderAlignment();
     }
@@ -588,7 +582,6 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
-
 
 
 
