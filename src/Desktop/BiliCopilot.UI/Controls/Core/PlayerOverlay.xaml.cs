@@ -217,12 +217,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             ? new Thickness(0)
             : (narrow ? new Thickness(0, 0, 0, panelHeight) : new Thickness(0, 0, panelWidth + 16, 0));
 
-        // 顶栏右侧按钮：窄版整排隐藏；宽版停在面板左边.
-        // AppTitleBar 自己给窗口按钮留了约 170，这里扣掉后才是「贴面板左边缘」.
+        // 顶栏右侧按钮：窄版整排隐藏；宽版与底栏用同一个让位值（面板宽 + 间距），
+        // 折叠时面板只剩一根展开条，改用 170 兜底，免得按钮贴到窗口的最小化/关闭上.
         FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
         HeaderBarHost.Margin = isLive && !narrow
-            ? new Thickness(0, 0, Math.Max(0, panelWidth + 16 - 170), 0)
-            : new Thickness(0);
+            ? new Thickness(0, 0, Math.Max(panelWidth + 16, 170), 0)
+            : new Thickness(0, 0, isLive ? 170 : 0, 0);
         FooterContainer.Margin = new Thickness(0);
     }
 
@@ -569,6 +569,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
 
 
 
