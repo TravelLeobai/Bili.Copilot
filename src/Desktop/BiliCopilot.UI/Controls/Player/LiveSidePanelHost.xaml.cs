@@ -156,6 +156,11 @@ public sealed partial class LiveSidePanelHost : UserControl
         HeaderBar.Width = width;
         PanelRoot.Width = width;
         ExpandButton.HorizontalAlignment = _isCompact ? HorizontalAlignment.Right : HorizontalAlignment.Right;
+
+        // 窄版（面板压在底部）没有「收起侧栏」的概念，左上角那个 X 直接隐藏，只留刷新.
+        CollapseButton.Visibility = _isCompact || _isCollapsed
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private void OnCompactStreamFlyoutOpening(object sender, object e)
@@ -228,9 +233,12 @@ public sealed partial class LiveSidePanelHost : UserControl
         if (_isCompact)
         {
             // 紧凑模式：面板压在下面，画面高度让出来，右侧不再让位.
+            // 用 VM 算好的底部占位（窗口高 - 16:9 画面高）：点按钮触发重排时
+            // ActualHeight 可能瞬间为 0，画面就会铺满整窗、被面板盖住.
+            var vmBottom = ViewModel?.LivePanelBottomInset ?? 0d;
             var bottom = _isCollapsed || ViewModel?.IsLivePanelNarrow != true
                 ? 0d
-                : Math.Max(0, ActualHeight);
+                : (vmBottom > 1 ? vmBottom : Math.Max(0, ActualHeight));
             Services.MpvSurfaceService.ApplyInset(handle, 0, bottom, scale);
             if (ViewModel is not null)
             {
