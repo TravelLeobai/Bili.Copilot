@@ -213,15 +213,19 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         var panelHeight = LivePanelControl.ActualHeight > 1 ? LivePanelControl.ActualHeight : 0d;
 
         // 内层容器（进度条、控制栏、顶栏用它让位）：宽版让右，窄版让底.
+        // 折叠后内容要铺满，只有「展开」才让位；折叠时给顶栏留 170 避开窗口按钮.
+        var collapsed = LivePanelControl.IsCollapsed;
         ContentHost.Margin = !isLive
             ? new Thickness(0)
-            : (narrow ? new Thickness(0, 0, 0, panelHeight) : new Thickness(0, 0, panelWidth, 0));
+            : (narrow
+                ? new Thickness(0, 0, 0, panelHeight)
+                : (collapsed ? new Thickness(0) : new Thickness(0, 0, panelWidth, 0)));
 
         // 顶栏和底部控制栏都在 ContentHost 里，已经跟着上面那次让位缩进；
         // 这里只在「面板收起、内容铺满」时补一块，避开窗口的最小化/关闭按钮.
         // AppTitleBar 内部会为窗口按钮预留一段（实测约 210 物理像素/140 DIP），
         // 展开时面板已经占掉右边，这段预留是多余的：用负边距抵消掉，让按钮贴到面板左边缘.
-        if (isLive && !narrow && panelWidth > 100)
+        if (isLive && !narrow && !collapsed)
         {
             HeaderBarHost.Margin = new Thickness(0, 0, -160, 0);
         }
@@ -584,6 +588,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
 
 
 
