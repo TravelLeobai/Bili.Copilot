@@ -203,9 +203,10 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         var panelOnRight = ViewModel.IsLive && !narrow && ViewModel.LivePanelInset > 1;
 
         // 折叠/无面板时也要给窗口按钮（最小化/最大化/关闭）让位，否则顶栏最右按钮会藏在它们后面.
-        const double CaptionButtonsWidth = 150d;
-        // 面板本身有 16 的内边距，扣掉后顶栏最右按钮正好贴着面板左边缘（视觉上对齐，不留缝）.
-        var rightInset = panelOnRight ? Math.Max(0d, ViewModel.LivePanelInset - 16d) : (narrow ? 0d : CaptionButtonsWidth);
+        // AppTitleBar 自身已经给窗口按钮留了位置，多扣会让按钮整体左移一段；
+        // 这里只补「面板宽度 - 内置预留」的差值，让最右按钮贴住面板左边缘.
+        const double CaptionReserved = 170d;
+        var rightInset = panelOnRight ? Math.Max(0d, ViewModel.LivePanelInset - CaptionReserved) : 0d;
         FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
         HeaderBarHost.Margin = rightInset > 0 ? new Thickness(0, 0, rightInset, 0) : new Thickness(0);
         FooterContainer.Margin = new Thickness(0);

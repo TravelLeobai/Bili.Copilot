@@ -48,6 +48,23 @@
                     <ic:SymbolIcon FontSize="12" Symbol="Dismiss" />
                 </Button>
 
+                <!--  窄版：画质/线路选择器放在面板顶行右侧（播放器顶栏在窄窗下整排隐藏）  -->
+                <DropDownButton
+                    x:Name="CompactStreamSelector"
+                    Grid.Column="2"
+                    Height="32"
+                    Padding="8,0,8,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    VerticalContentAlignment="Center"
+                    AutomationProperties.Name="直播画质与线路"
+                    Content="{x:Bind ViewModel.LiveQualityAndLineText, Mode=OneWay}"
+                    Visibility="Collapsed">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout Opening="OnCompactStreamFlyoutOpening" />
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+
                 <Button
                     x:Name="RefreshButton"
                     Grid.Column="1"

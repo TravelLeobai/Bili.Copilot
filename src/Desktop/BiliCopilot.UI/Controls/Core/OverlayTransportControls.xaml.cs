@@ -218,7 +218,9 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        var width = e.NewSize.Width;
+        // 用窗口宽度决定显隐状态：面板打开后控件自身变窄，
+        // 若按控件宽度算会掉进 Medium/Narrow，右半边按钮和进度条就被收掉了.
+        var width = XamlRoot?.Size.Width ?? e.NewSize.Width;
         var miniWidth = ViewModel.IsDanmakuControlVisible ? 900 : 760;
         if (width < miniWidth)
         {

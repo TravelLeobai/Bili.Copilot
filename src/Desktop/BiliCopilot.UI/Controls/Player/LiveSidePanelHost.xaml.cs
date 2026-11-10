@@ -126,6 +126,7 @@ public sealed partial class LiveSidePanelHost : UserControl
     {
         _isCompact = compact;
         ApplyCompactState();
+        CompactStreamSelector.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
         RefreshInset();
     }
 
@@ -144,6 +145,28 @@ public sealed partial class LiveSidePanelHost : UserControl
         HeaderBar.Width = width;
         PanelRoot.Width = width;
         ExpandButton.HorizontalAlignment = _isCompact ? HorizontalAlignment.Right : HorizontalAlignment.Right;
+    }
+
+    private void OnCompactStreamFlyoutOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout || ViewModel is null)
+        {
+            return;
+        }
+
+        flyout.Items.Clear();
+        foreach (var option in ViewModel.LiveStreamOptions)
+        {
+            var item = new MenuFlyoutItem { Text = option.DisplayText };
+            var captured = option;
+            item.Click += (_, _) => ViewModel.SwitchLiveStreamCommand.Execute(captured);
+            flyout.Items.Add(item);
+        }
+
+        if (flyout.Items.Count == 0)
+        {
+            flyout.Items.Add(new MenuFlyoutItem { Text = "还没有可用线路", IsEnabled = false });
+        }
     }
 
     private void OnCollapseClick(object sender, RoutedEventArgs e) => SetCollapsed(true);
