@@ -201,9 +201,14 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         // 宽版：顶栏整条按面板宽度缩进来，右侧按钮才不会跑到面板底下.
         var narrow = ViewModel.IsLivePanelNarrow;
         var panelOnRight = ViewModel.IsLive && !narrow && ViewModel.LivePanelInset > 1;
+
+        // 折叠/无面板时也要给窗口按钮（最小化/最大化/关闭）让位，否则顶栏最右按钮会藏在它们后面.
+        const double CaptionButtonsWidth = 150d;
+        // 面板本身有 16 的内边距，扣掉后顶栏最右按钮正好贴着面板左边缘（视觉上对齐，不留缝）.
+        var rightInset = panelOnRight ? Math.Max(0d, ViewModel.LivePanelInset - 16d) : (narrow ? 0d : CaptionButtonsWidth);
         FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-        HeaderBarHost.Margin = panelOnRight ? new Thickness(0, 0, ViewModel.LivePanelInset, 0) : new Thickness(0);
-        FooterContainer.Margin = panelOnRight ? new Thickness(0) : new Thickness(0, 0, -140, 0);
+        HeaderBarHost.Margin = rightInset > 0 ? new Thickness(0, 0, rightInset, 0) : new Thickness(0);
+        FooterContainer.Margin = new Thickness(0);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -549,6 +554,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
+
 
 
 
