@@ -18,6 +18,7 @@ public sealed partial class LiveSidePanelHost : UserControl
     private ReactorHostControl? _reactorHost;
     private PlayerViewModel? _mountedViewModel;
     private bool _isCollapsed;
+    private bool _isCompact;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveSidePanelHost"/> class.
@@ -87,6 +88,30 @@ public sealed partial class LiveSidePanelHost : UserControl
         _reactorHost.Mount(new LiveSidePanel(ViewModel));
     }
 
+    /// <summary>
+    /// 窄窗时切成「贴着底部、占满宽度」的紧凑布局；宽窗恢复 360 宽侧栏.
+    /// </summary>
+    /// <param name="compact">是否紧凑.</param>
+    public void SetCompact(bool compact)
+    {
+        _isCompact = compact;
+        ApplyCompactState();
+        RefreshInset();
+    }
+
+    /// <summary>
+    /// 让外层改完高度后重新算一次让位.
+    /// </summary>
+    public void RefreshInset() => ApplySurfaceInset();
+
+    private void ApplyCompactState()
+    {
+        var width = _isCompact ? double.NaN : 360d;
+        HeaderBar.Width = width;
+        PanelRoot.Width = width;
+        ExpandButton.HorizontalAlignment = _isCompact ? HorizontalAlignment.Right : HorizontalAlignment.Right;
+    }
+
     private void OnCollapseClick(object sender, RoutedEventArgs e) => SetCollapsed(true);
 
     private void OnExpandClick(object sender, RoutedEventArgs e) => SetCollapsed(false);
@@ -131,12 +156,28 @@ public sealed partial class LiveSidePanelHost : UserControl
             return;
         }
 
+        var scale = XamlRoot?.RasterizationScale ?? 1d;
+        if (_isCompact)
+        {
+            // 紧凑模式：面板压在下面，画面高度让出来，右侧不再让位.
+            var bottom = _isCollapsed || ViewModel?.IsLivePanelNarrow != true
+                ? 0d
+                : Math.Max(0, ActualHeight);
+            Services.MpvSurfaceService.ApplyInset(handle, 0, bottom, scale);
+            if (ViewModel is not null)
+            {
+                ViewModel.LivePanelInset = 0;
+            }
+
+            return;
+        }
+
         // 用实际宽度算让位，按钮列宽度改了也不用同步改常量.
         var measured = ActualWidth;
         var inset = _isCollapsed
             ? 0d
             : measured > 40 ? Math.Ceiling(measured) : (double)Services.MpvSurfaceService.LivePanelWidth;
-        Services.MpvSurfaceService.ApplyRightInset(handle, inset, XamlRoot?.RasterizationScale ?? 1d);
+        Services.MpvSurfaceService.ApplyInset(handle, inset, 0, scale);
 
         // 让覆盖层（进度条、按钮、右上角控件）也跟着缩，避免被面板压住.
         if (ViewModel is not null)

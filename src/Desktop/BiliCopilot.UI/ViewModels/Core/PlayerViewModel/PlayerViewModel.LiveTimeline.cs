@@ -169,6 +169,63 @@ public sealed partial class PlayerViewModel
     public Thickness LivePanelInsetThickness
         => IsLive ? new Thickness(0, 0, _livePanelInset, 0) : default;
 
+    /// <summary>
+    /// 窄窗时直播面板改成上下排布（画面在上面、面板在下面）.
+    /// </summary>
+    public bool IsLivePanelNarrow
+    {
+        get => _isLivePanelNarrow;
+        private set
+        {
+            if (_isLivePanelNarrow == value)
+            {
+                return;
+            }
+
+            _isLivePanelNarrow = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LivePanelAvoidanceThickness));
+        }
+    }
+
+    /// <summary>
+    /// 窄窗时面板在底部占掉的高度（DIP）.
+    /// </summary>
+    public double LivePanelBottomInset => _livePanelBottomInset;
+
+    /// <summary>
+    /// 覆盖层要让位的边距：窄窗让底部，宽窗让右侧.
+    /// </summary>
+    public Thickness LivePanelAvoidanceThickness
+        => IsLive
+            ? (_isLivePanelNarrow
+                ? new Thickness(0, 0, 0, _livePanelBottomInset)
+                : new Thickness(0, 0, _livePanelInset, 0))
+            : default;
+
+    private bool _isLivePanelNarrow;
+
+    private double _livePanelBottomInset;
+
+    /// <summary>
+    /// 由覆盖层在自适应状态切换时调用：窄窗 = 面板在底部，宽窗 = 面板在右侧.
+    /// </summary>
+    /// <param name="narrow">是否窄窗排布.</param>
+    /// <param name="windowHeight">播放窗口高度（DIP），用来算底部占位.</param>
+    public void SetLivePanelNarrow(bool narrow, double windowHeight)
+    {
+        IsLivePanelNarrow = narrow;
+        var bottom = narrow ? Math.Clamp(windowHeight * 0.42, 200d, 420d) : 0d;
+        if (Math.Abs(_livePanelBottomInset - bottom) >= 0.5)
+        {
+            _livePanelBottomInset = bottom;
+            OnPropertyChanged(nameof(LivePanelBottomInset));
+            OnPropertyChanged(nameof(LivePanelAvoidanceThickness));
+        }
+
+        OnPropertyChanged(nameof(LivePanelAvoidanceThickness));
+    }
+
     private double _livePanelInset;
     /// <summary>
     /// 悬浮的「回到最新」：控制栏自动隐藏时也能点，直播并落后时才出现.

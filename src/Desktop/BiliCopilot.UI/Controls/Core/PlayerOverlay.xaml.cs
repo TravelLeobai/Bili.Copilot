@@ -35,6 +35,24 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         _cursorTimer.Tick += OnCursorTimerTick;
     }
 
+
+    /// <summary>
+    /// 自适应触发切换直播面板排布：窄窗压底部，宽窗贴右侧.
+    /// 这里只负责同步「宿主紧凑模式」与 mpv 画面让位，位置本身由 VisualState 的 Setter 管.
+    /// </summary>
+    private void OnLivePanelLayoutStateChanged(object sender, VisualStateChangedEventArgs e)
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        var narrow = e.NewState?.Name == "NarrowLivePanel";
+        ViewModel.SetLivePanelNarrow(narrow, ActualHeight);
+        LivePanelControl.SetCompact(narrow && ViewModel.IsLive);
+        LivePanelControl.RefreshInset();
+    }
+
     public void ShowTip(string text, InfoType type = InfoType.Error)
     {
         DispatcherQueue.TryEnqueue(async () =>
@@ -495,6 +513,9 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
+
+
 
 
 

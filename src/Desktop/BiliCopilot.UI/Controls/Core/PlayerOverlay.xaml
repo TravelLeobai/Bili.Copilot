@@ -75,6 +75,7 @@
     </UserControl.Resources>
 
     <Grid x:Name="RootGrid">
+
         <danmaku:VideoDanmakuPanel
             x:Name="DanmakuPanel"
             Margin="4"
@@ -106,7 +107,7 @@
                 Visibility="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay}" />
         </Grid>
         <!--  直播面板展开时整块覆盖层右侧让位，进度条/按钮都跟着缩  -->
-        <Grid Margin="{x:Bind ViewModel.LivePanelInsetThickness, Mode=OneWay}">
+        <Grid Margin="{x:Bind ViewModel.LivePanelAvoidanceThickness, Mode=OneWay}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="60" />
                 <RowDefinition Height="*" />
@@ -937,6 +938,28 @@
                 <VisualState x:Name="NarrowState">
                     <VisualState.Setters>
                         <Setter Target="FooterContainer.Visibility" Value="Collapsed" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="LivePanelLayoutStates" CurrentStateChanged="OnLivePanelLayoutStateChanged">
+                <VisualState x:Name="NarrowLivePanel">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="0" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="LivePanelControl.HorizontalAlignment" Value="Stretch" />
+                        <Setter Target="LivePanelControl.VerticalAlignment" Value="Bottom" />
+                        <Setter Target="LivePanelControl.Height" Value="380" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="WideLivePanel">
+                    <VisualState.StateTriggers>
+                        <AdaptiveTrigger MinWindowWidth="1024" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="LivePanelControl.HorizontalAlignment" Value="Right" />
+                        <Setter Target="LivePanelControl.VerticalAlignment" Value="Stretch" />
+                        <Setter Target="LivePanelControl.Height" Value="NaN" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>

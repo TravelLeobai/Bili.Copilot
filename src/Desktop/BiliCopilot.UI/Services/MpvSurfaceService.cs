@@ -21,12 +21,13 @@ internal static class MpvSurfaceService
     private const int SwpNoMove = 0x0002;
 
     /// <summary>
-    /// 按右侧让出的宽度重新摆放 mpv 画面.
+    /// 按「右侧 + 底部」让位重新摆放 mpv 画面：窄窗时面板改成压在下面，画面缩到上半部分.
     /// </summary>
     /// <param name="playerWindow">播放器窗口句柄.</param>
-    /// <param name="rightInsetDips">右侧需要让出的 DIP，0 表示铺满.</param>
-    /// <param name="rasterizationScale">DPI 缩放（1.0 = 100%）.</param>
-    public static void ApplyRightInset(IntPtr playerWindow, double rightInsetDips, double rasterizationScale = 1d)
+    /// <param name="rightInsetDips">右侧让位（DIP）.</param>
+    /// <param name="bottomInsetDips">底部让位（DIP）.</param>
+    /// <param name="rasterizationScale">DPI 缩放.</param>
+    public static void ApplyInset(IntPtr playerWindow, double rightInsetDips, double bottomInsetDips, double rasterizationScale = 1d)
     {
         if (playerWindow == IntPtr.Zero)
         {
@@ -39,13 +40,22 @@ internal static class MpvSurfaceService
             return;
         }
 
-        // 子窗口尺寸是物理像素，XAML 里算出来的是 DIP，这里换算一次，避免 125% 缩放下差一条.
         var scale = rasterizationScale <= 0 ? 1d : rasterizationScale;
-        var insetPx = (int)Math.Round(Math.Max(0, rightInsetDips) * scale);
-        var width = Math.Max(1, rect.Right - rect.Left - insetPx);
-        var height = Math.Max(1, rect.Bottom - rect.Top);
+        var rightPx = (int)Math.Round(Math.Max(0, rightInsetDips) * scale);
+        var bottomPx = (int)Math.Round(Math.Max(0, bottomInsetDips) * scale);
+        var width = Math.Max(1, rect.Right - rect.Left - rightPx);
+        var height = Math.Max(1, rect.Bottom - rect.Top - bottomPx);
         _ = SetWindowPos(mpv, IntPtr.Zero, 0, 0, width, height, SwpNoZOrder | SwpNoActivate | SwpNoMove);
     }
+
+    /// <summary>
+    /// 按右侧让出的宽度重新摆放 mpv 画面.
+    /// </summary>
+    /// <param name="playerWindow">播放器窗口句柄.</param>
+    /// <param name="rightInsetDips">右侧需要让出的 DIP，0 表示铺满.</param>
+    /// <param name="rasterizationScale">DPI 缩放（1.0 = 100%）.</param>
+    public static void ApplyRightInset(IntPtr playerWindow, double rightInsetDips, double rasterizationScale = 1d)
+        => ApplyInset(playerWindow, rightInsetDips, 0, rasterizationScale);
 
     private static IntPtr FindChildByClass(IntPtr parent, string className)
     {
