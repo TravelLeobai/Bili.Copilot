@@ -586,7 +586,7 @@ internal static class QualityUnlockService
                     $"{context} · 卡在=服务端替我们取 playurl · code={code} · 服务器返回={Shorten(text, 120)}");
             }
 
-            var (video, audio, quality) = ParseDash(root);
+            var (video, audio, quality, width, height, bandwidth, codecs) = ParseDash(root);
             if (string.IsNullOrEmpty(video) && string.IsNullOrEmpty(audio))
             {
                 logger?.LogWarning("画质解锁返回里没有 dash 地址");
@@ -602,6 +602,10 @@ internal static class QualityUnlockService
                 Video = video,
                 Audio = audio,
                 Quality = quality,
+                Width = width,
+                Height = height,
+                Bandwidth = bandwidth,
+                Codecs = codecs,
             };
         }
         catch (Exception ex)
@@ -689,7 +693,7 @@ internal static class QualityUnlockService
         }
     }
 
-    private static (string? Video, string? Audio, int Quality) ParseDash(JsonElement root)
+    private static (string? Video, string? Audio, int Quality, int Width, int Height, long Bandwidth, string? Codecs) ParseDash(JsonElement root)
     {
         // 服务器直接把 playurl 的 JSON 返回回来，结构同 B 站：data.dash.video[] / data.dash.audio[].
         // 番剧那条（ogv/player/playview）不是这个形状，dash 可能埋在 data.result 或
@@ -711,7 +715,7 @@ internal static class QualityUnlockService
 
         if (!root.TryGetProperty("dash", out var dash) || dash.ValueKind != JsonValueKind.Object)
         {
-            return (null, null, 0);
+            return (null, null, 0, 0, 0, 0, null);
         }
 
         var quality = dash.TryGetProperty("video", out var videos) && videos.ValueKind == JsonValueKind.Array
@@ -719,13 +723,29 @@ internal static class QualityUnlockService
             : 0;
 
         string? video = null;
+        var width = 0;
+        var height = 0;
+        var bandwidth = 0L;
+        string? codecs = null;
         if (dash.TryGetProperty("video", out var videoArray) && videoArray.ValueKind == JsonValueKind.Array)
         {
-            video = videoArray.EnumerateArray()
-                .OrderByDescending(p => p.TryGetProperty("id", out var id) ? id.GetInt32() : 0)
-                .Select(p => p.TryGetProperty("baseUrl", out var url) ? url.GetString()
-                    : p.TryGetProperty("base_url", out var url2) ? url2.GetString() : null)
-                .FirstOrDefault(p => !string.IsNullOrEmpty(p));
+            foreach (var item in videoArray.EnumerateArray()
+                .OrderByDescending(p => p.TryGetProperty("id", out var vid) ? vid.GetInt32() : 0))
+            {
+                var url = item.TryGetProperty("baseUrl", out var u1) ? u1.GetString()
+                    : item.TryGetProperty("base_url", out var u2) ? u2.GetString() : null;
+                if (string.IsNullOrEmpty(url))
+                {
+                    continue;
+                }
+
+                video = url;
+                width = item.TryGetProperty("width", out var w) ? w.GetInt32() : 0;
+                height = item.TryGetProperty("height", out var h) ? h.GetInt32() : 0;
+                bandwidth = item.TryGetProperty("bandwidth", out var bw) ? bw.GetInt64() : 0;
+                codecs = item.TryGetProperty("codecs", out var cd) ? cd.GetString() : null;
+                break;
+            }
         }
 
         string? audio = null;
@@ -738,7 +758,7 @@ internal static class QualityUnlockService
                 .FirstOrDefault(p => !string.IsNullOrEmpty(p));
         }
 
-        return (video, audio, quality);
+        return (video, audio, quality, width, height, bandwidth, codecs);
     }
 
     /// <summary>
@@ -841,6 +861,18 @@ internal sealed class QualityUnlockResult
     public string? Audio { get; init; }
 
     public int Quality { get; init; }
+
+    /// <summary>
+    /// 解锁回来的视频轨实际宽高、码率与编码：统计面板要按这条显示，
+    /// 不能再用内核 dash（非会员只有 80 档）的数值.
+    /// </summary>
+    public int Width { get; init; }
+
+    public int Height { get; init; }
+
+    public long Bandwidth { get; init; }
+
+    public string? Codecs { get; init; }
 
     public string? Message { get; init; }
 

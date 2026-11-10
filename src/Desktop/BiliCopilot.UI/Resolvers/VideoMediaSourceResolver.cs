@@ -58,6 +58,14 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         get => _lastUnlockDiagnostic;
         private set => _lastUnlockDiagnostic = value;
     }
+    // 第三方服务器解锁回来的真实档位与轨参数：统计面板按这个显示，
+    // 内核 dash 里非会员最高 80，直接读它会「解锁 116 / 画质 80」自相矛盾.
+    private int _unlockedQuality;
+    private int _unlockedWidth;
+    private int _unlockedHeight;
+    private long _unlockedBandwidth;
+    private string? _unlockedCodecs;
+
 
     internal PlayerFormatInformation? GetCurrentFormat()
     {
@@ -232,7 +240,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         {
             items.Add(new("解锁失败原因", LastUnlockDiagnostic));
         }
-        if (video is not null)
+        if (_unlockedQuality > 0)
+        {
+            // 解锁成功：展示第三方那份 dash 的真实参数（分辨率/码率/编码）.
+            items.Add(new("分辨率", $"{_unlockedWidth} × {_unlockedHeight}"));
+            items.Add(new("视频码率（标称）", $"{_unlockedBandwidth / 1000} Kbps [{DescribeCodec(_unlockedCodecs)}]"));
+        }
+        else if (video is not null)
         {
             items.Add(new("分辨率", $"{video.Width} × {video.Height}"));
             items.Add(new("视频码率（标称）", $"{video.Bandwidth / 1000} Kbps [{DescribeCodec(video.Codecs)}]"));
@@ -246,7 +260,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         items.Add(new("分段", $"视频 {videos.Count} 段 / 音频 {audios.Count} 段"));
         items.Add(new("视频宿主机", ReadHost(video?.BaseUrl)));
         items.Add(new("音频宿主机", ReadHost(audio?.BaseUrl)));
-        items.Add(new("画质", format is null ? "未知" : $"qn={format.Quality}"));
+        items.Add(new("画质", _unlockedQuality > 0 ? $"qn={_unlockedQuality}（第三方）" : format is null ? "未知" : $"qn={format.Quality}"));
         return items;
     }
 
@@ -303,6 +317,11 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         // 启用了画质解锁时，先让第三方服务器代取 playurl（可拿到高画质 dash 地址）.
         LastUnlockSummary = QualityUnlockService.IsEnabled ? "未尝试" : "否（设置里没开画质解锁）";
+        _unlockedQuality = 0;
+        _unlockedWidth = 0;
+        _unlockedHeight = 0;
+        _unlockedBandwidth = 0;
+        _unlockedCodecs = null;
         if (QualityUnlockService.IsEnabled)
         {
             var cookie = cookiesResolver.GetCookieString();
@@ -343,6 +362,11 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
                     : QualityUnlockService.PreferMirrorHost(CdnAccelerator.Rewrite(unlocked.Audio!, true));
                 SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality);
                 LastUnlockSummary = $"是（第三方服务器，qn={(unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality)}）";
+                _unlockedQuality = unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality;
+                _unlockedWidth = unlocked.Width;
+                _unlockedHeight = unlocked.Height;
+                _unlockedBandwidth = unlocked.Bandwidth;
+                _unlockedCodecs = unlocked.Codecs;
                 LastUnlockDiagnostic = string.Empty;
                 return (unlockedVideo, unlockedAudio);
             }
