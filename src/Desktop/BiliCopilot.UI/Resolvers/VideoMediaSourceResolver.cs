@@ -308,23 +308,39 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             var cookie = cookiesResolver.GetCookieString();
             var csrf = ExtractCookie(cookie, "bili_jct");
             var mid = this.Get<AccountViewModel>().MyProfile?.User?.Id ?? string.Empty;
-            var targetQuality = QualityUnlockService.AutoMaxQuality
-                ? Math.Max(selectedFormat.Quality, 127)
-                : selectedFormat.Quality;
-
-            var unlocked = await QualityUnlockService.GetPlayUrlsAsync(
-                _snapshot.Video.Identifier.Id,
-                _part.Identifier.Id,
-                targetQuality,
-                cookie,
-                csrf,
-                mid,
-                logger);
+            // 档位要按「片源真实上限」来试：直接要 120(4K) 遇到只有 1080P 的片源，
+            // 服务端上游会失败并回 {"code":2,"message":"fail"}（实测：1080P 片源要 4K 必挂）。
+            // 所以从高到低逐个试，成功即停；每失败一次会消耗一次解析额度，最多试 3 档.
+            var ladder = QualityUnlockService.AutoMaxQuality
+                ? new[] { Math.Max(selectedFormat.Quality, 120), 112, 80 }
+                : new[] { selectedFormat.Quality };
+            QualityUnlockResult unlocked = default;
+            foreach (var candidate in ladder.Distinct())
+            {
+                unlocked = await QualityUnlockService.GetPlayUrlsAsync(
+                    _snapshot.Video.Identifier.Id,
+                    _part.Identifier.Id,
+                    candidate,
+                    cookie,
+                    csrf,
+                    mid,
+                    logger);
+                if (unlocked.Success)
+                {
+                    break;
+                }
+            }
 
             if (unlocked.Success)
             {
-                var unlockedVideo = string.IsNullOrEmpty(unlocked.Video) ? null : CdnAccelerator.Rewrite(unlocked.Video!, true);
-                var unlockedAudio = string.IsNullOrEmpty(unlocked.Audio) ? null : CdnAccelerator.Rewrite(unlocked.Audio!, true);
+                // 先按客户端既有规则优选，再把 cn-gdfs/upos 之类换到能连通的镜像，
+                // 否则 mpv 会在「Failed to open ... Timeout was reached」上挂死.
+                var unlockedVideo = string.IsNullOrEmpty(unlocked.Video)
+                    ? null
+                    : QualityUnlockService.PreferMirrorHost(CdnAccelerator.Rewrite(unlocked.Video!, true));
+                var unlockedAudio = string.IsNullOrEmpty(unlocked.Audio)
+                    ? null
+                    : QualityUnlockService.PreferMirrorHost(CdnAccelerator.Rewrite(unlocked.Audio!, true));
                 SettingsToolkit.WriteLocalSetting(SettingNames.LastSelectedVideoQuality, unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality);
                 LastUnlockSummary = $"是（第三方服务器，qn={(unlocked.Quality > 0 ? unlocked.Quality : selectedFormat.Quality)}）";
                 LastUnlockDiagnostic = string.Empty;
@@ -387,6 +403,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
         return string.Empty;
     }
 }
+
 
 
 
