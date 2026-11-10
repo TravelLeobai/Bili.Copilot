@@ -33,6 +33,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         _cursorTimer = DispatcherQueue.CreateTimer();
         _cursorTimer.Interval = TimeSpan.FromMilliseconds(500);
         _cursorTimer.Tick += OnCursorTimerTick;
+        SizeChanged += OnOverlaySizeChanged;
     }
 
 
@@ -47,10 +48,33 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             return;
         }
 
-        var narrow = e.NewState?.Name == "NarrowLivePanel";
-        ViewModel.SetLivePanelNarrow(narrow, ActualHeight);
+        ApplyLivePanelGeometry(e.NewState?.Name == "NarrowLivePanel");
+    }
+
+    /// <summary>
+    /// 窄窗：面板高度 = 窗口高 − 16:9 画面高，画面贴顶、面板无缝接在下面；
+    /// 宽窗：面板恢复贴右竖排.
+    /// </summary>
+    private void ApplyLivePanelGeometry(bool narrow)
+    {
+        if (ViewModel is null)
+        {
+            return;
+        }
+
+        ViewModel.SetLivePanelNarrow(narrow, ActualWidth, ActualHeight);
+        LivePanelControl.Height = narrow ? ViewModel.LivePanelBottomInset : double.NaN;
         LivePanelControl.SetCompact(narrow && ViewModel.IsLive);
         LivePanelControl.RefreshInset();
+        ApplyLiveHeaderAlignment();
+    }
+
+    private void OnOverlaySizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (ViewModel?.IsLivePanelNarrow == true)
+        {
+            ApplyLivePanelGeometry(true);
+        }
     }
 
     public void ShowTip(string text, InfoType type = InfoType.Error)
@@ -93,6 +117,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         _cursorTimer.Tick -= OnCursorTimerTick;
         _cursorTimer.Stop();
         SourceListView?.ItemsSource = default;
+        SizeChanged -= OnOverlaySizeChanged;
     }
 
     private void OnRequestHideNextTip(object? sender, EventArgs e)
@@ -128,7 +153,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         if (!_isTouch && !ViewModel.IsExtraPanelVisible)
         {
             _isInTitleBar = position.Y <= HeaderBarHeight && position.Y >= 0;
-            _isInTransportControls = position.Y >= ActualHeight - MediaTransportControlsHeight;
+            var liveBottomInset = ViewModel?.IsLivePanelNarrow == true ? ViewModel.LivePanelBottomInset : 0d;
+        _isInTransportControls = position.Y >= ActualHeight - liveBottomInset - MediaTransportControlsHeight;
             if (_isInTitleBar || _isInTransportControls)
             {
                 // If the pointer is in the title bar or transport controls, show controls immediately.
@@ -163,11 +189,12 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             return;
         }
 
-        // 只有直播面板展开（有让位宽度）时才往右顶；收起后要留出窗口按钮的位置，别压上去.
-        var shouldShift = ViewModel.IsLive && ViewModel.LivePanelInset > 1;
-        FooterContainer.Margin = shouldShift
-            ? new Thickness(0, 0, -140, 0)
-            : new Thickness(0);
+        // 宽窗且面板展开：顶栏右侧按钮停在面板左边，别被面板盖住；
+        // 窄窗面板在底部，顶栏保持原样（-140 是给窗口按钮让位的）.
+        var panelOnRight = ViewModel.IsLive && !ViewModel.IsLivePanelNarrow && ViewModel.LivePanelInset > 1;
+        FooterContainer.Margin = panelOnRight
+            ? new Thickness(0, 0, Math.Max(0, ViewModel.LivePanelInset - 8), 0)
+            : new Thickness(0, 0, -140, 0);
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)

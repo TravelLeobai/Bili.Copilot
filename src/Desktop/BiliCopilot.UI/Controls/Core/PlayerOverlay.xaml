@@ -949,7 +949,6 @@
                     <VisualState.Setters>
                         <Setter Target="LivePanelControl.HorizontalAlignment" Value="Stretch" />
                         <Setter Target="LivePanelControl.VerticalAlignment" Value="Bottom" />
-                        <Setter Target="LivePanelControl.Height" Value="380" />
                     </VisualState.Setters>
                 </VisualState>
                 <VisualState x:Name="WideLivePanel">
