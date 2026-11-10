@@ -215,14 +215,24 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         // 内层容器（进度条、控制栏、顶栏用它让位）：宽版让右，窄版让底.
         ContentHost.Margin = !isLive
             ? new Thickness(0)
-            : (narrow ? new Thickness(0, 0, 0, panelHeight) : new Thickness(0, 0, panelWidth + 16, 0));
+            : (narrow ? new Thickness(0, 0, 0, panelHeight) : new Thickness(0, 0, panelWidth + 40, 0));
 
         // 顶栏和底部控制栏都在 ContentHost 里，已经跟着上面那次让位缩进；
         // 这里只在「面板收起、内容铺满」时补一块，避开窗口的最小化/关闭按钮.
-        var panelReserved = isLive && !narrow ? Math.Max(panelWidth + 16, 0) : 0d;
-        HeaderBarHost.Margin = panelReserved > 0
-            ? new Thickness(0)
-            : new Thickness(0, 0, 170, 0);
+        // AppTitleBar 内部会为窗口按钮预留一段（实测约 210 物理像素/140 DIP），
+        // 展开时面板已经占掉右边，这段预留是多余的：用负边距抵消掉，让按钮贴到面板左边缘.
+        if (isLive && !narrow && panelWidth > 100)
+        {
+            HeaderBarHost.Margin = new Thickness(0, 0, -210, 0);
+        }
+        else if (isLive)
+        {
+            HeaderBarHost.Margin = new Thickness(0, 0, 170, 0);
+        }
+        else
+        {
+            HeaderBarHost.Margin = new Thickness(0);
+        }
 
         // 顶栏右侧按钮：窄版整排隐藏；宽版与底栏用同一个让位值（面板宽 + 间距），
         // 折叠时面板只剩一根展开条，改用 170 兜底，免得按钮贴到窗口的最小化/关闭上.
@@ -574,6 +584,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         e.Handled = true;
     }
 }
+
 
 
 
