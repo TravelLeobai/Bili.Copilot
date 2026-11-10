@@ -107,7 +107,8 @@
                 Visibility="{x:Bind ViewModel.Player.IsLoading, Mode=OneWay}" />
         </Grid>
         <!--  直播面板展开时整块覆盖层右侧让位，进度条/按钮都跟着缩  -->
-        <Grid Margin="{x:Bind ViewModel.LivePanelAvoidanceThickness, Mode=OneWay}">
+        <!--  让位由代码按面板真实宽度设置：见 PlayerOverlay.ApplyLiveInsets  -->
+        <Grid x:Name="ContentHost">
             <Grid.RowDefinitions>
                 <RowDefinition Height="60" />
                 <RowDefinition Height="*" />

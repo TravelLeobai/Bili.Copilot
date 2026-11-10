@@ -34,6 +34,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         _cursorTimer.Interval = TimeSpan.FromMilliseconds(500);
         _cursorTimer.Tick += OnCursorTimerTick;
         SizeChanged += OnOverlaySizeChanged;
+        LivePanelControl.SizeChanged += OnLivePanelSizeChanged;
     }
 
 
@@ -49,6 +50,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         }
 
         ApplyLivePanelGeometry(e.NewState?.Name == "NarrowLivePanel");
+        ApplyLiveHeaderAlignment();
     }
 
     /// <summary>
@@ -69,12 +71,17 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         ApplyLiveHeaderAlignment();
     }
 
+    private void OnLivePanelSizeChanged(object sender, SizeChangedEventArgs e)
+        => ApplyLiveHeaderAlignment();
+
     private void OnOverlaySizeChanged(object sender, SizeChangedEventArgs e)
     {
         if (ViewModel?.IsLivePanelNarrow == true)
         {
             ApplyLivePanelGeometry(true);
         }
+
+        ApplyLiveHeaderAlignment();
     }
 
     public void ShowTip(string text, InfoType type = InfoType.Error)
@@ -126,6 +133,7 @@ public sealed partial class PlayerOverlay : PlayerControlBase
         _cursorTimer.Stop();
         SourceListView?.ItemsSource = default;
         SizeChanged -= OnOverlaySizeChanged;
+        LivePanelControl.SizeChanged -= OnLivePanelSizeChanged;
     }
 
     private void OnRequestHideNextTip(object? sender, EventArgs e)
@@ -192,23 +200,29 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
     private void ApplyLiveHeaderAlignment()
     {
-        if (FooterContainer is null)
+        if (FooterContainer is null || ContentHost is null)
         {
             return;
         }
 
-        // 窄版：视频区右上那排按钮整排隐藏（窄窗塞不下，也不该压画面）.
-        // 宽版：顶栏整条按面板宽度缩进来，右侧按钮才不会跑到面板底下.
-        var narrow = ViewModel.IsLivePanelNarrow;
-        var panelOnRight = ViewModel.IsLive && !narrow && ViewModel.LivePanelInset > 1;
+        var isLive = ViewModel?.IsLive == true;
+        var narrow = ViewModel?.IsLivePanelNarrow == true;
 
-        // 折叠/无面板时也要给窗口按钮（最小化/最大化/关闭）让位，否则顶栏最右按钮会藏在它们后面.
-        // AppTitleBar 自身已经给窗口按钮留了位置，多扣会让按钮整体左移一段；
-        // 这里只补「面板宽度 - 内置预留」的差值，让最右按钮贴住面板左边缘.
-        const double CaptionReserved = 170d;
-        var rightInset = panelOnRight ? Math.Max(0d, ViewModel.LivePanelInset - CaptionReserved) : 0d;
+        // 面板还没测量出来时用常量兜底（面板本身写死 360 宽 + 18 间距）.
+        var panelWidth = LivePanelControl.ActualWidth > 1 ? LivePanelControl.ActualWidth : 378d;
+        var panelHeight = LivePanelControl.ActualHeight > 1 ? LivePanelControl.ActualHeight : 0d;
+
+        // 内层容器（进度条、控制栏、顶栏用它让位）：宽版让右，窄版让底.
+        ContentHost.Margin = !isLive
+            ? new Thickness(0)
+            : (narrow ? new Thickness(0, 0, 0, panelHeight) : new Thickness(0, 0, panelWidth + 16, 0));
+
+        // 顶栏右侧按钮：窄版整排隐藏；宽版停在面板左边.
+        // AppTitleBar 自己给窗口按钮留了约 170，这里扣掉后才是「贴面板左边缘」.
         FooterContainer.Visibility = narrow ? Visibility.Collapsed : Visibility.Visible;
-        HeaderBarHost.Margin = rightInset > 0 ? new Thickness(0, 0, rightInset, 0) : new Thickness(0);
+        HeaderBarHost.Margin = isLive && !narrow
+            ? new Thickness(0, 0, Math.Max(0, panelWidth + 16 - 170), 0)
+            : new Thickness(0);
         FooterContainer.Margin = new Thickness(0);
     }
 
