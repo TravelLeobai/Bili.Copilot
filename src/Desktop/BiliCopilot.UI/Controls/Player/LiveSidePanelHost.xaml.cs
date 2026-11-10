@@ -229,11 +229,9 @@ public sealed partial class LiveSidePanelHost : UserControl
             return;
         }
 
-        // 用实际宽度算让位，按钮列宽度改了也不用同步改常量.
-        var measured = ActualWidth;
-        var inset = _isCollapsed
-            ? 0d
-            : measured > 40 ? Math.Ceiling(measured) : (double)Services.MpvSurfaceService.LivePanelWidth;
+        // 用固定常量算让位：面板宽度是写死的 360（+18 间距），
+        // 用 ActualWidth 会在紧凑/宽版切换瞬间取到过期或拉伸后的宽度，导致整块覆盖层被挤窄.
+        var inset = _isCollapsed ? 0d : (double)Services.MpvSurfaceService.LivePanelWidth;
         Services.MpvSurfaceService.ApplyInset(handle, inset, 0, scale);
 
         // 让覆盖层（进度条、按钮、右上角控件）也跟着缩，避免被面板压住.
@@ -248,4 +246,5 @@ public sealed partial class LiveSidePanelHost : UserControl
     private void OnRefreshClick(object sender, RoutedEventArgs e)
         => ViewModel?.RefreshLiveInfoCommand.Execute(default);
 }
+
 
