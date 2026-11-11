@@ -775,7 +775,8 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
             {
                 var ms = await CdnAccelerator.TestLatencyAsync(
                     host,
-                    $"{SettingsToolkit.ReadLocalSetting(SettingNames.PlayerCdnServer, PlayUrlOptimizer.DefaultCdnHost)}",
+                    // 设置页拿不到可用样本：传空串，让 TestLatencyAsync 走 https://host/ + TCP 兜底.
+                    string.Empty,
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                     "https://www.bilibili.com");
                 return (host, ms);

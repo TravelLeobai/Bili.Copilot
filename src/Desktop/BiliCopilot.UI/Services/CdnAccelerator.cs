@@ -313,10 +313,14 @@ internal static class CdnAccelerator
     /// </summary>
     public static async Task<int> TestLatencyAsync(string host, string sampleUrl, string userAgent, string referer)
     {
-        var target = string.IsNullOrWhiteSpace(sampleUrl) ? $"https://{host}/" : ReplaceHost(sampleUrl, host);
+        // 样本必须是绝对地址才能换主机；调用方传了裸主机名（设置页就是这种）时
+        // 不能当 URL 解析，否则 Uri.TryCreate 失败、ReplaceHost 返回 null，直接判 -1.
+        var hasSample = !string.IsNullOrWhiteSpace(sampleUrl)
+            && sampleUrl.Contains("://", StringComparison.Ordinal);
+        var target = hasSample ? ReplaceHost(sampleUrl, host) : $"https://{host}/";
         if (target is null)
         {
-            return -1;
+            target = $"https://{host}/";
         }
 
         var stopwatch = Stopwatch.StartNew();
