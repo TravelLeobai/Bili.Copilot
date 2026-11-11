@@ -327,6 +327,10 @@ public sealed class CommentPanel : Component
 
         Element content = BuildCommentContent(comment.Content?.Text ?? string.Empty);
 
+        // 评论附图：数据来自 x/v2/reply 的 content.pictures（见 CommentPictureStore），
+        // 内核模型里没有这个字段，所以只能按评论 id 查缓存.
+        var pictures = BuildCommentPictures(comment);
+
         var likeButton = new XamlHostElement(
             () => new CommentLikeButton { VerticalAlignment = VerticalAlignment.Center },
             element => ((CommentLikeButton)element).ViewModel = comment)
@@ -369,10 +373,11 @@ public sealed class CommentPanel : Component
 
         var body = Grid(
             columns: new[] { GridSize.Star() },
-            rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto },
+            rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto },
             nameRow.Grid(row: 0, column: 0),
             content.Grid(row: 1, column: 0).Margin(0, 6, 0, 0),
-            actionRow.Grid(row: 2, column: 0));
+            pictures.Grid(row: 2, column: 0).Margin(0, 6, 0, 0),
+            actionRow.Grid(row: 3, column: 0));
 
         return Border(
             Grid(
@@ -480,6 +485,90 @@ public sealed class CommentPanel : Component
     /// <summary>
     /// 评论正文：有表情占位就渲染富文本，否则用普通 TextBlock.
     /// </summary>
+    /// <summary>
+    /// 评论附图：最多显示三张，等高排一行；没有附图时返回零高度占位，不占额外行高.
+    /// 点开交给系统默认浏览器（B 站图床带防盗链，交给浏览器反而更稳）.
+    /// </summary>
+    private static Element BuildCommentPictures(CommentItemViewModel comment)
+    {
+        var pictures = comment.Pictures;
+        if (pictures.Count == 0)
+        {
+            return TextBlock(string.Empty).Height(0);
+        }
+
+        const double PictureHeight = 120d;
+        var shown = pictures.Take(3).ToList();
+        var extra = pictures.Count - shown.Count;
+        var columns = Enumerable.Repeat(GridSize.Star(), shown.Count).ToArray();
+        var children = new List<Element>();
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var picture = shown[i];
+            var url = picture.Url;
+            var width = Math.Clamp(PictureHeight * picture.AspectRatio, 60d, 320d);
+            var badge = (i == shown.Count - 1 && extra > 0)
+                ? (Element)Border(
+                    TextBlock($"+{extra}")
+                        .FontSize(12)
+                        .VAlign(VerticalAlignment.Center)
+                        .HAlign(HorizontalAlignment.Center)
+                        .Set(tb => tb.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White)))
+                    .Background(new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(0x99, 0, 0, 0)))
+                    .CornerRadius(4)
+                    .Padding(6, 2, 6, 2)
+                    .HAlign(HorizontalAlignment.Right)
+                    .VAlign(VerticalAlignment.Bottom)
+                    .Margin(0, 0, 6, 6)
+                : (Element)TextBlock(string.Empty);
+
+            var cell = Button(
+                Grid(
+                    columns: new[] { GridSize.Star() },
+                    rows: new[] { GridSize.Star() },
+                    new XamlHostElement(
+                        () => new Microsoft.UI.Xaml.Controls.Image
+                        {
+                            Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
+                            HorizontalAlignment = HorizontalAlignment.Stretch,
+                            VerticalAlignment = VerticalAlignment.Stretch,
+                        },
+                        element =>
+                        {
+                            var image = (Microsoft.UI.Xaml.Controls.Image)element;
+                            image.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(url))
+                            {
+                                DecodePixelWidth = (int)Math.Max(160, width * 2),
+                            };
+                        })
+                        .Grid(row: 0, column: 0),
+                    badge.Grid(row: 0, column: 0))
+                .Height(PictureHeight),
+                () => OpenPicture(url))
+                .Padding(0)
+                .SubtleButton()
+                .AutomationName("查看评论图片");
+
+            children.Add(cell.Grid(row: 0, column: i).Width(width).Margin(i == 0 ? 0 : 6, 0, 0, 0));
+        }
+
+        return Grid(
+            columns: columns,
+            rows: new[] { GridSize.Auto },
+            children.ToArray());
+    }
+
+    private static async void OpenPicture(string url)
+    {
+        try
+        {
+            await Windows.System.Launcher.LaunchUriAsync(new Uri(url));
+        }
+        catch (Exception)
+        {
+        }
+    }
+
     private static Element BuildCommentContent(string text)
     {
         if (string.IsNullOrEmpty(text) || !text.Contains('['))
@@ -572,6 +661,7 @@ public sealed class CommentPanel : Component
         }
     }
 }
+
 
 
 

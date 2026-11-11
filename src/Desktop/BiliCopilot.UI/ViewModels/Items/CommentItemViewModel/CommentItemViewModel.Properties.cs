@@ -58,6 +58,16 @@ public sealed partial class CommentItemViewModel
     public int Level { get; init; }
 
     /// <summary>
+    /// 评论附图，没有就是空集合.
+    /// </summary>
+    public IReadOnlyList<Services.CommentPicture> Pictures { get; init; } = [];
+
+    /// <summary>
+    /// 是否有附图.
+    /// </summary>
+    public bool HasPictures => Pictures.Count > 0;
+
+    /// <summary>
     /// 是否为置顶评论.
     /// </summary>
     public bool IsTop { get; init; }
