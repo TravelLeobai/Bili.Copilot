@@ -831,12 +831,22 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             && SettingsToolkit.ReadLocalSetting(SettingNames.IsBottomProgressBarVisible, true);
 
     partial void OnIsControlsVisibleChanged(bool value)
-        => Window?.SetCaptionButtonVisibility(value);
+    {
+        Services.PerfProbe.Count("TopBar.IsControlsVisible.Set");
+        Services.PerfProbe.Measure(
+            "TopBar.SetCaptionButtonVisibility",
+            () => Window?.SetCaptionButtonVisibility(value));
+    }
 
     partial void OnIsControlsVisibleChanged(bool oldValue, bool newValue)
     {
-        IsTopMost = Window?.IsTopMost() ?? false;
-        CheckBottomProgressBarVisible();
+        Services.PerfProbe.Measure(
+            "TopBar.IsTopMost.Query",
+            () => IsTopMost = Window?.IsTopMost() ?? false);
+        Services.PerfProbe.Measure(
+            "TopBar.BottomProgressBar",
+            CheckBottomProgressBarVisible);
+        Services.PerfProbe.FlushIfDue();
     }
 
     partial void OnIsSubtitleEnabledChanged(bool value)

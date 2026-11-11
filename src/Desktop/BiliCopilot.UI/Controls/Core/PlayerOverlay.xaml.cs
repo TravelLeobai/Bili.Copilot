@@ -174,11 +174,13 @@ public sealed partial class PlayerOverlay : PlayerControlBase
             if (_isInTitleBar || _isInTransportControls)
             {
                 // If the pointer is in the title bar or transport controls, show controls immediately.
+                Services.PerfProbe.Count("TopBar.Hover.ShowRequests");
                 _cursorTimer.Start();
                 ViewModel.IsControlsVisible = true;
             }
             else
             {
+                Services.PerfProbe.Count("TopBar.Hover.HideRequests");
                 _controlTimer.Start();
                 if (!ViewModel.IsEnd)
                 {
