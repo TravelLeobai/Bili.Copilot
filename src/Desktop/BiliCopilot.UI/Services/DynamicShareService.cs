@@ -32,14 +32,16 @@ public static class DynamicShareService
     /// <param name="dynamicId">被转发动态的 id.</param>
     /// <param name="content">附言.</param>
     /// <param name="cookie">登录态.</param>
+    /// <param name="allowInteract">是否允许别人评论和转发.</param>
     /// <param name="logger">日志.</param>
     /// <returns>成功与否 + 提示文本.</returns>
     public static Task<(bool Success, string Message)> RepostAsync(
         string dynamicId,
         string content,
         string cookie,
+        bool allowInteract = true,
         ILogger? logger = null)
-        => PostTextAsync(Compose(content, $"https://t.bilibili.com/{dynamicId}"), cookie, logger);
+        => PostTextAsync(Compose(content, $"https://t.bilibili.com/{dynamicId}"), cookie, allowInteract, logger);
 
     /// <summary>
     /// 发一条纯文字动态（评论转发也走这里）.
@@ -47,6 +49,7 @@ public static class DynamicShareService
     public static async Task<(bool Success, string Message)> PostTextAsync(
         string content,
         string cookie,
+        bool allowInteract = true,
         ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(cookie) || !cookie.Contains("SESSDATA=", StringComparison.OrdinalIgnoreCase))
@@ -84,6 +87,11 @@ public static class DynamicShareService
                 writer.WriteEndArray();
                 writer.WriteEndObject();
                 writer.WriteNumber("scene", 1);
+                writer.WritePropertyName("option");
+                writer.WriteStartObject();
+                writer.WriteNumber("close_comment", allowInteract ? 0 : 1);
+                writer.WriteNumber("close_repost", allowInteract ? 0 : 1);
+                writer.WriteEndObject();
                 writer.WritePropertyName("meta");
                 writer.WriteStartObject();
                 writer.WritePropertyName("app_meta");
@@ -95,6 +103,10 @@ public static class DynamicShareService
                 writer.WriteEndObject();
                 writer.WriteEndObject();
             }
+
+            var payloadText = Encoding.UTF8.GetString(payload.ToArray());
+            // 日志里要把 csrf 打码，别把凭据写进日志文件.
+            logger?.LogInformation("动态报文：{Payload}", payloadText.Replace(csrf, "***"));
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
@@ -150,13 +162,14 @@ public static class DynamicShareService
         string aidOrBvid,
         string content,
         string cookie,
+        bool allowInteract = true,
         ILogger? logger = null)
     {
         var id = aidOrBvid ?? string.Empty;
         var link = id.StartsWith("BV", StringComparison.OrdinalIgnoreCase)
             ? $"https://www.bilibili.com/video/{id}"
             : $"https://www.bilibili.com/video/av{id}";
-        return PostTextAsync(Compose(content, link), cookie, logger);
+        return PostTextAsync(Compose(content, link), cookie, allowInteract, logger);
     }
 
     private static string Compose(string? content, string link)

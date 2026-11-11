@@ -45,13 +45,13 @@ public static class ForwardDialog
     /// </summary>
     /// <param name="xamlRoot">当前窗口的 XamlRoot.</param>
     /// <param name="preview">被转发的对象（用于画缩略卡片）.</param>
-    /// <returns>用户输入的文字；取消返回 null.</returns>
-    public static async Task<string?> ShowAsync(XamlRoot? xamlRoot, ForwardPreview? preview)
+    /// <returns>用户输入的文字（取消时为 null）+ 是否允许评论和转发.</returns>
+    public static async Task<(string? Text, bool AllowInteract)> ShowAsync(XamlRoot? xamlRoot, ForwardPreview? preview)
     {
         var root = xamlRoot ?? CurrentRoot;
         if (root is null)
         {
-            return null;
+            return (null, true);
         }
 
         var box = new RichEditBox
@@ -102,10 +102,30 @@ public static class ForwardDialog
             },
         };
         toolbar.Children.Add(emojiButton);
-        Grid.SetColumn(counter, 1);
-        toolbar.Children.Add(counter);
-        panel.Children.Add(toolbar);
 
+        // 右半边：允许评论和转发 + 字数，整体靠右.
+        var allowBox = new CheckBox
+        {
+            Content = "允许评论和转发",
+            IsChecked = true,
+            MinWidth = 0,
+            Padding = new Thickness(0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(allowBox, "允许评论和转发");
+
+        var right = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        right.Children.Add(allowBox);
+        right.Children.Add(counter);
+        Grid.SetColumn(right, 1);
+        toolbar.Children.Add(right);
+        panel.Children.Add(toolbar);
         if (preview is not null)
         {
             panel.Children.Add(BuildPreviewCard(preview));
@@ -122,7 +142,13 @@ public static class ForwardDialog
         };
 
         var result = await dialog.ShowAsync();
-        return result == ContentDialogResult.Primary ? ReadPlain(box, tokens).Trim() : null;
+        if (result != ContentDialogResult.Primary)
+        {
+            return (null, true);
+        }
+
+        var allowInteract = allowBox.IsChecked == true;
+        return (ReadPlain(box, tokens).Trim(), allowInteract);
     }
 
     /// <summary>

@@ -105,13 +105,13 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 _logger.LogWarning("拿不到 XamlRoot，转发框不弹");
                 return;
             }
-            var text = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, preview);
+            var (text, allowInteract) = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, preview);
             if (text is null)
             {
                 return;
             }
 
-            var (ok, message) = await ForwardCoreAsync(cookie, text);
+            var (ok, message) = await ForwardCoreAsync(cookie, text, allowInteract);
             _logger.LogInformation("转发动态结果：{Ok} {Message}", ok, message);
             this.Get<AppViewModel>().ShowTipCommand.Execute((message, ok ? InfoType.Success : InfoType.Error));
         }
@@ -122,11 +122,11 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
         }
     }
 
-    private async Task<(bool Ok, string Message)> ForwardCoreAsync(string cookie, string text)
+    private async Task<(bool Ok, string Message)> ForwardCoreAsync(string cookie, string text, bool allowInteract)
     {
         if (Data.Data is null)
         {
-            return await Services.DynamicShareService.RepostAsync(Data.Id, text, cookie, _logger);
+            return await Services.DynamicShareService.RepostAsync(Data.Id, text, cookie, allowInteract, _logger);
         }
 
         if (FindInnerContent<VideoInformation>() is VideoInformation video)
@@ -134,14 +134,14 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
             var id = video.Identifier.Id ?? string.Empty;
             if (long.TryParse(id, out _))
             {
-                return await Services.DynamicShareService.ShareVideoAsync(id, text, cookie, _logger);
+                return await Services.DynamicShareService.ShareVideoAsync(id, text, cookie, allowInteract, _logger);
             }
 
             var link = $"https://www.bilibili.com/video/{id}";
-            return await Services.DynamicShareService.PostTextAsync($"{text}\n{link}", cookie, _logger);
+            return await Services.DynamicShareService.PostTextAsync($"{text}\n{link}", cookie, allowInteract, _logger);
         }
 
-        return await Services.DynamicShareService.RepostAsync(Data.Id, text, cookie, _logger);
+        return await Services.DynamicShareService.RepostAsync(Data.Id, text, cookie, allowInteract, _logger);
     }
 
     [RelayCommand]
@@ -336,4 +336,5 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
         return default;
     }
 }
+
 

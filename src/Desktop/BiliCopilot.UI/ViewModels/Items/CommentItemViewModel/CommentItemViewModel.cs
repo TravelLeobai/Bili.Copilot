@@ -82,7 +82,7 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
             }
 
             var preview = new Controls.Dialogs.ForwardPreview(UserName, Avatar, null, excerpt);
-            var text = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, preview);
+            var (text, allowInteract) = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, preview);
             if (text is null)
             {
                 return;
@@ -91,7 +91,7 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
             var content = string.IsNullOrWhiteSpace(text)
                 ? $"@{UserName}：{excerpt}"
                 : $"{text}\n@{UserName}：{excerpt}";
-            var (ok, message) = await Services.DynamicShareService.PostTextAsync(content, cookie, this.Get<ILogger<CommentItemViewModel>>());
+            var (ok, message) = await Services.DynamicShareService.PostTextAsync(content, cookie, allowInteract, this.Get<ILogger<CommentItemViewModel>>());
             Serilog.Log.Information("评论转发结果：{Ok} {Message}", ok, message);
             this.Get<BiliCopilot.UI.ViewModels.Core.AppViewModel>().ShowTipCommand.Execute(
                 (message, ok ? Richasy.WinUIKernel.Share.Base.InfoType.Success : Richasy.WinUIKernel.Share.Base.InfoType.Error));
