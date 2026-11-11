@@ -505,7 +505,8 @@ public sealed class CommentPanel : Component
         var all = pictures.ToList();
         var shown = all.Take(3).ToList();
         var extra = all.Count - shown.Count;
-        var columns = Enumerable.Repeat(GridSize.Star(), shown.Count).ToArray();
+        // 用 Auto 列：星号列会把有限宽度的子项居中撑开，行宽对不上卡片，看着就是一堆缝.
+        var columns = Enumerable.Repeat(GridSize.Auto, shown.Count).ToArray();
         var children = new List<Element>();
         for (var i = 0; i < shown.Count; i++)
         {
@@ -518,9 +519,12 @@ public sealed class CommentPanel : Component
             {
                 url = "https://" + url.Substring("http://".Length);
             }
-            Serilog.Log.Information("cmpic build url={Url} w={W} h={H}", url, picture.Width, picture.Height);
             var ratio = picture.Width > 0 && picture.Height > 0 ? picture.Width / picture.Height : 4d / 3d;
-            var width = Math.Clamp(PictureHeight * ratio, 60d, 320d);
+            // 单图按原始比例给宽度（120~240），多图统一 120 宽等高裁切，
+            // 这样一行多张时宽高一致，不会一张大一张小.
+            var width = shown.Count == 1
+                ? Math.Clamp(PictureHeight * ratio, 120d, 240d)
+                : PictureHeight;
             var decodeWidth = (int)Math.Max(160, width * 2);
 
             var badge = (i == shown.Count - 1 && extra > 0)
@@ -592,7 +596,8 @@ public sealed class CommentPanel : Component
         return Grid(
             columns: columns,
             rows: new[] { GridSize.Auto },
-            children.ToArray());
+            children.ToArray())
+                .HAlign(HorizontalAlignment.Left);
     }
 
     private static void OpenCommentGallery(
