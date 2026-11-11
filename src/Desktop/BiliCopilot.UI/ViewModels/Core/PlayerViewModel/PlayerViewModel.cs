@@ -148,6 +148,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _forceWebFallback = false;
         _mpvInitFailed = false;
 
+        // 性能探针：播放器创建时启动 UI 线程排队延迟采样（探针关闭时空操作，重复调用无副作用）.
+        // 挂在播放器初始化而不是某个控件上，控件的加载/卸载不会把采样停掉.
+        Services.PerfProbe.StartUiLagProbe(queue);
+
         // 上一轮初始化如果还在飞，先取消：不然两个初始化会同时往 Player 上写状态.
         if (_initCts is not null)
         {

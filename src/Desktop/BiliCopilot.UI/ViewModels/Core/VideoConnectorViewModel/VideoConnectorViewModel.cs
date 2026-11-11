@@ -29,6 +29,8 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
         _snapshot = snapshot;
         ClearView();
         IsLoading = true;
+        // 性能探针：详情面板首次加载从这一刻开始计时（探针关闭时是空操作）.
+        VideoPlayerInfoSectionDetailViewModel.BeginFirstLoadProbe();
         await LoadItemDetailAsync();
         var prev = FindPrevVideo();
         var next = FindNextVideo();
@@ -150,18 +152,30 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
     private async Task LoadItemDetailAsync()
     {
         var service = this.Get<IPlayerService>();
+        var networkWatch = VideoPlayerInfoSectionDetailViewModel.BeginNetworkProbe();
         try
         {
-            _view = await service.GetVideoPageDetailAsync(_snapshot.Video.Identifier);
+            try
+            {
+                // 只把这一次 await 算进网络耗时，后面的填充/切区块不算.
+                _view = await service.GetVideoPageDetailAsync(_snapshot.Video.Identifier);
+            }
+            finally
+            {
+                VideoPlayerInfoSectionDetailViewModel.EndNetworkProbe(networkWatch);
+            }
+
             _part = FindInitialPart(_snapshot.PreferPart?.Identifier.Id);
             UpdateProperties();
             InitializeView(_view);
             _comments?.Initialize(_view.Information.Identifier.Id, Richasy.BiliKernel.Models.CommentTargetType.Video, Richasy.BiliKernel.Models.CommentSortType.Hot);
             InitializeSections();
+            VideoPlayerInfoSectionDetailViewModel.CompleteFirstLoadProbe(Tags?.Count ?? 0);
             AI.InjectVideoAsync(_view, _part);
         }
         catch (Exception ex)
         {
+            VideoPlayerInfoSectionDetailViewModel.AbortFirstLoadProbe();
             this.Get<ILogger<VideoConnectorViewModel>>().LogError(ex, "获取视频信息失败");
         }
     }
