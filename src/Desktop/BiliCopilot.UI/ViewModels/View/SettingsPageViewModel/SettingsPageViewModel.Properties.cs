@@ -440,6 +440,12 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     public partial bool HideMainWindowOnPlay { get; set; }
 
+    /// <summary>
+    /// 屏蔽 B 站等级小于 3 的用户的评论与直播弹幕.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool BlockLowLevelUsers { get; set; }
+
     [ObservableProperty]
     public partial string D3D11AdapterName { get; set; }
 

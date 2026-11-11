@@ -515,7 +515,8 @@ public sealed partial class PlayerViewModel
             return false;
         }
 
-        if (IsLiveDanmakuLevelFilterEnabled && item.UserLevel < 3)
+        // 播放器里的临时开关，或设置页的全局「屏蔽低等级用户」任一开启都生效.
+        if ((IsLiveDanmakuLevelFilterEnabled || Services.UserLevelFilter.IsEnabled) && item.UserLevel > 0 && item.UserLevel < 3)
         {
             return true;
         }

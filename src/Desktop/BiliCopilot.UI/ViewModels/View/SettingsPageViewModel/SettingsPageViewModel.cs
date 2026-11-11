@@ -445,6 +445,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     partial void OnHideMainWindowOnPlayChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideMainWindowOnPlay, value);
 
+    partial void OnBlockLowLevelUsersChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.BlockLowLevelUsers, value);
+
     partial void OnStepBackwardSecondChanged(double value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.StepBackwardSecond, value);
 

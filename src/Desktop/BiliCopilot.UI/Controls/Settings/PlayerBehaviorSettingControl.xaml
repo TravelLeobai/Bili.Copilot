@@ -139,6 +139,14 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.AutoFallbackToWeb, Mode=TwoWay}" />
             </base:SettingsCard>
+            <base:SettingsCard
+                Description="等级低于 3 的用户发的评论与直播弹幕不再显示。等级未知的内容不受影响；点播弹幕接口不返回发送者等级，暂不受此开关控制"
+                Header="屏蔽低等级用户的评论与弹幕">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Flag" />
+                </base:SettingsCard.HeaderIcon>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.BlockLowLevelUsers, Mode=TwoWay}" />
+            </base:SettingsCard>
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>
