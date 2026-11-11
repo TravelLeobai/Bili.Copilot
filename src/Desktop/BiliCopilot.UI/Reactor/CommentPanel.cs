@@ -538,12 +538,18 @@ public sealed class CommentPanel : Component
                     var border = (Border)element;
                     try
                     {
+                        // DecodePixelWidth 必须在 UriSource 之前设：先 new BitmapImage(uri)
+                        // 再设解码宽度会抛异常，被 catch 吞掉后就只剩一个空白圆角框.
+                        var bitmap = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                        if (decodeWidth > 0)
+                        {
+                            bitmap.DecodePixelWidth = decodeWidth;
+                        }
+
+                        bitmap.UriSource = new Uri(url);
                         border.Background = new Microsoft.UI.Xaml.Media.ImageBrush
                         {
-                            ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(url))
-                            {
-                                DecodePixelWidth = decodeWidth,
-                            },
+                            ImageSource = bitmap,
                             Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
                         };
                     }
