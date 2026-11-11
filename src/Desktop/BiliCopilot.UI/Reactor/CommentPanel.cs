@@ -511,6 +511,14 @@ public sealed class CommentPanel : Component
         {
             var picture = shown[i];
             var url = picture.Uri?.ToString() ?? picture.SourceUri?.ToString() ?? string.Empty;
+
+            // 评论附图给的是 http:// 地址，打包应用里 WinUI 的图片加载对明文 http 不生效
+            // （不报错，就是不画），统一升级成 https.
+            if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "https://" + url.Substring("http://".Length);
+            }
+            Serilog.Log.Information("cmpic build url={Url} w={W} h={H}", url, picture.Width, picture.Height);
             var ratio = picture.Width > 0 && picture.Height > 0 ? picture.Width / picture.Height : 4d / 3d;
             var width = Math.Clamp(PictureHeight * ratio, 60d, 320d);
             var decodeWidth = (int)Math.Max(160, width * 2);
@@ -532,7 +540,14 @@ public sealed class CommentPanel : Component
 
             // 用 ImageBrush 当 Background：Border 会把背景按圆角裁掉，图片自然跟着圆. 
             var pictureHost = new XamlHostElement(
-                () => new Border { CornerRadius = new CornerRadius(ControlCornerRadiusValue) },
+                () => new Border
+                {
+                    // 尺寸必须写死：Button 的内容默认居中、不拉伸，Border 又没子元素，
+                    // 不给宽高就是 0×0，ImageBrush 画了也看不见.
+                    Width = width,
+                    Height = PictureHeight,
+                    CornerRadius = new CornerRadius(ControlCornerRadiusValue),
+                },
                 element =>
                 {
                     var border = (Border)element;
@@ -555,7 +570,7 @@ public sealed class CommentPanel : Component
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine(ex.Message);
+                        Serilog.Log.Warning(ex, "cmpic 附图渲染失败 {Url}", url);
                     }
                 });
 
@@ -686,6 +701,9 @@ public sealed class CommentPanel : Component
         }
     }
 }
+
+
+
 
 
 
