@@ -131,6 +131,9 @@ public sealed class FavoritesShell : Component
     private readonly FavoritesPageSideBody _sideBody = new();
     private readonly FavoritesPageMainHeader _mainHeader = new();
     private readonly FavoritesPageMainBody _mainBody = new();
+    private readonly Controls.Common.AiInterestBanner _banner = new();
+    private VideoFavoriteSectionDetailViewModel? _bannerSection;
+    private bool _bannerHooked;
     private readonly Richasy.WinUIKernel.Share.Base.ColumnSplitter _splitter;
 
     /// <summary>
@@ -169,13 +172,60 @@ public sealed class FavoritesShell : Component
             [GridSize.Star()],
             side.Grid(row: 0, column: 0),
             ViewLaterShell.Host(_splitter, _ => { }, vm).Grid(row: 0, column: 1),
-            Grid(
-                [GridSize.Star()],
-                [GridSize.Px(56), GridSize.Px(1), GridSize.Star()],
-                ViewLaterShell.Host(_mainHeader, control => control.ViewModel = vm, vm).Grid(row: 0).Margin(-6, 0, 0, 0),
-                ViewLaterShell.Divider().Grid(row: 1),
-                ViewLaterShell.Host(_mainBody, control => control.ViewModel = vm, vm).Grid(row: 2).Margin(-6, 0, 0, 0))
-                .Grid(row: 0, column: 2));
+            BuildMain(vm).Grid(row: 0, column: 2));
+    }
+
+    // 只有「默认收藏夹」这一栏挂 AI 兴趣条，其他收藏夹、番剧、合集、订阅都不挂.
+    // 行结构固定为 4 行：Reactor 的 Host 复用同一个控件实例，中间插一行会让
+    // 位置对不上、抛「Element is already the child of another element」，所以
+    // 不显示时把 banner 折起来（Auto 行高变 0），而不是改变子元素数量.
+    private Element BuildMain(FavoritesPageViewModel vm)
+    {
+        var videoSection = vm.CurrentSection as VideoFavoriteSectionDetailViewModel;
+        var showBanner = videoSection?.IsDefault == true;
+
+        if (showBanner && !_bannerHooked && videoSection is not null)
+        {
+            _bannerHooked = true;
+            videoSection.ListUpdated += OnBannerSectionUpdated;
+        }
+
+        return Grid(
+            [GridSize.Star()],
+            [GridSize.Px(56), GridSize.Px(1), GridSize.Auto, GridSize.Star()],
+            ViewLaterShell.Host(_mainHeader, control => control.ViewModel = vm, vm).Grid(row: 0).Margin(-6, 0, 0, 0),
+            ViewLaterShell.Divider().Grid(row: 1),
+            ViewLaterShell.Host(_banner, control =>
+            {
+                if (!showBanner || videoSection is null)
+                {
+                    control.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                control.Visibility = Visibility.Visible;
+                RefreshBanner(control, videoSection);
+            }, vm).Grid(row: 2),
+            ViewLaterShell.Host(_mainBody, control => control.ViewModel = vm, vm).Grid(row: 3).Margin(-6, 0, 0, 0));
+    }
+
+    private void RefreshBanner(Controls.Common.AiInterestBanner banner, VideoFavoriteSectionDetailViewModel section)
+    {
+        if (ReferenceEquals(_bannerSection, section))
+        {
+            return;
+        }
+
+        _bannerSection = section;
+        _ = banner.RefreshAsync("favorites_default", section.Items, null);
+    }
+
+    private void OnBannerSectionUpdated(object? sender, EventArgs e)
+    {
+        if (sender is VideoFavoriteSectionDetailViewModel section && ReferenceEquals(_bannerSection, section))
+        {
+            _ = _banner.RefreshAsync("favorites_default", section.Items, null);
+        }
     }
 
 

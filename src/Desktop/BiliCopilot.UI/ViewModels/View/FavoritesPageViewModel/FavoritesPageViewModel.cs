@@ -167,7 +167,7 @@ public sealed partial class FavoritesPageViewModel : LayoutPageViewModelBase
                 Sections.Add(new SubscribedSeasonSectionDetailViewModel(seasonFolders, _service));
             }
 
-            var defaultGroupVM = new VideoFavoriteSectionDetailViewModel(defaultGroup.Folder, _service);
+            var defaultGroupVM = new VideoFavoriteSectionDetailViewModel(defaultGroup.Folder, _service) { IsDefault = true };
             defaultGroupVM.InjectFirstPageData(defaultGroup);
             Sections.Add(defaultGroupVM);
 

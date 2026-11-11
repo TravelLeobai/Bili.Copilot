@@ -1,3 +1,4 @@
+using System.Linq;
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Services;
@@ -30,6 +31,14 @@ public sealed partial class AiInterestBanner : UserControl
     public async Task RefreshAsync(string pageKey, IEnumerable<VideoItemViewModel> videos, ILogger? logger)
     {
         _pageKey = pageKey;
+        var videoCount = videos?.Count() ?? 0;
+        Serilog.Log.Information(
+            "AI 兴趣条：page={Key} enabled={Enabled} configured={Configured} items={Count}",
+            pageKey,
+            AiInterestAnalyzer.IsEnabled,
+            AiInterestAnalyzer.IsConfigured,
+            videoCount);
+
         if (!AiInterestAnalyzer.IsEnabled || !AiInterestAnalyzer.IsConfigured)
         {
             RootBorder.Visibility = Visibility.Collapsed;

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -27,6 +27,11 @@ public sealed partial class VideoFavoriteSectionDetailViewModel
 
     [ObservableProperty]
     private int _totalCount;
+
+    /// <summary>
+    /// 是否为默认收藏夹（只有这一栏挂 AI 兴趣分析条）.
+    /// </summary>
+    public bool IsDefault { get; init; }
 
     /// <summary>
     /// 列表已完成更新.
