@@ -58,6 +58,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         IsOpenScreenshotFile = SettingsToolkit.ReadLocalSetting(SettingNames.OpenAfterScreenshot, true);
         PlayerSpeedEnhancement = SettingsToolkit.ReadLocalSetting(SettingNames.IsPlayerSpeedEnhancement, false);
         GlobalPlayerSpeed = SettingsToolkit.ReadLocalSetting(SettingNames.IsPlayerSpeedShare, true);
+        DanmakuJumpEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.DanmakuJumpEnabled, true);
         HideWhenCloseWindow = SettingsToolkit.ReadLocalSetting(SettingNames.HideWhenCloseWindow, false);
         IsNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsNotificationEnabled, true);
         IsVideoMomentNotificationEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.IsVideoMomentNotificationEnabled, true);
@@ -444,6 +445,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnHideMainWindowOnPlayChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.HideMainWindowOnPlay, value);
+
+    partial void OnDanmakuJumpEnabledChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.DanmakuJumpEnabled, value);
 
     partial void OnBlockLowLevelUsersChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.BlockLowLevelUsers, value);

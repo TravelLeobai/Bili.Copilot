@@ -217,8 +217,10 @@ public enum SettingNames
     LiveDanmakuMedalFilter,
     IsSeasonUpdateNotificationEnabled,
     BlockLowLevelUsers,
+    DanmakuJumpEnabled,
     LastSeasonVideoIds,
 }
+
 
 
 

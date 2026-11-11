@@ -14,6 +14,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Richasy.WinUIKernel.Share.ViewModels;
+using Richasy.BiliKernel.Models.Danmaku;
 using WinUIEx;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -1499,8 +1500,28 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         IsSkipPromptVisible = true;
     }
 
+    /// <summary>
+    /// 弹幕时间戳给出的跳转候选（出现时间 → 目标时间）.
+    /// </summary>
+    private readonly List<(double Appear, double Target)> _jumpCandidates = [];
+
+    /// <summary>
+    /// 已经提示过的候选（按出现时间记）.
+    /// </summary>
+    private readonly HashSet<double> _jumpConsumed = [];
+
+    private bool _isJumpPrompt;
+    private double _jumpShownAt = double.NaN;
+    private double _jumpTargetSeconds = double.NaN;
+
     private void HideSkipPrompt()
     {
+        // 跳伞提示由 CheckDanmakuJump 自己决定什么时候收，广告片段这边不要顺手关掉它.
+        if (_isJumpPrompt)
+        {
+            return;
+        }
+
         if (IsSkipPromptVisible)
         {
             IsSkipPromptVisible = false;
@@ -1511,11 +1532,186 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     }
 
     /// <summary>
+    /// 收起跳伞提示（只有它自己用）.
+    /// </summary>
+    private void HideJumpPrompt()
+    {
+        _isJumpPrompt = false;
+        _jumpShownAt = double.NaN;
+        _jumpTargetSeconds = double.NaN;
+        if (IsSkipPromptVisible)
+        {
+            IsSkipPromptVisible = false;
+        }
+
+        SkipPromptText = "跳过广告片段";
+    }
+
+    /// <summary>
+    /// 从弹幕里挑出「跳伞/跳至/时间戳」候选，只留目标在视频范围内、且目标比出现时间靠后的.
+    /// </summary>
+    /// <param name="danmakus">这一集的全部弹幕.</param>
+    private void BuildJumpCandidates(IEnumerable<DanmakuInformation> danmakus)
+    {
+        _jumpCandidates.Clear();
+        _jumpConsumed.Clear();
+        if (danmakus is null)
+        {
+            return;
+        }
+
+        var duration = Player?.Duration ?? 0;
+        foreach (var item in danmakus)
+        {
+            if (!Services.DanmakuJumpDetector.TryParse(item.Content, out var target))
+            {
+                continue;
+            }
+
+            if (target <= item.StartPosition + 3)
+            {
+                continue;
+            }
+
+            if (duration > 0 && target > duration)
+            {
+                continue;
+            }
+
+            _jumpCandidates.Add((item.StartPosition, target));
+        }
+
+        // 自检钩子：LocalState/danmaku-jump-test.txt 每行「出现秒,目标秒」，用来在没有跳伞弹幕的视频上验证提示.
+        AppendJumpTestCandidates();
+
+        _jumpCandidates.Sort((a, b) => a.Appear.CompareTo(b.Appear));
+        if (_jumpCandidates.Count > 0)
+        {
+            logger.LogInformation("弹幕跳伞候选：{Count} 条", _jumpCandidates.Count);
+        }
+    }
+
+    /// <summary>
+    /// 自检：LocalState/danmaku-jump-test.txt 里每行「出现秒,目标秒」追加成跳转候选.
+    /// </summary>
+    private void AppendJumpTestCandidates()
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(
+                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path,
+                "danmaku-jump-test.txt");
+            if (!System.IO.File.Exists(path))
+            {
+                return;
+            }
+
+            foreach (var line in System.IO.File.ReadAllLines(path))
+            {
+                var parts = line.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length != 2
+                    || !double.TryParse(parts[0], out var appear)
+                    || !double.TryParse(parts[1], out var target)
+                    || target <= appear)
+                {
+                    continue;
+                }
+
+                _jumpCandidates.Add((appear, target));
+            }
+
+            logger.LogInformation("跳伞自检候选加载：{Count} 条", _jumpCandidates.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "跳伞自检候选读取失败");
+        }
+    }
+
+    /// <summary>
+    /// 播放位置每变一次就看看有没有刚到点的跳伞弹幕.
+    /// </summary>
+    private void CheckDanmakuJump()
+    {
+        if (Player is null || Player.Duration <= 0 || IsLive)
+        {
+            if (_isJumpPrompt)
+            {
+                HideJumpPrompt();
+            }
+
+            return;
+        }
+
+        if (!SettingsToolkit.ReadLocalSetting(SettingNames.DanmakuJumpEnabled, true) || _jumpCandidates.Count == 0)
+        {
+            if (_isJumpPrompt)
+            {
+                HideJumpPrompt();
+            }
+
+            return;
+        }
+
+        var position = Player.Position;
+
+        // 已经在提示中：够时间没点、或者已经跳过去了，就收起.
+        if (_isJumpPrompt)
+        {
+            if (position > _jumpShownAt + 12 || Math.Abs(position - _jumpTargetSeconds) < 1.5)
+            {
+                HideJumpPrompt();
+            }
+
+            return;
+        }
+
+        // 广告片段的提示优先，别抢它的位置.
+        if (IsSkipPromptVisible)
+        {
+            return;
+        }
+
+        foreach (var (appear, target) in _jumpCandidates)
+        {
+            if (position < appear || position > appear + 6)
+            {
+                continue;
+            }
+
+            if (_jumpConsumed.Contains(appear) || target <= position + 3)
+            {
+                continue;
+            }
+
+            _jumpConsumed.Add(appear);
+            _isJumpPrompt = true;
+            _jumpShownAt = appear;
+            _jumpTargetSeconds = target;
+            SkipPromptSegment = default;
+            SkipPromptText = $"跳至 {FormatSkipStamp(target)}";
+            IsSkipPromptVisible = true;
+            logger.LogInformation("弹幕跳伞提示：出现 {Appear:F0}s，目标 {Target:F0}s", appear, target);
+            return;
+        }
+    }
+
+    /// <summary>
     /// 手动模式下跳过当前提示的片段.
     /// </summary>
     [RelayCommand]
     private async Task SkipPromptSegmentAsync()
     {
+        if (SkipPromptSegment is null && _isJumpPrompt && !double.IsNaN(_jumpTargetSeconds))
+        {
+            var jumpTarget = _jumpTargetSeconds;
+            HideJumpPrompt();
+            PushAdSkipLog($"按弹幕跳伞跳到 {FormatSkipStamp(jumpTarget)}");
+            logger.LogInformation("按弹幕跳伞跳到 {Target:F1}s", jumpTarget);
+            await ChangePositionAsync(jumpTarget);
+            return;
+        }
+
         if (SkipPromptSegment is null)
         {
             return;

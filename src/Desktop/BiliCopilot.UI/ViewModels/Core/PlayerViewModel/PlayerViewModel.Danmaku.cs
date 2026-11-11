@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
@@ -67,6 +67,7 @@ public sealed partial class PlayerViewModel
                 ? string.Format(ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuCountTemplate), danmakus.Count.ToString("N0"))
                 : ResourceToolkit.GetLocalizedString(Models.Constants.StringNames.DanmakuEmpty);
             Danmaku.Initialize(danmakus);
+            BuildJumpCandidates(danmakus);
             IsDanmakuLoading = false;
         }
         catch (Exception ex)

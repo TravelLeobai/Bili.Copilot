@@ -738,6 +738,7 @@ public sealed partial class PlayerViewModel
             PositionText = TimeSpan.FromSeconds(Player.Position).ToString(@"hh\:mm\:ss");
             ProgressChanged?.Invoke(this, Player.Position);
             CheckSponsorBlock();
+            CheckDanmakuJump();
             Danmaku.UpdatePosition(Convert.ToInt32(Player.Position));
             foreach (var chapter in Chapters)
             {

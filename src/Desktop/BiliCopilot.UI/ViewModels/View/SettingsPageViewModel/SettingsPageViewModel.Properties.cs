@@ -451,6 +451,12 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     public partial bool BlockLowLevelUsers { get; set; }
 
+    /// <summary>
+    /// 弹幕时间戳跳转提示.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool DanmakuJumpEnabled { get; set; }
+
     [ObservableProperty]
     public partial string D3D11AdapterName { get; set; }
 
