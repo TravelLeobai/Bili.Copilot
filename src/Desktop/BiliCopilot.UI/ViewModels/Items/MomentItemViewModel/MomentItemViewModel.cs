@@ -113,10 +113,12 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
 
             var (ok, message) = await ForwardCoreAsync(cookie, text);
             _logger.LogInformation("转发动态结果：{Ok} {Message}", ok, message);
+            this.Get<AppViewModel>().ShowTipCommand.Execute((message, ok ? InfoType.Success : InfoType.Error));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "转发动态失败");
+            this.Get<AppViewModel>().ShowTipCommand.Execute(($"转发失败：{ex.Message}", InfoType.Error));
         }
     }
 

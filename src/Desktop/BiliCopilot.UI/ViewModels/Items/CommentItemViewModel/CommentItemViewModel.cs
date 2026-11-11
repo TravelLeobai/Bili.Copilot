@@ -93,10 +93,13 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
                 : $"{text}\n@{UserName}：{excerpt}";
             var (ok, message) = await Services.DynamicShareService.PostTextAsync(content, cookie, this.Get<ILogger<CommentItemViewModel>>());
             Serilog.Log.Information("评论转发结果：{Ok} {Message}", ok, message);
+            this.Get<BiliCopilot.UI.ViewModels.Core.AppViewModel>().ShowTipCommand.Execute(
+                (message, ok ? Richasy.WinUIKernel.Share.Base.InfoType.Success : Richasy.WinUIKernel.Share.Base.InfoType.Error));
         }
         catch (Exception ex)
         {
             Serilog.Log.Warning(ex, "评论转发失败");
+            this.Get<BiliCopilot.UI.ViewModels.Core.AppViewModel>().ShowTipCommand.Execute(($"转发失败：{ex.Message}", Richasy.WinUIKernel.Share.Base.InfoType.Error));
         }
     }
 
