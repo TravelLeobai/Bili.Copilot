@@ -9,9 +9,11 @@ using Microsoft.Extensions.Logging;
 namespace BiliCopilot.UI.Services;
 
 /// <summary>
-/// 转发动态 / 视频 / 评论到自己的动态时间线.
-/// 走的是 Web 的 x/dynamic/feed/create/dyn（wbi 签名 + bili_jct 防伪），
-/// 参考 biliuwp-lite 里 RepostDynamic 的做法（老版 vc 接口已不走签名了，这里用新版）.
+/// 把内容发到自己的动态时间线.
+/// 走 opus 的新接口 x/dynamic/feed/create/dyn：wbi 签名 + JSON 的 dyn_req，
+/// 认证只要 cookie 里的 SESSDATA + bili_jct（csrf）.
+/// 转发统一用「正文 + 原内容链接」的写法：B 站会把链接解析成对应卡片，
+/// 比去猜各类型动态的 dyn_req 结构可靠.
 /// </summary>
 public static class DynamicShareService
 {
@@ -25,11 +27,11 @@ public static class DynamicShareService
     };
 
     /// <summary>
-    /// 转发一条动态（dyn_type=1）.
+    /// 转发一条动态：正文 + 原动态链接.
     /// </summary>
-    /// <param name="dynamicId">被转发动态的 id（dyn_id_str）.</param>
+    /// <param name="dynamicId">被转发动态的 id.</param>
     /// <param name="content">附言.</param>
-    /// <param name="cookie">登录态（需要 SESSDATA 与 bili_jct）.</param>
+    /// <param name="cookie">登录态.</param>
     /// <param name="logger">日志.</param>
     /// <returns>成功与否 + 提示文本.</returns>
     public static Task<(bool Success, string Message)> RepostAsync(
@@ -37,64 +39,15 @@ public static class DynamicShareService
         string content,
         string cookie,
         ILogger? logger = null)
-        => PostAsync(
-            new Dictionary<string, string>
-            {
-                ["dyn_type"] = "1",
-                ["dyn_id_str"] = dynamicId,
-                ["content"] = content ?? string.Empty,
-                ["at_uids"] = string.Empty,
-                ["at_control"] = string.Empty,
-            },
-            cookie,
-            "转发动态",
-            logger);
+        => PostTextAsync(Compose(content, $"https://t.bilibili.com/{dynamicId}"), cookie, logger);
 
     /// <summary>
-    /// 发一条纯文字动态（dyn_type=4）。评论按等级不高、拿不到动态 id 时用它兜底.
+    /// 发一条纯文字动态（评论转发也走这里）.
     /// </summary>
-    public static Task<(bool Success, string Message)> PostTextAsync(
+    public static async Task<(bool Success, string Message)> PostTextAsync(
         string content,
         string cookie,
         ILogger? logger = null)
-        => PostAsync(
-            new Dictionary<string, string>
-            {
-                ["dyn_type"] = "4",
-                ["content"] = content ?? string.Empty,
-                ["at_uids"] = string.Empty,
-                ["at_control"] = string.Empty,
-            },
-            cookie,
-            "发表动态",
-            logger);
-
-    /// <summary>
-    /// 把视频作为视频动态转发（dyn_type=8，rid=aid）.
-    /// </summary>
-    public static Task<(bool Success, string Message)> ShareVideoAsync(
-        string aid,
-        string content,
-        string cookie,
-        ILogger? logger = null)
-        => PostAsync(
-            new Dictionary<string, string>
-            {
-                ["dyn_type"] = "8",
-                ["rid"] = aid,
-                ["content"] = content ?? string.Empty,
-                ["at_uids"] = string.Empty,
-                ["at_control"] = string.Empty,
-            },
-            cookie,
-            "转发视频",
-            logger);
-
-    private static async Task<(bool Success, string Message)> PostAsync(
-        Dictionary<string, string> payload,
-        string cookie,
-        string action,
-        ILogger? logger)
     {
         if (string.IsNullOrWhiteSpace(cookie) || !cookie.Contains("SESSDATA=", StringComparison.OrdinalIgnoreCase))
         {
@@ -109,27 +62,43 @@ public static class DynamicShareService
 
         try
         {
-            payload["csrf"] = csrf;
-            var signParams = new Dictionary<string, string>
-            {
-                ["dyn_type"] = payload["dyn_type"],
-            };
-            if (payload.TryGetValue("dyn_id_str", out var dynId))
-            {
-                signParams["dyn_id_str"] = dynId;
-            }
-
-            if (payload.TryGetValue("rid", out var rid))
-            {
-                signParams["rid"] = rid;
-            }
-
-            var query = await BiliWbiSigner.SignAsync(signParams, cookie, logger).ConfigureAwait(false);
+            var query = await BiliWbiSigner.SignAsync(new Dictionary<string, string> { ["csrf"] = csrf }, cookie, logger).ConfigureAwait(false);
             var url = $"https://api.bilibili.com/x/dynamic/feed/create/dyn?{query}";
+
+            using var payload = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(payload))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("csrf", csrf);
+                writer.WritePropertyName("dyn_req");
+                writer.WriteStartObject();
+                writer.WritePropertyName("content");
+                writer.WriteStartObject();
+                writer.WritePropertyName("contents");
+                writer.WriteStartArray();
+                writer.WriteStartObject();
+                writer.WriteString("raw_text", content ?? string.Empty);
+                writer.WriteNumber("type", 1);
+                writer.WriteString("biz_id", string.Empty);
+                writer.WriteEndObject();
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+                writer.WriteNumber("scene", 1);
+                writer.WritePropertyName("meta");
+                writer.WriteStartObject();
+                writer.WritePropertyName("app_meta");
+                writer.WriteStartObject();
+                writer.WriteString("from", "create.dynamic.web");
+                writer.WriteString("mobi_app", "web");
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+                writer.WriteEndObject();
+            }
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
-                Content = new FormUrlEncodedContent(payload),
+                Content = new StringContent(Encoding.UTF8.GetString(payload.ToArray()), Encoding.UTF8, "application/json"),
             };
             request.Headers.TryAddWithoutValidation("Cookie", cookie);
             request.Headers.TryAddWithoutValidation(
@@ -147,22 +116,62 @@ public static class DynamicShareService
 
             if (code == 0)
             {
-                logger?.LogInformation("动态{Action}成功", action);
-                return (true, $"{action}成功");
+                var dynId = string.Empty;
+                if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+                {
+                    if (data.TryGetProperty("dyn_id_str", out var strNode))
+                    {
+                        dynId = strNode.ValueKind == JsonValueKind.String ? strNode.GetString() ?? string.Empty : strNode.ToString();
+                    }
+                    else if (data.TryGetProperty("dyn_id", out var numNode))
+                    {
+                        dynId = numNode.ToString();
+                    }
+                }
+
+                logger?.LogInformation("动态发表成功：{DynId}", dynId);
+                return (true, string.IsNullOrEmpty(dynId) ? "发表成功" : $"发表成功（{dynId}）");
             }
 
-            logger?.LogWarning("动态{Action}失败：code={Code} message={Message}", action, code, message);
-            return (false, string.IsNullOrWhiteSpace(message) ? $"{action}失败（code={code}）" : message!);
+            logger?.LogWarning("动态发表失败：code={Code} message={Message} body={Body}", code, message, text.Length > 300 ? text[..300] : text);
+            return (false, string.IsNullOrWhiteSpace(message) ? $"发表失败（code={code}）" : message!);
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "动态{Action}出错", action);
-            return (false, $"{action}出错：{ex.Message}");
+            logger?.LogWarning(ex, "动态发表出错");
+            return (false, $"发表出错：{ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// 把视频作为动态发出去：正文 + 视频链接（B 站会把链接解析成视频卡片）.
+    /// </summary>
+    public static Task<(bool Success, string Message)> ShareVideoAsync(
+        string aidOrBvid,
+        string content,
+        string cookie,
+        ILogger? logger = null)
+    {
+        var id = aidOrBvid ?? string.Empty;
+        var link = id.StartsWith("BV", StringComparison.OrdinalIgnoreCase)
+            ? $"https://www.bilibili.com/video/{id}"
+            : $"https://www.bilibili.com/video/av{id}";
+        return PostTextAsync(Compose(content, link), cookie, logger);
+    }
+
+    private static string Compose(string? content, string link)
+    {
+        var text = content?.Trim() ?? string.Empty;
+        return string.IsNullOrEmpty(text) ? link : $"{text}\n{link}";
     }
 
     private static string ExtractCookie(string cookie, string name)
     {
+        if (string.IsNullOrWhiteSpace(cookie))
+        {
+            return string.Empty;
+        }
+
         foreach (var part in cookie.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var index = part.IndexOf('=');
@@ -175,3 +184,4 @@ public static class DynamicShareService
         return string.Empty;
     }
 }
+
