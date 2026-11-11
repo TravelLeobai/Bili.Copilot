@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
@@ -83,6 +83,59 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 VideoDuration = AppToolkit.FormatDuration(TimeSpan.FromSeconds(einfo.Duration!.Value));
             }
         }
+    }
+
+    /// <summary>
+    /// 转发到自己的动态：动态直接转，视频按视频动态发（带 link 兜底）.
+    /// </summary>
+    /// <returns>任务.</returns>
+    [RelayCommand]
+    private async Task ForwardAsync(Microsoft.UI.Xaml.XamlRoot? xamlRoot)
+    {
+        try
+        {
+            var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+            var at = string.IsNullOrWhiteSpace(Data.User?.Name) ? string.Empty : $"@{Data.User!.Name}";
+            if (xamlRoot is null)
+            {
+                _logger.LogWarning("拿不到 XamlRoot，转发框不弹");
+                return;
+            }
+            var text = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, at);
+            if (text is null)
+            {
+                return;
+            }
+
+            var (ok, message) = await ForwardCoreAsync(cookie, text);
+            _logger.LogInformation("转发动态结果：{Ok} {Message}", ok, message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "转发动态失败");
+        }
+    }
+
+    private async Task<(bool Ok, string Message)> ForwardCoreAsync(string cookie, string text)
+    {
+        if (Data.Data is null)
+        {
+            return await Services.DynamicShareService.RepostAsync(Data.Id, text, cookie, _logger);
+        }
+
+        if (FindInnerContent<VideoInformation>() is VideoInformation video)
+        {
+            var id = video.Identifier.Id ?? string.Empty;
+            if (long.TryParse(id, out _))
+            {
+                return await Services.DynamicShareService.ShareVideoAsync(id, text, cookie, _logger);
+            }
+
+            var link = $"https://www.bilibili.com/video/{id}";
+            return await Services.DynamicShareService.PostTextAsync($"{text}\n{link}", cookie, _logger);
+        }
+
+        return await Services.DynamicShareService.RepostAsync(Data.Id, text, cookie, _logger);
     }
 
     [RelayCommand]
@@ -277,3 +330,4 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
         return default;
     }
 }
+

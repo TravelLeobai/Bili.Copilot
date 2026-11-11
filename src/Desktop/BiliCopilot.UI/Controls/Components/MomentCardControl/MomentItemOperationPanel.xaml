@@ -37,6 +37,18 @@
                 </StackPanel>
             </ToggleButton>
             <Button
+                x:Name="ForwardButton"
+                VerticalAlignment="Center"
+                Background="Transparent"
+                Command="{x:Bind ViewModel.ForwardCommand, Mode=OneWay}"
+                CommandParameter="{x:Bind XamlRoot, Mode=OneWay}"
+                ToolTipService.ToolTip="转发">
+                <ic:SymbolIcon
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Symbol="Share" />
+            </Button>
+            <Button
                 VerticalAlignment="Center"
                 Background="Transparent"
                 Command="{x:Bind ViewModel.ShowCommentCommand, Mode=OneWay}"
@@ -56,3 +68,4 @@
         </StackPanel>
     </Grid>
 </local:MomentItemOperationPanelBase>
+

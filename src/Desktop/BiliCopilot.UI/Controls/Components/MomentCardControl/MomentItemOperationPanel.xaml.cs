@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.ViewModels.Items;
 using Richasy.WinUIKernel.Share.Base;
@@ -25,3 +25,4 @@ public sealed partial class MomentItemOperationPanel : MomentItemOperationPanelB
 public abstract class MomentItemOperationPanelBase : LayoutUserControlBase<MomentItemViewModel>
 {
 }
+
