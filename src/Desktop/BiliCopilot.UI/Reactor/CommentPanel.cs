@@ -458,6 +458,7 @@ public sealed class CommentPanel : Component
             VerticalAlignment = VerticalAlignment.Center,
         };
         ToolTipService.SetToolTip(button, "转发");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, "转发");
         return button;
     }
 
@@ -741,6 +742,7 @@ public sealed class CommentPanel : Component
         }
     }
 }
+
 
 
 

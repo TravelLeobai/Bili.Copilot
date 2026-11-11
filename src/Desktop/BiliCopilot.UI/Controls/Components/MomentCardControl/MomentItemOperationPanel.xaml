@@ -41,6 +41,7 @@
                 VerticalAlignment="Center"
                 Background="Transparent"
                 Command="{x:Bind ViewModel.ForwardCommand, Mode=OneWay}"
+                AutomationProperties.Name="转发"
                 CommandParameter="{x:Bind XamlRoot, Mode=OneWay}"
                 ToolTipService.ToolTip="转发">
                 <ic:SymbolIcon
@@ -68,4 +69,5 @@
         </StackPanel>
     </Grid>
 </local:MomentItemOperationPanelBase>
+
 
