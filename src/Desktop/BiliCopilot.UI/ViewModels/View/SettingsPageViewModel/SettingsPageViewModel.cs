@@ -757,6 +757,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     private async Task TestCdnLatencyAsync()
     {
         CdnLatencyText = "测试中…";
+        CdnLatencyItems.Clear();
         if (CdnPoolService.Count == 0)
         {
             await CdnPoolService.SyncAsync(this.Get<ILogger<SettingsPageViewModel>>());
@@ -773,9 +774,9 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         var tasks = CdnPoolService.GetCandidates(16)
             .Select(async host =>
             {
+                // 设置页没有可用样本：传空串让 TestLatencyAsync 走「https://host/ + TCP 兜底」.
                 var ms = await CdnAccelerator.TestLatencyAsync(
                     host,
-                    // 设置页拿不到可用样本：传空串，让 TestLatencyAsync 走 https://host/ + TCP 兜底.
                     string.Empty,
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                     "https://www.bilibili.com");
@@ -784,11 +785,17 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
             .ToList();
 
         var results = await Task.WhenAll(tasks);
-        var text = string.Join("　", results
+        foreach (var item in results
             .OrderBy(p => p.ms < 0 ? int.MaxValue : p.ms)
-            .Select(p => p.ms < 0 ? $"{p.host}: 不可用" : $"{p.host}: {p.ms}ms"));
-        CdnLatencyText = text;
+            .Select(p => new Items.CdnLatencyItem(p.host, p.ms)))
+        {
+            CdnLatencyItems.Add(item);
+        }
+
         var best = results.Where(p => p.ms >= 0).OrderBy(p => p.ms).FirstOrDefault();
+        CdnLatencyText = best.host is null
+            ? $"测试完成，{results.Length} 个节点全部不可用"
+            : $"测试完成，最快 {best.host}（{best.ms} ms）";
         Services.CdnStatusBus.Report(best.host is null
             ? "CDN 延迟测试：全部节点不可用"
             : $"CDN 延迟测试完成，最快 {best.host}（{best.ms}ms）");

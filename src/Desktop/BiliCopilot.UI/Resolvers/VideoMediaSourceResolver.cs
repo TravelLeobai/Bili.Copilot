@@ -354,6 +354,13 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             {
                 // 先按客户端既有规则优选，再把 cn-gdfs/upos 之类换到能连通的镜像，
                 // 否则 mpv 会在「Failed to open ... Timeout was reached」上挂死.
+                // 解锁分支原来直接返回，绕过了 PlayUrlOptimizer，导致「自动优选」在开着画质解锁时
+                // 根本不生效。这里先按样本实测一轮候选节点，Rewrite 自然就会选到最快的那台.
+                if (CdnAccelerator.IsEnabled && !string.IsNullOrEmpty(unlocked.Video))
+                {
+                    await CdnAccelerator.RankHostsAsync(unlocked.Video!, logger);
+                }
+
                 var unlockedVideo = string.IsNullOrEmpty(unlocked.Video)
                     ? null
                     : QualityUnlockService.PreferMirrorHost(CdnAccelerator.Rewrite(unlocked.Video!, true));
@@ -390,6 +397,11 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
             if (!string.IsNullOrEmpty(proxied?.Video) || !string.IsNullOrEmpty(proxied?.Audio))
             {
+                if (CdnAccelerator.IsEnabled && !string.IsNullOrEmpty(proxied.Value.Video))
+                {
+                    await CdnAccelerator.RankHostsAsync(proxied.Value.Video!, logger);
+                }
+
                 var proxiedVideo = proxied!.Value.Video is null
                     ? null
                     : CdnAccelerator.Rewrite(proxied.Value.Video, true);

@@ -284,6 +284,11 @@ public sealed partial class SettingsPageViewModel
     /// </summary>
     public System.Collections.ObjectModel.ObservableCollection<string> CdnServerCollection { get; } = new();
 
+    /// <summary>
+    /// CDN 节点延迟测试结果（按延迟升序，不可用的排最后）.
+    /// </summary>
+    public System.Collections.ObjectModel.ObservableCollection<ViewModels.Items.CdnLatencyItem> CdnLatencyItems { get; } = new();
+
     [ObservableProperty]
     private string _defaultDownloadPath;
 

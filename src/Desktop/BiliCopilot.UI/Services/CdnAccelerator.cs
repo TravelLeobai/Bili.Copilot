@@ -252,6 +252,12 @@ internal static class CdnAccelerator
     /// </summary>
     public static async Task<IReadOnlyList<string>> RankHostsAsync(string sampleUrl, ILogger? logger = null)
     {
+        logger?.LogInformation(
+            "CDN 优选入口：AutoSelect={Auto} hasSample={Has} cached={Cached}",
+            AutoSelect,
+            !string.IsNullOrWhiteSpace(sampleUrl),
+            Speeds.Count);
+
         if (!AutoSelect || string.IsNullOrWhiteSpace(sampleUrl))
         {
             return GetRankedHosts();
@@ -462,3 +468,4 @@ internal static class CdnAccelerator
 
     private readonly record struct HostSpeed(string Host, double Mbps, int Ttfb);
 }
+
