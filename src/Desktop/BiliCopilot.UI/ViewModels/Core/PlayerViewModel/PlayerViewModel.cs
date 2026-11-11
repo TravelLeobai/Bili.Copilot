@@ -841,12 +841,18 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     partial void OnIsControlsVisibleChanged(bool oldValue, bool newValue)
     {
         Services.PerfProbe.Measure(
-            "TopBar.IsTopMost.Query",
-            () => IsTopMost = Window?.IsTopMost() ?? false);
-        Services.PerfProbe.Measure(
             "TopBar.BottomProgressBar",
             CheckBottomProgressBarVisible);
         Services.PerfProbe.FlushIfDue();
+
+        // 窗口 z-order 只在真正变化时同步：每次顶栏显隐都 SetWindowPos 会和 mpv
+        // 子窗口的合成互相打扰，这是顶栏路径上唯一跨到非客户区的窗口操作.
+        var topMost = Window?.IsTopMost() ?? false;
+        if (_lastTopMostSynced != topMost)
+        {
+            _lastTopMostSynced = topMost;
+            Services.PerfProbe.Measure("TopBar.IsTopMost.Sync", () => IsTopMost = topMost);
+        }
     }
 
     partial void OnIsSubtitleEnabledChanged(bool value)
@@ -1521,6 +1527,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     private readonly HashSet<double> _jumpConsumed = [];
 
     private bool _isJumpPrompt;
+
+    /// <summary>
+    /// 上次同步给窗口的置顶状态：窗口 z-order 只在真正变化时才动，
+    /// 否则每次顶栏显隐都去 SetWindowPos 一次，和 mpv 子窗口的合成互相打扰.
+    /// </summary>
+    private bool? _lastTopMostSynced;
     private double _jumpShownAt = double.NaN;
     private double _jumpTargetSeconds = double.NaN;
 

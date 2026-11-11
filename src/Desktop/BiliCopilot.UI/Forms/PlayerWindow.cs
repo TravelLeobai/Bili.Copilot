@@ -12,7 +12,9 @@ using Windows.Graphics;
 using Windows.Win32.UI.WindowsAndMessaging;
 using WinUIEx;
 
+
 namespace BiliCopilot.UI.Forms;
+
 
 public sealed partial class PlayerWindow : IAsyncDisposable
 {
@@ -22,17 +24,20 @@ public sealed partial class PlayerWindow : IAsyncDisposable
     private readonly DesktopWindowXamlSource _xamlSource;
     private readonly CursorGrid _rootGrid;
     private InputActivationListener _inputActivationListener;
+    private bool? _lastCaptionForegroundVisible;
     private bool _isFirstActivated = true;
     private bool _enteringFullScreen;
     private bool _enteringCompactOverlay;
     private bool _isPresenterChanging;
     private Action<bool> _activeChangedAction;
 
+
     public PlayerWindow()
     {
         _rootWindow = AppWindow.Create();
         _rootWindow.AssociateWithDispatcherQueue(DispatcherQueue.GetForCurrentThread());
         _rootWindow.Destroying += OnWindowDestroying;
+
 
         _rootWindow.SetIcon("Assets/logo.ico");
         _rootWindow.TitleBar.ExtendsContentIntoTitleBar = true;
@@ -45,46 +50,56 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         _rootWindow.TitleBar.ButtonPressedForegroundColor = Colors.White;
         _rootWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
 
+
         _rootGrid = new CursorGrid();
         _xamlSource = new DesktopWindowXamlSource();
         _xamlSource.Initialize(_rootWindow.Id);
         _xamlSource.Content = _rootGrid;
 
+
         _inputActivationListener = InputActivationListener.GetForWindowId(_rootWindow.Id);
         _inputActivationListener.InputActivationChanged += OnInputActivationChanged;
 
+
         ResetWindowMinSize();
     }
+
 
     /// <summary>
     /// 对象是否已经被释放.
     /// </summary>
     public bool IsDisposed { get; private set; }
 
+
     /// <summary>
     /// 窗口是否已关闭.
     /// </summary>
     public bool IsClosed { get; private set; }
+
 
     /// <summary>
     /// 窗口展示模式是否正在改变.
     /// </summary>
     public bool IsPresenterChanging => _isPresenterChanging;
 
+
     /// <summary>
     /// 窗口大小改变事件.
     /// </summary>
     public event EventHandler<Size> SizeChanged;
+
 
     /// <summary>
     /// 窗口句柄.
     /// </summary>
     public IntPtr Handle => Win32Interop.GetWindowFromWindowId(_rootWindow.Id);
 
+
     /// <summary>
     /// XAML 根元素.
     /// </summary>
     public XamlRoot? XamlRoot => _xamlSource?.Content?.XamlRoot;
+
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync()
@@ -94,7 +109,9 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             return ValueTask.CompletedTask;
         }
 
+
         IsDisposed = true;
+
 
         if (_rootWindow != null)
         {
@@ -102,9 +119,11 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             _rootWindow.Destroy();
         }
 
+
         _xamlSource?.Dispose();
         return ValueTask.CompletedTask;
     }
+
 
     /// <summary>
     /// 显示窗口.
@@ -119,6 +138,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             MoveAndResize();
         }
 
+
         if (_isFirstActivated)
         {
             _rootWindow.Changed += OnWindowChanged;
@@ -129,9 +149,11 @@ public sealed partial class PlayerWindow : IAsyncDisposable
                 ResetFocus();
             }
 
+
             _isFirstActivated = false;
         }
     }
+
 
     public void ShowTip(string message, InfoType type)
     {
@@ -141,22 +163,32 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         }
     }
 
+
     /// <summary>
     /// 设置标题栏按钮的可见性.
     /// </summary>
     /// <param name="isVisible"></param>
     public void SetCaptionButtonVisibility(bool isVisible)
     {
+        // 颜色没变就别再写 AppWindow：这一步实测 2.5~3ms，是顶栏路径上最贵的一步.
+        if (_lastCaptionForegroundVisible == isVisible)
+        {
+            return;
+        }
+
+        _lastCaptionForegroundVisible = isVisible;
         _rootWindow.TitleBar?.ButtonForegroundColor = isVisible ? Colors.White : "#111111".ToColor();
     }
 
     public void SetActiveAction(Action<bool> activeChangedAction)
         => _activeChangedAction = activeChangedAction;
 
+
     /// <summary>
     /// 关闭窗口.
     /// </summary>
     public void Close() => _rootWindow.Destroy();
+
 
     /// <summary>
     /// 隱藏光标.
@@ -164,11 +196,13 @@ public sealed partial class PlayerWindow : IAsyncDisposable
     public void HideCursor()
         => _rootGrid?.HideCursor();
 
+
     /// <summary>
     /// 显示光标.
     /// </summary>
     public void ShowCursor()
         => _rootGrid?.ShowCursor();
+
 
     public void EnterFullScreen()
     {
@@ -178,6 +212,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             {
                 SetTopMost(false);
             }
+
 
             _enteringFullScreen = true;
             _enteringCompactOverlay = false;
@@ -190,6 +225,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             });
         }
     }
+
 
     public void ExitFullScreen()
     {
@@ -206,6 +242,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         }
     }
 
+
     public void EnterCompactOverlay()
     {
         if (_rootWindow.Presenter.Kind != AppWindowPresenterKind.CompactOverlay)
@@ -214,6 +251,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             {
                 SetTopMost(false);
             }
+
 
             _enteringCompactOverlay = true;
             _enteringFullScreen = false;
@@ -226,6 +264,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             });
         }
     }
+
 
     public void ExitCompactOverlay()
     {
@@ -242,6 +281,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         }
     }
 
+
     /// <summary>
     /// 设置主题.
     /// </summary>
@@ -250,6 +290,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
     {
         _rootGrid.RequestedTheme = theme;
     }
+
 
     /// <summary>
     /// 设置UI元素.
@@ -262,11 +303,13 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             _rootGrid.Children.Clear();
         }
 
+
         if (element is not null)
         {
             _rootGrid.Children.Add(element);
         }
     }
+
 
     /// <summary>
     /// 获取窗口对象.
@@ -274,6 +317,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
     /// <returns><see cref="AppWindow"/>.</returns>
     public AppWindow GetWindow()
         => _rootWindow;
+
 
     /// <summary>
     /// 设置视频承载元素（放在覆盖层下方）.
@@ -286,17 +330,20 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             return;
         }
 
+
         var exist = _rootGrid.Children.FirstOrDefault(p => p is Controls.Core.WebVideoPlayer);
         if (exist is not null)
         {
             _rootGrid.Children.Remove(exist);
         }
 
+
         if (element is not null)
         {
             _rootGrid.Children.Insert(0, element);
         }
     }
+
 
     public void DelayUpdateTitleBarPadding(bool delaySec = false)
     {
@@ -312,6 +359,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
                     await Task.Delay(800);
                 }
 
+
                 if (overlay?.HeaderBar?.ActualWidth > 0 && _rootWindow.IsVisible && !PInvoke.IsIconic(new(Handle)))
                 {
                     overlay.HeaderBar.UpdatePadding();
@@ -319,6 +367,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             });
         }
     }
+
 
     private async void OnInputActivationChanged(InputActivationListener sender, InputActivationListenerActivationChangedEventArgs args)
     {
@@ -329,18 +378,22 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             return;
         }
 
+
         if (sender.State != InputActivationState.Deactivated)
         {
             ResetFocus();
         }
 
+
         _activeChangedAction?.Invoke(sender.State == InputActivationState.Activated);
+
 
         if (_rootWindow.Position.X < -10000 || _rootWindow.Position.Y < -10000)
         {
             MoveAndResize();
         }
     }
+
 
     private void OnWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
@@ -352,16 +405,19 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             SizeChanged?.Invoke(this, new Size(size.Width, size.Height));
         }
 
+
         if (args.DidSizeChange || args.DidVisibilityChange || args.DidPresenterChange)
         {
             UpdateXamlSourcePosition();
             SaveCurrentWindowStats();
         }
 
+
         if ((args.DidVisibilityChange || args.DidPresenterChange) && sender.IsVisible)
         {
             ResetFocus();
         }
+
 
         if (args.DidPresenterChange && sender.Presenter.Kind == AppWindowPresenterKind.Overlapped)
         {
@@ -370,11 +426,13 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             DelayUpdateTitleBarPadding(true);
         }
 
+
         if (args.DidPositionChange)
         {
             SaveCurrentWindowStats();
         }
     }
+
 
     private void ResetWindowMinSize()
     {
@@ -390,6 +448,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         }
     }
 
+
     private void OnWindowDestroying(AppWindow sender, object args)
     {
         IsClosed = true;
@@ -399,6 +458,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         SaveCurrentWindowStats();
         _inputActivationListener = default;
     }
+
 
     internal void UpdateXamlSourcePosition()
     {
@@ -412,6 +472,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             size.Height));
     }
 
+
     internal void SetTopMost(bool isTopMost)
     {
         // 全屏和小窗模式下不处理置顶.
@@ -420,14 +481,17 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             return;
         }
 
+
         PInvoke.SetWindowPos(new(Handle), isTopMost ? new(-1) : new(-2), 0, 0, 0, 0, SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
     }
+
 
     internal bool IsTopMost()
     {
         var style = PInvoke.GetWindowLong(new(Handle), WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
         return (style & 0x00000008) != 0; // WS_EX_TOPMOST
     }
+
 
     public void ResetFocus()
     {
@@ -437,6 +501,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             {
                 return;
             }
+
 
             PInvoke.SetFocus(new(Handle));
             PInvoke.SetFocus(new(Win32Interop.GetWindowFromWindowId(_xamlSource.SiteBridge.WindowId)));
@@ -448,12 +513,14 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         });
     }
 
+
     private static PointInt32 GetSavedWindowPosition()
     {
         var left = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerWindowPositionLeft, 0);
         var top = SettingsToolkit.ReadLocalSetting(SettingNames.PlayerWindowPositionTop, 0);
         return new PointInt32(left, top);
     }
+
 
     private RectInt32 GetRenderRect(DisplayArea area)
     {
@@ -470,6 +537,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             height = workAreaHeight - 20;
         }
 
+
         var lastPoint = GetSavedWindowPosition();
         var isZeroPoint = lastPoint.X == 0 && lastPoint.Y == 0;
         var isValidPosition = lastPoint.X >= workArea.X && lastPoint.Y >= workArea.Y && lastPoint.X + width <= workArea.X + workArea.Width && lastPoint.Y + height <= workArea.Y + workArea.Height;
@@ -482,6 +550,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             : lastPoint.Y;
         return new RectInt32(Convert.ToInt32(left), Convert.ToInt32(top), width, height);
     }
+
 
     private void MoveAndResize()
     {
@@ -497,10 +566,12 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         }
     }
 
+
     private void SaveCurrentWindowStats()
     {
         var isMaximized = PInvoke.IsZoomed(new HWND(Handle));
         SettingsToolkit.WriteLocalSetting(SettingNames.IsPlayerWindowMaximized, (bool)isMaximized);
+
 
         if (!isMaximized && !_enteringFullScreen && !_enteringCompactOverlay && _rootWindow.Presenter.Kind == AppWindowPresenterKind.Overlapped)
         {
@@ -519,4 +590,6 @@ public sealed partial class PlayerWindow : IAsyncDisposable
         }
     }
 }
+
+
 
