@@ -363,12 +363,30 @@ public sealed class CommentPanel : Component
             .Width(36)
             .Height(32);
 
+        var forwardButton = new XamlHostElement(
+            () =>
+            {
+                var button = CreateForwardButton();
+                button.Click += async (sender, _) =>
+                {
+                    if (sender is Button b)
+                    {
+                        await comment.ForwardAsync(b.XamlRoot);
+                    }
+                };
+                return button;
+            },
+            _ => { })
+            .Width(36)
+            .Height(32);
+
         var actionRow = Grid(
-            columns: new[] { GridSize.Auto, GridSize.Star(), GridSize.Auto },
+            columns: new[] { GridSize.Auto, GridSize.Star(), GridSize.Auto, GridSize.Auto },
             rows: new[] { GridSize.Auto },
             likeButton.Grid(row: 0, column: 0).VAlign(VerticalAlignment.Center),
             moreLink.Grid(row: 0, column: 1).HAlign(HorizontalAlignment.Left).VAlign(VerticalAlignment.Center).Margin(12, 0, 0, 0),
-            replyButton.Grid(row: 0, column: 2).HAlign(HorizontalAlignment.Right).VAlign(VerticalAlignment.Center))
+            forwardButton.Grid(row: 0, column: 2).HAlign(HorizontalAlignment.Right).VAlign(VerticalAlignment.Center).Margin(0, 0, 8, 0),
+            replyButton.Grid(row: 0, column: 3).HAlign(HorizontalAlignment.Right).VAlign(VerticalAlignment.Center))
             .Margin(0, 8, 0, 0);
 
         var body = Grid(
@@ -425,6 +443,23 @@ public sealed class CommentPanel : Component
             },
             _ => { })
             .HAlign(HorizontalAlignment.Left);
+
+    private static Button CreateForwardButton()
+    {
+        var button = new Button
+        {
+            Padding = new Thickness(0),
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            Content = new FluentIcons.WinUI.SymbolIcon
+            {
+                Symbol = FluentIcons.Common.Symbol.Share,
+                FontSize = 12,
+            },
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTipService.SetToolTip(button, "转发");
+        return button;
+    }
 
     private static Button CreateReplyButton()    {
         var button = new Button

@@ -64,9 +64,44 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
     [RelayCommand]
     private void ShowUserSpace()
         => this.Get<NavigationViewModel>().NavigateToOver(typeof(UserSpacePage), Data.User.User);
+
+    /// <summary>
+    /// 把这条评论转发到自己的动态（@作者 + 正文摘录）.
+    /// </summary>
+    /// <param name="xamlRoot">XamlRoot.</param>
+    /// <returns>任务.</returns>
+    public async Task ForwardAsync(Microsoft.UI.Xaml.XamlRoot? xamlRoot)
+    {
+        try
+        {
+            var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+            var excerpt = Content?.Text ?? string.Empty;
+            if (excerpt.Length > 120)
+            {
+                excerpt = excerpt[..120];
+            }
+
+            var preview = new Controls.Dialogs.ForwardPreview(UserName, Avatar, null, excerpt);
+            var text = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, preview);
+            if (text is null)
+            {
+                return;
+            }
+
+            var content = string.IsNullOrWhiteSpace(text)
+                ? $"@{UserName}：{excerpt}"
+                : $"{text}\n@{UserName}：{excerpt}";
+            var (ok, message) = await Services.DynamicShareService.PostTextAsync(content, cookie, this.Get<ILogger<CommentItemViewModel>>());
+            Serilog.Log.Information("评论转发结果：{Ok} {Message}", ok, message);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "评论转发失败");
+        }
+    }
+
+
+
+
+
 }
-
-
-
-
-

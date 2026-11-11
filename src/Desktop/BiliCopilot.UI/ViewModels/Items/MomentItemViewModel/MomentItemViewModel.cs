@@ -95,13 +95,17 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
         try
         {
             var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
-            var at = string.IsNullOrWhiteSpace(Data.User?.Name) ? string.Empty : $"@{Data.User!.Name}";
+            var preview = new Controls.Dialogs.ForwardPreview(
+                Data.User?.Name,
+                Avatar,
+                VideoCover,
+                string.IsNullOrWhiteSpace(VideoTitle) ? (Description?.Text ?? string.Empty) : VideoTitle);
             if (xamlRoot is null)
             {
                 _logger.LogWarning("拿不到 XamlRoot，转发框不弹");
                 return;
             }
-            var text = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, at);
+            var text = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, preview);
             if (text is null)
             {
                 return;
