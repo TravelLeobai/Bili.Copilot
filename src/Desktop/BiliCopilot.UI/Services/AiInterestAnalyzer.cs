@@ -31,7 +31,14 @@ internal static class AiInterestAnalyzer
     {
         get
         {
-            var value = SettingsToolkit.ReadLocalSetting(SettingNames.AiInterestMaxLength, 60);
+            var value = SettingsToolkit.ReadLocalSetting(SettingNames.AiInterestMaxLength, 120);
+
+            // 旧默认值是 60，写不进「动机 + 依据 + 迁移」三层意思，读到时按新默认的 120 处理.
+            if (value == 60)
+            {
+                value = 120;
+            }
+
             return Math.Clamp(value, 20, 200);
         }
     }
@@ -137,10 +144,18 @@ internal static class AiInterestAnalyzer
             var content = ReadContent(message);
 
             content = ExtractSummary(content, limit);
+            if (LooksLikeInstructionEcho(content))
+            {
+                content = string.Empty;
+            }
             if (content.Length < 20)
             {
                 // 推理模型只把标记写进 content、正文留在 reasoning_content 里.
                 content = ExtractSummary(ReadString(message, "reasoning_content"), limit);
+                if (LooksLikeInstructionEcho(content))
+                {
+                    content = string.Empty;
+                }
             }
             if (string.IsNullOrWhiteSpace(content))
             {
@@ -148,6 +163,7 @@ internal static class AiInterestAnalyzer
                 return null;
             }
 
+            Serilog.Log.Information("兴趣原始输出：{Raw}", content.Length > 200 ? content[..200] : content);
             logger?.LogInformation("观看兴趣分析完成：{Length} 字", content.Length);
             return content;
         }
@@ -167,14 +183,24 @@ internal static class AiInterestAnalyzer
         builder.Append("{\"model\":\"").Append(Escape(model)).Append("\",\"temperature\":0.4,\"messages\":[");
 
         // 系统提示：严格限定输出格式，正文只放在 <<<兴趣>>> ... <<<END>>> 之间.
+        // 内容上不许罗列题材，必须写动机、依据、迁移；文风按 no-ai-slop 的中文规则压一遍。
+        // 指令写成短句、不用编号列表：模型会把编号列表当答案复述回来（实测过一次）。
         builder.Append("{\"role\":\"system\",\"content\":\"")
-            .Append(Escape("你是视频平台的内容分析师。根据用户最近看过的视频（标题、封面、简介），概括他最近的内容偏好。"
-                + $"输出必须严格按下面的格式，只允许一段话，不超过 {limit} 个汉字：\n"
+            .Append(Escape("从视频清单里读出这个人的兴趣结构，写两到三句中文。\n"
+                + "写动机（他为什么看这些）、依据（从哪些内容看出来的）、以及兴趣是否在迁移。\n"
+                + "不要罗列题材类型，「喜欢二次元、数码、历史」等于没说。不要空话，说具体内容。不确定就用「看起来」。\n"
+                + "禁用词：赋能、抓手、闭环、生态、链路、沉淀、对齐、颗粒度、底层逻辑、破圈、矩阵、赛道、心智。\n"
+                + "禁用句式：不是…而是…、不仅…更是…、综上所述、总而言之、值得一提的是、让我们。\n"
+                + "不要排比、感叹号、破折号、结尾升华。\n"
+                + $"不超过 {limit} 个汉字，一段话，不分点、不加标题。\n"
+                + "下面是格式和深度的参照（只学写法和颗粒度，内容不许照抄）：\n"
                 + "<<<兴趣>>>\n"
-                + "（只在这里写那一段话）\n"
+                + "看起来他在补的是把东西做出来的能力，插件开发、DIY 改造、工具折腾都在同一条线上，考据类只是穿插调剂。早先纯看乐子的 MV 和鬼畜比重在掉。\n"
                 + "<<<END>>>\n"
-                + "规则：不要写解释、不要写标题、不要分点、不要罗列视频名、不要加引号或 Markdown；"
-                + "除这两个标记和中间那段话之外，不要输出任何其他字符。"))
+                + "现在照这个颗粒度，为下面的清单写一段。只输出两个标记之间的那段话，不要复述要求，不要解释你在做什么，不要写「我们需要回答」「以下是」。\n"
+                + "<<<兴趣>>>\n"
+                + "（这里只放那一段话）\n"
+                + "<<<END>>>"))
             .Append("\"},");
 
         var text = new StringBuilder("最近看过的视频：\n");
@@ -200,11 +226,11 @@ internal static class AiInterestAnalyzer
         if (covers.Count == 0)
         {
             builder.Append("{\"role\":\"user\",\"content\":\"").Append(Escape(text.ToString())).Append("\"}]");
-            builder.Append(",\"max_tokens\":400}");
+            builder.Append(",\"max_tokens\":1500}");
             return builder.ToString();
         }
 
-        text.Append("\n下面附几帧封面作为参考。请据此概括这个人的观看兴趣。");
+        text.Append("\n下面附几帧封面作为参考。按前面的要求分析这个人的深层兴趣，不要只列类型。");
         builder.Append("{\"role\":\"user\",\"content\":[");
         builder.Append("{\"type\":\"text\",\"text\":\"").Append(Escape(text.ToString())).Append("\"}");
 
@@ -213,7 +239,7 @@ internal static class AiInterestAnalyzer
             builder.Append(",{\"type\":\"image_url\",\"image_url\":{\"url\":\"").Append(Escape(cover)).Append("\"}}");
         }
 
-        builder.Append("]}],\"max_tokens\":400}");
+        builder.Append("]}],\"max_tokens\":1500}");
         return builder.ToString();
     }
     private static async Task<List<string>> CollectCoversAsync(IReadOnlyList<InterestSample> samples, ILogger? logger)
@@ -310,6 +336,27 @@ internal static class AiInterestAnalyzer
     /// 从模型输出里抽正文：优先严格取标记「兴趣」块之间的内容；
     /// 模型没按格式来时，退回「【结论】」/「结论：」之后的文字；最后按字数上限硬裁.
     /// </summary>
+    /// <summary>
+    /// 模型有时会把提示词当成答案复述回来，这种整段丢掉，宁可不显示.
+    /// </summary>
+    /// <param name="text">候选文本.</param>
+    /// <returns>是否像在复述要求.</returns>
+    private static bool LooksLikeInstructionEcho(string text)
+    {
+        string[] markers =
+        {
+            "我们需要回答",
+            "不超过",
+            "个汉字",
+            "任务是",
+            "标记之间",
+            "以下是",
+            "动机、依据",
+        };
+
+        return markers.Any(text.Contains);
+    }
+
     private static string ExtractSummary(string raw, int limit)
     {
         var text = raw.Trim();
@@ -328,7 +375,7 @@ internal static class AiInterestAnalyzer
             var end = text.IndexOf(endMarker, bodyStart, StringComparison.Ordinal);
             var body = end > bodyStart ? text[bodyStart..end] : text[bodyStart..];
             var normalized = Normalize(body);
-            if (normalized.Length > 0)
+            if (normalized.Length > 0 && !LooksLikeInstructionEcho(normalized))
             {
                 return TrimToLimit(normalized, limit);
             }
@@ -369,7 +416,10 @@ internal static class AiInterestAnalyzer
             .Select(p => p.Trim().TrimStart('-', '*', '#', '>', ' ').Trim())
             .Where(p => p.Length > 0);
         value = string.Join(string.Empty, lines);
-        return value.Trim().Trim('"', '“', '”', '`', '「', '」', '《', '》').Trim();
+        value = value.Trim().Trim('"', '“', '”', '`', '「', '」', '《', '》').Trim();
+
+        // 模型常在逗号/分号处收尾，留着这些符号会像被截断的残句.
+        return value.TrimEnd('，', '、', '；', '：', ',', ';', ':', '—', '-', '…', ' ');
     }
 
     /// <summary>
@@ -443,5 +493,6 @@ internal static class AiInterestAnalyzer
 /// <param name="Description">简介片段.</param>
 /// <param name="CoverUrl">封面地址.</param>
 public sealed record InterestSample(string Title, string Author, string Description, string CoverUrl);
+
 
 

@@ -91,7 +91,7 @@
                 <TextBox MinWidth="360" PlaceholderText="https://your-worker.example.com/ads?bvid={bvid}" Text="{x:Bind ViewModel.AdCloudUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
             </base:SettingsCard>
 
-            <base:SettingsCard Description="复用下面配置的 AI 接口，在动态「已看过」里用一段话概括你的观看偏好" Header="分析观看兴趣">
+            <base:SettingsCard Description="复用下面配置的 AI 接口，在「已看过」、历史、稍后再看和默认收藏夹顶部用一段话分析你的深层兴趣" Header="分析观看兴趣">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="PeopleEye" />
                 </base:SettingsCard.HeaderIcon>
