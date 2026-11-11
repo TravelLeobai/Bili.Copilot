@@ -1,8 +1,10 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Reactor;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.ViewModels.Components;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Xaml;
 using Richasy.WinUIKernel.Share.Base;
 
 namespace BiliCopilot.UI.Controls.Player;
@@ -48,8 +50,30 @@ public sealed partial class VideoInfoSection : VideoInfoSectionBase
 
         _mountedViewModel = viewModel;
         _reactorHost = new ReactorHostControl();
+
+        // 性能探针：侧栏根元素的 Loaded 才算"真的挂上去了"，在这里收尾 Detail.Panel.Mount。
+        // 探针关闭时不挂事件，零开销.
+        if (PerfProbe.IsEnabled)
+        {
+            _reactorHost.Loaded += OnPanelLoaded;
+        }
+
         RootGrid.Children.Add(_reactorHost);
         _reactorHost.Mount(new VideoInfoPanel(viewModel));
+
+        // 性能探针：在挂载这一刻投一个低优先级回调，测"UI 线程跑到下一个空闲点"要多久，
+        // 近似于挂载后的第一次布局/渲染.
+        PerfProbe.QueueDetailPanelFirstRenderProbe();
+    }
+
+    private void OnPanelLoaded(object sender, RoutedEventArgs e)
+    {
+        if (_reactorHost is not null)
+        {
+            _reactorHost.Loaded -= OnPanelLoaded;
+        }
+
+        PerfProbe.CompleteDetailPanelMountProbe();
     }
 }
 

@@ -169,7 +169,12 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
             UpdateProperties();
             InitializeView(_view);
             _comments?.Initialize(_view.Information.Identifier.Id, Richasy.BiliKernel.Models.CommentTargetType.Video, Richasy.BiliKernel.Models.CommentSortType.Hot);
+            // 性能探针：进 InitializeSections 之前先把挂载窗口打开，万一侧栏是同步挂上来的，
+            // "首次渲染"那次投递也还能发生（探针关闭时是空操作）.
+            VideoPlayerInfoSectionDetailViewModel.BeginPanelMountProbe();
             InitializeSections();
+            // 再把区间起点挪到"区块建完"这一刻：Detail.Panel.Mount 从这里开始算到侧栏 Loaded.
+            VideoPlayerInfoSectionDetailViewModel.BeginPanelMountProbe();
             VideoPlayerInfoSectionDetailViewModel.CompleteFirstLoadProbe(Tags?.Count ?? 0);
             AI.InjectVideoAsync(_view, _part);
         }

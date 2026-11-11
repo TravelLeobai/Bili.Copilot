@@ -94,3 +94,35 @@ pwsh -NoProfile -File tools\player-perf\sample-topbar.ps1 -Cycles 100 -SkipLaunc
 2. **对照实验**：同一视频、同一位置，分别测「进详情」与「不进详情」的 UiLag 尾部分布；如果 Tail 只跟着详情走，根因就是它。
 3. 若确认在渲染/布局：再看是否能延后非首屏内容（标签、推荐列表）而不影响首屏可交互。
 4. 顶栏这条链不再需要优化——数据已经说明它每次只要 2.5ms。
+
+---
+
+## 7. 重要更正（1.0.12.6 实测推翻了上一节的归因）
+
+上一节把 540~628ms 的 UI 停顿归到"详情面板首次成型"，**这个归因是错的**，被后续测量推翻：
+
+- 新增 `Detail.Panel.Mount` / `Detail.Panel.FirstRender` 后，两次真实加载 **一条样本都没有**。
+- 原因：信息侧栏挂在 `Controls\OverlayPanel.xaml`，根节点 `Visibility="{x:Bind IsShow}"` 绑到
+  `PlayerViewModel.IsExtraPanelVisible`，默认 false，只有用户主动展开侧栏才变 true
+  （`PlayerViewModel.Methods.cs:991-998`）。侧栏没展开时 `ContentControl` 不会实例化
+  `DataTemplate`，`Reactor\VideoSidePanels.cs` 的 `VideoInfoPanel` 根本没被构建。
+- 所以那 0.6 秒的停顿发生时，详情面板的 UI 子树**不存在**，不可能是它的首帧。
+
+### 同时纠正的第二个读数
+
+`Cover.Decode` 实测 n=32/34、p50≈1.28s、p95≈1.61s，解码宽度 p50=600px。但这个统计区间是
+"设置 Source → ImageLoaded"，**包含缩略图的 HTTP 拉取**，不是纯解码 CPU。不能拿它当"解码很慢"的证据。
+
+### 现在的结论
+
+1. 顶栏路径：不卡（2.5ms/次，UiLag 1385 样本无 >16.7ms）。**这条保持成立。**
+2. 540~628ms 停顿：发生在**视频加载/播放器初始化**阶段，此时详情侧栏并不存在。剩下的嫌疑是
+   播放器控件与 overlay 的首次构建、弹幕层初始化、mpv/visor 初始化路径。
+3. 这个环境里还反复出现 `mpv 播放器初始化超过 20 秒没返回` / `播放器错误（初始化超时）`，
+   说明这条初始化路径本身就不稳定，值得单独查。
+
+### 下一步
+
+按新证据，应该给"视频加载"这条链分段打点：
+`snapshot → 播放器控件挂载 → mpv 初始化返回 → 弹幕初始化 → 首帧`，
+先把 0.6 秒钉在具体一段，再谈修复。

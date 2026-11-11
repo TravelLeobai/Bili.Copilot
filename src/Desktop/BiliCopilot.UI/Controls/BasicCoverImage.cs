@@ -27,11 +27,22 @@ public sealed partial class BasicCoverImage : ImageExBase
         _ = _loadStopwatch;
 
         // 诊断开关打开时，解码完成/失败都记一笔，用来判断失败重试风暴和解码开销.
-        ImageLoaded += (_, _) => ImageDiagnostics.RecordLoaded(
-            Source?.OriginalString,
-            (int)DecodeWidth,
-            (int)DecodeHeight,
-            _loadStopwatch.Elapsed.TotalMilliseconds);
+        ImageLoaded += (_, _) =>
+        {
+            var decodeMs = _loadStopwatch.Elapsed.TotalMilliseconds;
+            ImageDiagnostics.RecordLoaded(
+                Source?.OriginalString,
+                (int)DecodeWidth,
+                (int)DecodeHeight,
+                decodeMs);
+
+            // 性能探针：解码耗时和这次解码用的宽度（像素）各记一笔，探针关闭时是空操作.
+            if (PerfProbe.IsEnabled)
+            {
+                PerfProbe.Record(PerfProbe.CoverDecodeProbeName, decodeMs);
+                PerfProbe.Record(PerfProbe.CoverDecodeWidthProbeName, DecodeWidth);
+            }
+        };
 
         ImageFailed += (_, _) => ImageDiagnostics.RecordFailed(Source?.OriginalString, null);
 

@@ -92,6 +92,22 @@ public sealed partial class VideoPlayerInfoSectionDetailViewModel : ViewModelBas
     }
 
     /// <summary>
+    /// 打开"详情侧栏挂载"的计时窗口.
+    /// 连接器在 <c>InitializeSections()</c> 前后各调一次：前面那次让同步发生的挂载也能投出
+    /// "首次渲染"采样，后面那次把 <see cref="PerfProbe.DetailPanelMountProbeName"/> 的起点
+    /// 精确挪到区块建完的那一刻。不在首次加载窗口内或探针关闭时什么都不做。
+    /// </summary>
+    internal static void BeginPanelMountProbe()
+    {
+        if (!PerfProbe.IsEnabled || _firstLoadActive == 0)
+        {
+            return;
+        }
+
+        PerfProbe.BeginDetailPanelMountProbe();
+    }
+
+    /// <summary>
     /// 首次加载失败（拉取详情抛异常）：丢掉这次计时，不产生半截样本.
     /// </summary>
     internal static void AbortFirstLoadProbe()
