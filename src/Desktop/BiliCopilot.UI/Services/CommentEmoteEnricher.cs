@@ -15,6 +15,7 @@ namespace BiliCopilot.UI.Services;
 internal static class CommentEmoteEnricher
 {
     private static readonly HttpClient Client = CreateClient();
+
     private static readonly HashSet<string> FetchedPages = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -25,15 +26,16 @@ internal static class CommentEmoteEnricher
     /// <param name="page">页码（从 1 开始）.</param>
     /// <param name="cookie">登录态.</param>
     /// <param name="logger">日志.</param>
+    /// <param name="sort">排序（2 热门 / 0 时间），必须与列表一致，否则取到的条目对不上.</param>
     /// <returns>任务.</returns>
-    public static async Task EnrichAsync(string oid, int targetType, int page, string cookie, ILogger? logger = null)
+    public static async Task EnrichAsync(string oid, int targetType, int page, string cookie, ILogger? logger = null, int sort = 2)
     {
         if (string.IsNullOrWhiteSpace(oid) || page <= 0)
         {
             return;
         }
 
-        var key = $"{targetType}:{oid}:{page}";
+        var key = $"{targetType}:{oid}:{page}:{sort}";
         lock (FetchedPages)
         {
             if (!FetchedPages.Add(key))
@@ -42,7 +44,7 @@ internal static class CommentEmoteEnricher
             }
         }
 
-        var url = $"https://api.bilibili.com/x/v2/reply?type={targetType}&oid={oid}&sort=2&ps=20&pn={page}&nohot=1";
+        var url = $"https://api.bilibili.com/x/v2/reply?type={targetType}&oid={oid}&sort={sort}&ps=20&pn={page}&nohot=1";
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -72,7 +74,6 @@ internal static class CommentEmoteEnricher
             foreach (var reply in replies.EnumerateArray())
             {
                 added += RegisterReplyEmotes(reply);
-                RegisterReplyPictures(reply);
             }
 
             if (added > 0)
@@ -104,60 +105,6 @@ internal static class CommentEmoteEnricher
         }
 
         return added;
-    }
-
-    /// <summary>
-    /// 登记评论附图：内核模型不带 pictures，只能从原文 JSON 取.
-    /// 顶层回复和楼中楼都处理.
-    /// </summary>
-    private static void RegisterReplyPictures(JsonElement reply)
-    {
-        RegisterPictures(reply);
-        if (reply.TryGetProperty("replies", out var children) && children.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var child in children.EnumerateArray())
-            {
-                RegisterPictures(child);
-            }
-        }
-    }
-
-    private static void RegisterPictures(JsonElement reply)
-    {
-        if (!reply.TryGetProperty("rpid", out var rpidElement)
-            || !reply.TryGetProperty("content", out var content)
-            || !content.TryGetProperty("pictures", out var pictures)
-            || pictures.ValueKind != JsonValueKind.Array)
-        {
-            return;
-        }
-
-        var id = rpidElement.ValueKind == JsonValueKind.String
-            ? rpidElement.GetString()
-            : rpidElement.GetRawText();
-        if (string.IsNullOrEmpty(id))
-        {
-            return;
-        }
-
-        var list = new List<CommentPicture>();
-        foreach (var picture in pictures.EnumerateArray())
-        {
-            var url = picture.TryGetProperty("img_src", out var src) ? src.GetString() : null;
-            if (string.IsNullOrWhiteSpace(url))
-            {
-                continue;
-            }
-
-            var width = picture.TryGetProperty("img_width", out var w) && w.ValueKind == JsonValueKind.Number ? w.GetInt32() : 0;
-            var height = picture.TryGetProperty("img_height", out var h) && h.ValueKind == JsonValueKind.Number ? h.GetInt32() : 0;
-            list.Add(new CommentPicture(url!, width, height));
-        }
-
-        if (list.Count > 0)
-        {
-            CommentPictureStore.Register(id, list);
-        }
     }
 
     private static int RegisterFromContent(JsonElement reply)
@@ -211,3 +158,8 @@ internal static class CommentEmoteEnricher
         return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(12) };
     }
 }
+
+
+
+
+

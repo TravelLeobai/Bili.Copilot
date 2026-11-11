@@ -489,6 +489,10 @@ public sealed class CommentPanel : Component
     /// 评论附图：最多显示三张，等高排一行；没有附图时返回零高度占位，不占额外行高.
     /// 点开交给系统默认浏览器（B 站图床带防盗链，交给浏览器反而更稳）.
     /// </summary>
+    /// <summary>
+    /// 评论附图：直接用内核 EmoteText.Pictures（BiliImage），最多显示三张，等高一行.
+    /// 圆角与评论卡片一致；点击交给已有的 GalleryWindow 看图.
+    /// </summary>
     private static Element BuildCommentPictures(CommentItemViewModel comment)
     {
         var pictures = comment.Pictures;
@@ -498,15 +502,19 @@ public sealed class CommentPanel : Component
         }
 
         const double PictureHeight = 120d;
-        var shown = pictures.Take(3).ToList();
-        var extra = pictures.Count - shown.Count;
+        var all = pictures.ToList();
+        var shown = all.Take(3).ToList();
+        var extra = all.Count - shown.Count;
         var columns = Enumerable.Repeat(GridSize.Star(), shown.Count).ToArray();
         var children = new List<Element>();
         for (var i = 0; i < shown.Count; i++)
         {
             var picture = shown[i];
-            var url = picture.Url;
-            var width = Math.Clamp(PictureHeight * picture.AspectRatio, 60d, 320d);
+            var url = picture.Uri?.ToString() ?? picture.SourceUri?.ToString() ?? string.Empty;
+            var ratio = picture.Width > 0 && picture.Height > 0 ? picture.Width / picture.Height : 4d / 3d;
+            var width = Math.Clamp(PictureHeight * ratio, 60d, 320d);
+            var decodeWidth = (int)Math.Max(160, width * 2);
+
             var badge = (i == shown.Count - 1 && extra > 0)
                 ? (Element)Border(
                     TextBlock($"+{extra}")
@@ -522,29 +530,37 @@ public sealed class CommentPanel : Component
                     .Margin(0, 0, 6, 6)
                 : (Element)TextBlock(string.Empty);
 
+            // 用 ImageBrush 当 Background：Border 会把背景按圆角裁掉，图片自然跟着圆. 
+            var pictureHost = new XamlHostElement(
+                () => new Border { CornerRadius = new CornerRadius(ControlCornerRadiusValue) },
+                element =>
+                {
+                    var border = (Border)element;
+                    try
+                    {
+                        border.Background = new Microsoft.UI.Xaml.Media.ImageBrush
+                        {
+                            ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(url))
+                            {
+                                DecodePixelWidth = decodeWidth,
+                            },
+                            Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine(ex.Message);
+                    }
+                });
+
             var cell = Button(
                 Grid(
                     columns: new[] { GridSize.Star() },
                     rows: new[] { GridSize.Star() },
-                    new XamlHostElement(
-                        () => new Microsoft.UI.Xaml.Controls.Image
-                        {
-                            Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill,
-                            HorizontalAlignment = HorizontalAlignment.Stretch,
-                            VerticalAlignment = VerticalAlignment.Stretch,
-                        },
-                        element =>
-                        {
-                            var image = (Microsoft.UI.Xaml.Controls.Image)element;
-                            image.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(url))
-                            {
-                                DecodePixelWidth = (int)Math.Max(160, width * 2),
-                            };
-                        })
-                        .Grid(row: 0, column: 0),
+                    pictureHost.Grid(row: 0, column: 0),
                     badge.Grid(row: 0, column: 0))
                 .Height(PictureHeight),
-                () => OpenPicture(url))
+                () => OpenCommentGallery(picture, all))
                 .Padding(0)
                 .SubtleButton()
                 .AutomationName("查看评论图片");
@@ -558,14 +574,17 @@ public sealed class CommentPanel : Component
             children.ToArray());
     }
 
-    private static async void OpenPicture(string url)
+    private static void OpenCommentGallery(
+        Richasy.BiliKernel.Models.Appearance.BiliImage picture,
+        List<Richasy.BiliKernel.Models.Appearance.BiliImage> all)
     {
         try
         {
-            await Windows.System.Launcher.LaunchUriAsync(new Uri(url));
+            new BiliCopilot.UI.Forms.GalleryWindow(picture, all).Activate();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine(ex.Message);
         }
     }
 
@@ -661,6 +680,7 @@ public sealed class CommentPanel : Component
         }
     }
 }
+
 
 
 

@@ -82,7 +82,7 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
             // 先补一页评论原文里的表情映射，装扮表情不在内核表情表里.
             _page++;
             var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
-            await Services.CommentEmoteEnricher.EnrichAsync(Id, (int)_targetType, _page, cookie, _logger);
+            // 排序必须和列表一致：热门列表取热门前 20，按时间取时间前 20，否则条目对不上号.\n            await Services.CommentEmoteEnricher.EnrichAsync(Id, (int)_targetType, _page, cookie, _logger, SortType == CommentSortType.Hot ? 2 : 0);
             _preventLoadMore = view.IsEnd;
             if (view.TopComment is not null)
             {
@@ -203,4 +203,5 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         ResetReplyTarget();
     }
 }
+
 

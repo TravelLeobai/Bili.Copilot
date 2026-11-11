@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Pages.Overlay;
 using BiliCopilot.UI.ViewModels.Core;
@@ -37,7 +37,7 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
         UserName = data.User.User.Name;
         IsVip = data.User.IsVip ?? false;
         Content = data.Content;
-        Pictures = Services.CommentPictureStore.Get(data.Id);
+        Pictures = data.Content?.Pictures?.ToList() ?? [];
         _markReplyTargetAction = markReplyTargetAction;
     }
 
@@ -65,3 +65,8 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
     private void ShowUserSpace()
         => this.Get<NavigationViewModel>().NavigateToOver(typeof(UserSpacePage), Data.User.User);
 }
+
+
+
+
+

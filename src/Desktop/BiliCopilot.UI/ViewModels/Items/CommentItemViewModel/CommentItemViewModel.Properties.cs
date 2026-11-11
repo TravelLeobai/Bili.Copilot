@@ -60,7 +60,7 @@ public sealed partial class CommentItemViewModel
     /// <summary>
     /// 评论附图，没有就是空集合.
     /// </summary>
-    public IReadOnlyList<Services.CommentPicture> Pictures { get; init; } = [];
+    public IReadOnlyList<Richasy.BiliKernel.Models.Appearance.BiliImage> Pictures { get; init; } = [];
 
     /// <summary>
     /// 是否有附图.
