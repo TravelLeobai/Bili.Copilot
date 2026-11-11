@@ -448,8 +448,8 @@ public sealed class CommentPanel : Component
     {
         var button = new Button
         {
-            Padding = new Thickness(0),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
             Content = new FluentIcons.WinUI.SymbolIcon
             {
                 Symbol = FluentIcons.Common.Symbol.Share,

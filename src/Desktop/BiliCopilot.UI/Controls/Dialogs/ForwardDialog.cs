@@ -1,9 +1,14 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using System.Text;
+using BiliCopilot.UI.Controls.Components;
+using BiliCopilot.UI.Services;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Storage.Streams;
 
 namespace BiliCopilot.UI.Controls.Dialogs;
 
@@ -17,7 +22,8 @@ namespace BiliCopilot.UI.Controls.Dialogs;
 public sealed record ForwardPreview(string? Name, Uri? Avatar, Uri? Cover, string Text);
 
 /// <summary>
-/// 转发动态的输入框：标题 + 说点什么吧 + 缩略卡片 + 表情 + 字数 + 发表/取消.
+/// 转发动态的输入框：标题 + 说点什么吧 + 缩略卡片 + 表情面板 + 字数 + 发表/取消.
+/// 输入框用 RichEditBox：表情以图片形式内嵌，发表时再还原成 [emote] 文本.
 /// </summary>
 public static class ForwardDialog
 {
@@ -26,13 +32,13 @@ public static class ForwardDialog
     /// </summary>
     public static XamlRoot? CurrentRoot { get; set; }
 
-    private static readonly string[] Emojis =
-    [
-        "😂", "🤣", "😭", "😍", "🥰", "😘", "😎", "🤔",
-        "😅", "😳", "🙃", "😴", "🤤", "😡", "🤯", "🥺",
-        "👍", "👎", "🙏", "👏", "💪", "🤝", "✌️", "🫡",
-        "❤️", "💔", "🔥", "✨", "🎉", "🍋", "🌹", "🐶",
-    ];
+    private static readonly HttpClient ImageClient = new(new SocketsHttpHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+    })
+    {
+        Timeout = TimeSpan.FromSeconds(15),
+    };
 
     /// <summary>
     /// 弹出转发框.
@@ -48,7 +54,7 @@ public static class ForwardDialog
             return null;
         }
 
-        var box = new TextBox
+        var box = new RichEditBox
         {
             PlaceholderText = "说点什么吧...",
             AcceptsReturn = true,
@@ -56,6 +62,9 @@ public static class ForwardDialog
             Height = 130,
             MaxLength = 1000,
         };
+
+        // 插进去的表情 token，按顺序记下来；发表时把文档里的图片占位符换回 token.
+        var tokens = new List<string>();
 
         var counter = new TextBlock
         {
@@ -65,16 +74,16 @@ public static class ForwardDialog
             HorizontalAlignment = HorizontalAlignment.Right,
         };
 
-        box.TextChanged += (_, _) => counter.Text = box.Text?.Length.ToString() ?? "0";
+        box.TextChanged += (_, _) => counter.Text = ReadPlain(box, tokens).Length.ToString();
 
-        var panel = new StackPanel { Spacing = 10, Width = 520 };
+        var panel = new StackPanel { Spacing = 10, Width = 560 };
         panel.Children.Add(box);
 
-        // 工具条：表情按钮 + 字数.
         var emojiButton = new Button
         {
             Padding = new Thickness(8, 4, 8, 4),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            BorderThickness = new Thickness(0),
             Content = new FluentIcons.WinUI.SymbolIcon
             {
                 Symbol = FluentIcons.Common.Symbol.Emoji,
@@ -82,7 +91,7 @@ public static class ForwardDialog
             },
         };
         ToolTipService.SetToolTip(emojiButton, "表情");
-        emojiButton.Flyout = BuildEmojiFlyout(box);
+        emojiButton.Flyout = BuildEmoteFlyout(box, tokens);
 
         var toolbar = new Grid
         {
@@ -113,50 +122,155 @@ public static class ForwardDialog
         };
 
         var result = await dialog.ShowAsync();
-        return result == ContentDialogResult.Primary ? box.Text ?? string.Empty : null;
+        return result == ContentDialogResult.Primary ? ReadPlain(box, tokens).Trim() : null;
     }
 
-    private static Flyout BuildEmojiFlyout(TextBox box)
+    /// <summary>
+    /// 读出正文：文档里的图片占位符按插入顺序替换回表情 token.
+    /// </summary>
+    private static string ReadPlain(RichEditBox box, List<string> tokens)
     {
-        var grid = new Grid
+        box.Document.GetText(TextGetOptions.NoHidden, out var text);
+        if (string.IsNullOrEmpty(text))
         {
-            ColumnSpacing = 2,
-            RowSpacing = 2,
-        };
-        for (var i = 0; i < 8; i++)
-        {
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            return string.Empty;
         }
 
-        for (var i = 0; i < 4; i++)
+        text = text.TrimEnd('\r');
+        var builder = new StringBuilder(text.Length + (tokens.Count * 8));
+        var index = 0;
+        foreach (var ch in text)
         {
-            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        }
-
-        for (var i = 0; i < Emojis.Length; i++)
-        {
-            var emoji = Emojis[i];
-            var button = new Button
+            // RichEdit 里内嵌对象读出来是 U+FFFC（对象替换符）.
+            if (ch == '\uFFFC')
             {
-                Content = emoji,
-                FontSize = 18,
-                Padding = new Thickness(6, 2, 6, 2),
-                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            };
-            ToolTipService.SetToolTip(button, emoji);
-            button.Click += (_, _) =>
+                builder.Append(index < tokens.Count ? tokens[index] : string.Empty);
+                index++;
+            }
+            else
             {
-                var caret = box.SelectionStart;
-                box.Text = box.Text.Insert(caret, emoji);
-                box.SelectionStart = caret + emoji.Length;
-            };
-            Grid.SetRow(button, i / 8);
-            Grid.SetColumn(button, i % 8);
-            grid.Children.Add(button);
+                builder.Append(ch);
+            }
         }
 
-        return new Flyout { Content = grid };
+        // 多出来的 token（比如用户删了图片）直接忽略，避免重复.
+        return builder.ToString();
     }
+
+    private static Flyout BuildEmoteFlyout(RichEditBox box, List<string> tokens)
+    {
+        var host = new Grid { Width = 320, Height = 420 };
+        var flyout = new Flyout
+        {
+            Content = host,
+        };
+
+        flyout.Opened += (_, _) =>
+        {
+            if (host.Children.Count > 0)
+            {
+                return;
+            }
+
+            var emotePanel = new EmotePanel
+            {
+                Width = 320,
+                Height = 420,
+            };
+            emotePanel.ItemClick += async (_, key) => await InsertEmoteAsync(box, tokens, key);
+            host.Children.Add(emotePanel);
+        };
+
+        return flyout;
+    }
+
+    private static async Task InsertEmoteAsync(RichEditBox box, List<string> tokens, string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        var emote = BiliEmoteService.TryGet(key);
+        var imageUri = string.IsNullOrWhiteSpace(emote?.Url) ? null : new Uri(emote!.Url);
+        if (imageUri is null)
+        {
+            // 拿不到图就退回文字 token，至少不丢内容.
+            InsertPlain(box, key);
+            tokens.Add(key);
+            return;
+        }
+
+        byte[]? bytes = null;
+        try
+        {
+            using var response = await ImageClient.GetAsync(imageUri);
+            if (response.IsSuccessStatusCode)
+            {
+                bytes = await response.Content.ReadAsByteArrayAsync();
+            }
+        }
+        catch
+        {
+            bytes = null;
+        }
+
+        if (bytes is null || bytes.Length == 0)
+        {
+            InsertPlain(box, key);
+            tokens.Add(key);
+            return;
+        }
+
+        var (width, height) = GetEmoteSize(emote);
+        InsertPicture(box, bytes, width, height);
+        tokens.Add(key);
+    }
+
+    private static (int Width, int Height) GetEmoteSize(BiliEmote? emote)
+    {
+        // 面板没给像素尺寸，按档位估：普通 24，大表情 36.
+        var side = emote?.Size == 2 ? 36 : 24;
+        return (side, side);
+    }
+
+    /// <summary>
+    /// 把图片插到光标处：RichEdit 的 ITextRange 没有 InsertImage，只能整篇按 RTF 重建.
+    /// </summary>
+    private static void InsertPicture(RichEditBox box, byte[] imageBytes, int width, int height)
+    {
+        box.Document.GetText(TextGetOptions.NoHidden, out var raw);
+        raw = raw.TrimEnd('\r');
+
+        var caret = box.Document.Selection.StartPosition;
+        caret = Math.Clamp(caret, 0, raw.Length);
+
+        var before = EscapeRtf(raw[..caret]);
+        var after = EscapeRtf(raw[caret..]);
+        var hex = Convert.ToHexString(imageBytes);
+        var pict = $@"{{\pict\pngblip\picw{width * 15}\pich{height * 15}\picwgoal{width * 15}\pichgoal{height * 15} {hex}}}";
+        var rtf = $@"{{\rtf1\ansi\deff0{{\fonttbl{{\f0 Segoe UI;}}}}\f0\fs22 {before}{pict}{after}}}";
+
+        box.Document.SetText(TextSetOptions.FormatRtf, rtf);
+        box.Document.Selection.SetRange(caret + 1, caret + 1);
+    }
+
+    private static void InsertPlain(RichEditBox box, string text)
+    {
+        box.Document.GetText(TextGetOptions.NoHidden, out var raw);
+        raw = raw.TrimEnd('\r');
+        var caret = Math.Clamp(box.Document.Selection.StartPosition, 0, raw.Length);
+        box.Document.SetText(TextSetOptions.None, raw.Insert(caret, text));
+        box.Document.Selection.SetRange(caret + text.Length, caret + text.Length);
+    }
+
+    private static string EscapeRtf(string value)
+        => value
+            .Replace("\\", "\\\\")
+            .Replace("{", "\\{")
+            .Replace("}", "\\}")
+            .Replace("\r", "\\par ")
+            .Replace("\n", "\\par ");
 
     private static FrameworkElement BuildPreviewCard(ForwardPreview preview)
     {
@@ -216,7 +330,6 @@ public static class ForwardDialog
         }
         else
         {
-            // 没图时正文与昵称左对齐，不空出封面那一格.
             Grid.SetColumn(text, 0);
             Grid.SetColumnSpan(text, 2);
         }
@@ -248,3 +361,4 @@ public static class ForwardDialog
         return new ImageBrush { ImageSource = bitmap, Stretch = Stretch.UniformToFill };
     }
 }
+
