@@ -269,7 +269,7 @@ public sealed class VideoSeasonPanel : Component
             .WithKey("season-combo");
 
         var cards = new List<Element>();
-        foreach (var item in viewModel.Items)
+        foreach (var item in viewModel.VisibleItems)
         {
             var itemViewModel = item;
             var card = new XamlHostElement(
@@ -366,3 +366,4 @@ public sealed class VideoPlaylistPanel : Component
     private static Style ResolveStyle(string key)
         => Application.Current.Resources.TryGetValue(key, out var value) && value is Style style ? style : null!;
 }
+
