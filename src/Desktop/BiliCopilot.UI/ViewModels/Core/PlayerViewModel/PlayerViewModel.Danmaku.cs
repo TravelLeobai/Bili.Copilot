@@ -23,6 +23,8 @@ public sealed partial class PlayerViewModel
         }
 
         IsDanmakuLoading = true;
+        // 性能探针：整段弹幕初始化（分段拉取 + 落进渲染层）的起点，探针关闭时为空操作.
+        var danmakuWatch = Services.PerfProbe.BeginLoadSegment();
         // 使用限流器，最多同时请求 6 个分段弹幕.
         var semaphore = new SemaphoreSlim(6, 6);
         var danmakus = new List<DanmakuInformation>();
@@ -75,6 +77,11 @@ public sealed partial class PlayerViewModel
             logger.LogError(ex, "Failed to initialize danmaku.");
             IsDanmakuLoading = false;
             IsDanmakuControlVisible = false;
+        }
+        finally
+        {
+            // 性能探针：弹幕初始化收尾（失败也算，探针关闭时为空操作）.
+            Services.PerfProbe.EndLoadSegment(Services.PerfProbe.LoadDanmakuProbeName, danmakuWatch);
         }
 
         async Task GetDanmakuAsync(int index, string aid, string cid)

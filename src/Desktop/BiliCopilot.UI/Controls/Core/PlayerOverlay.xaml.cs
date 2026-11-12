@@ -114,6 +114,8 @@ public sealed partial class PlayerOverlay : PlayerControlBase
 
     protected override void OnControlLoaded()
     {
+        // 性能探针：播放器覆盖层第一次挂到可视树上，正好对应"加载入口 → 控件可用"这一段.
+        Services.PerfProbe.CompleteWidgetMountProbe();
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         ApplyLiveHeaderAlignment();
         ViewModel.WarningOccurred += OnWarningOccurred;

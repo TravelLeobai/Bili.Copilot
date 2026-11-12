@@ -152,6 +152,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         // 挂在播放器初始化而不是某个控件上，控件的加载/卸载不会把采样停掉.
         Services.PerfProbe.StartUiLagProbe(queue);
 
+        // 性能探针：本轮加载的计时起点（顺带作废上一轮还没收尾的样本，保证一次加载只有一个 Total）.
+        var loadToken = Services.PerfProbe.BeginLoadProbe();
+
         // 上一轮初始化如果还在飞，先取消：不然两个初始化会同时往 Player 上写状态.
         if (_initCts is not null)
         {
@@ -178,7 +181,15 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             $"snapshot={currentId} prev={previousId} same={isSameMedia} sameVideo={sameVideo} reuse={reuse} hasPlayer={Player is not null} web={UseWebEngine}",
             withStack: true);
         // 初始化会创建播放器控件、改绑定属性，必须在 UI 线程上继续.
-        await InitializeCoreAsync(snapshot, reusePlayer: reuse, _initCts?.Token ?? default);
+        try
+        {
+            await InitializeCoreAsync(snapshot, reusePlayer: reuse, _initCts?.Token ?? default, loadToken);
+        }
+        finally
+        {
+            // 性能探针：这轮加载收尾（正常完成、超时、取消都记一笔；探针关闭时为空操作）.
+            Services.PerfProbe.CompleteLoadProbe(loadToken);
+        }
     }
     /// <summary>
     /// 从结束页切到另一个视频：复用现有 mpv 实例，只换解析器再重新加载媒体.
@@ -240,7 +251,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         && !_mpvInitFailed
         && Player is { IsWebEngine: false, Mpv: not null };
 
-    private async Task InitializeCoreAsync(MediaSnapshot snapshot, bool reusePlayer, CancellationToken cancellationToken = default)
+    private async Task InitializeCoreAsync(MediaSnapshot snapshot, bool reusePlayer, CancellationToken cancellationToken = default, int loadToken = 0)
     {
         IsLive = snapshot.Type == BiliMediaType.Live;
         _snapshot = snapshot;
@@ -277,6 +288,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         BackwardTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.BackwardTemplate), SettingsToolkit.ReadLocalSetting(SettingNames.StepBackwardSecond, 10d));
         ForwardTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.ForwardTemplate), SettingsToolkit.ReadLocalSetting(SettingNames.StepForwardSecond, 30d));
         RequestHideNextTip?.Invoke(this, EventArgs.Empty);
+
+        // 性能探针：同步段到此为止——下面是第一个真的可能让出线程的 await（暂停/停止，或 mpv client 创建）.
+        // 这段覆盖窗口显示、播放器覆盖层构建与绑定属性重置，是纯 UI 线程上的活.
+        Services.PerfProbe.RecordLoadSnapshot(loadToken);
+
         if (Client != null)
         {
             try
@@ -464,6 +480,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             Player.PropertyChanged += OnPlayerPropertyChanged;
             Player.Mpv!.UpdateResolvers(_sourceResolver, _historyResolver);
 
+            // 性能探针：只量下面这一次 await（mpv 实例初始化），前面的拆旧实例不算在内.
+            var mpvInitWatch = Services.PerfProbe.BeginLoadSegment();
             try
             {
                 // mpv 建实例偶尔会卡死（同一窗口里连着换视频时实测过，45 秒都不返回，
@@ -478,6 +496,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 // 以前会立刻回落网页播放器并 Dispose 卡住的实例 —— 两套播放器同时活着，
                 // 一边在销毁 mpv 的 vo、一边在建 WebView2，实测直接崩在原生层（coreclr c0000005）。
                 // 现在只报告状态、不碰那个实例，让用户重开窗口，进程退出时一并回收.
+                Services.PerfProbe.Count(Services.PerfProbe.LoadMpvInitTimeoutCounterName);
                 logger.LogWarning("mpv 播放器初始化超过 20 秒没返回，放弃这轮播放");
                 Services.PlayerLifecycle.Log("create-player:timeout", $"PlayerVM#{LifecycleId}", "abandoned, no fallback, no dispose");
                 Player = null;
@@ -501,6 +520,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                     ErrorMessage = ex.Message;
                     return;
                 }
+            }
+            finally
+            {
+                // 性能探针：超时/取消也算这次 await 的耗时，照记（探针关闭时为空操作）.
+                Services.PerfProbe.EndLoadSegment(Services.PerfProbe.LoadMpvInitProbeName, mpvInitWatch);
             }
         }
 

@@ -41,6 +41,47 @@ public static class PerfProbe
     /// </summary>
     public const string CoverDecodeWidthProbeName = "Cover.DecodeWidth";
 
+    /// <summary>
+    /// 视频加载总耗时的探针名（毫秒）。
+    /// 采样值是 <c>PlayerViewModel.InitializeAsync</c> 从进入到完成（含超时/取消返回）的整段。
+    /// 一次加载只记一个样本：后一次加载开始会让前一次尚未收尾的样本作废。
+    /// </summary>
+    public const string LoadTotalProbeName = "Load.Total";
+
+    /// <summary>
+    /// 视频加载同步段耗时的探针名（毫秒）。
+    /// 采样值从加载入口算到「第一个真的可能让出线程的 await 之前」，覆盖窗口显示、
+    /// 播放器覆盖层构建、绑定属性重置这一整段同步 UI 活；不含任何网络或播放器初始化等待。
+    /// </summary>
+    public const string LoadSnapshotProbeName = "Load.Snapshot";
+
+    /// <summary>
+    /// mpv 播放器初始化等待耗时的探针名（毫秒）。
+    /// 采样值只包住 <c>PlayerSurface.InitializeAsync()</c> 那一次 await（带 20 秒上限的那次），
+    /// 超时/取消同样记一笔，值就是这次等待实际耗掉的时间。
+    /// </summary>
+    public const string LoadMpvInitProbeName = "Load.MpvInit";
+
+    /// <summary>
+    /// 弹幕初始化耗时的探针名（毫秒）。
+    /// 采样值从弹幕初始化入口算到 <c>Danmaku.Initialize(...)</c> 返回，包含分段弹幕的拉取时间。
+    /// 这段由 <c>Player.IsPlaybackInitialized</c> 触发，所以起点晚于 <see cref="LoadTotalProbeName"/> 的起点。
+    /// </summary>
+    public const string LoadDanmakuProbeName = "Load.Danmaku";
+
+    /// <summary>
+    /// 播放器控件首次挂载耗时的探针名（毫秒）。
+    /// 采样值从加载入口算到播放器覆盖层（<c>PlayerOverlay</c>）第一次 Loaded。
+    /// 只有真正创建覆盖层的那次加载才有样本：同一个播放窗口里换视频不会重建覆盖层，也就不会有新样本。
+    /// </summary>
+    public const string LoadWidgetMountProbeName = "Load.WidgetMount";
+
+    /// <summary>
+    /// mpv 初始化超时的计数器名。
+    /// 命中「mpv 播放器初始化超过 20 秒没返回」那条分支时 +1，用来不 grep 日志也能数超时次数。
+    /// </summary>
+    public const string LoadMpvInitTimeoutCounterName = "Load.MpvInit.Timeout";
+
     private const int UiLagIntervalMs = 50;
 
     // 周期汇总的间隔：只求"不用交互也能看到数"，不做高频刷新.
@@ -48,6 +89,9 @@ public static class PerfProbe
 
     // 挂载计时的止损上限：超过这个值说明这次挂载不是"建完区块紧接着挂上"，样本丢掉.
     private const int MaxPanelMountSampleMs = 30000;
+
+    // 播放器覆盖层挂载计时的止损上限：超过这个值说明这次 Loaded 不是本次加载引起的（控件早就挂上了），样本丢掉.
+    private const int MaxWidgetMountSampleMs = 30000;
 
     private static readonly Lazy<bool> EnabledLazy = new(() =>
     {
@@ -72,6 +116,11 @@ public static class PerfProbe
     private static int _uiLagStarted;
     private static long _panelMountStartTimestamp;
     private static int _panelMountArmed;
+    private static int _loadGeneration;
+    private static long _loadStartTimestamp;
+    private static int _loadSnapshotRecorded;
+    private static long _widgetMountStartTimestamp;
+    private static int _widgetMountArmed;
     private static DispatcherQueueTimer? _flushTimer;
     private static int _flushTimerStarted;
 
@@ -210,6 +259,109 @@ public static class PerfProbe
         {
             _ = queue.TryEnqueue(callback);
         }
+    }
+
+    /// <summary>
+    /// 开始一次视频加载计时：记下起点、作废上一轮尚未收尾的样本，并同时起算播放器覆盖层挂载。
+    /// 每次 <c>PlayerViewModel.InitializeAsync</c> 进入时调用一次；探针关闭时返回 0，之后所有收尾调用都是空操作.
+    /// </summary>
+    /// <returns>本次加载的代号，收尾时原样传回.</returns>
+    public static int BeginLoadProbe()
+    {
+        if (!IsEnabled)
+        {
+            return 0;
+        }
+
+        var token = Interlocked.Increment(ref _loadGeneration);
+        var start = Stopwatch.GetTimestamp();
+        Volatile.Write(ref _loadStartTimestamp, start);
+        Volatile.Write(ref _widgetMountStartTimestamp, start);
+        Interlocked.Exchange(ref _loadSnapshotRecorded, 0);
+        Interlocked.Exchange(ref _widgetMountArmed, 1);
+        return token;
+    }
+
+    /// <summary>
+    /// 记同步段 <see cref="LoadSnapshotProbeName"/>。
+    /// 调用点要放在加载链路里第一个「真的可能让出线程」的 await 之前；一次加载只记一个样本，
+    /// 代号已经过期（又开始了新一轮加载）时丢弃.
+    /// </summary>
+    /// <param name="token"><see cref="BeginLoadProbe"/> 返回的加载代号.</param>
+    public static void RecordLoadSnapshot(int token)
+    {
+        if (!IsEnabled || token == 0 || token != Volatile.Read(ref _loadGeneration))
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _loadSnapshotRecorded, 1) != 0)
+        {
+            return;
+        }
+
+        Record(LoadSnapshotProbeName, Stopwatch.GetElapsedTime(Volatile.Read(ref _loadStartTimestamp)).TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// 记加载总耗时 <see cref="LoadTotalProbeName"/>：<c>InitializeAsync</c> 收尾时调用一次。
+    /// 代号过期（这轮加载已被下一轮取代）时不记，保证一次加载只有一个样本.
+    /// </summary>
+    /// <param name="token"><see cref="BeginLoadProbe"/> 返回的加载代号.</param>
+    public static void CompleteLoadProbe(int token)
+    {
+        if (!IsEnabled || token == 0 || token != Volatile.Read(ref _loadGeneration))
+        {
+            return;
+        }
+
+        Record(LoadTotalProbeName, Stopwatch.GetElapsedTime(Volatile.Read(ref _loadStartTimestamp)).TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// 播放器覆盖层已经挂到可视树上（Loaded）：记一笔 <see cref="LoadWidgetMountProbeName"/>。
+    /// 只在 <see cref="BeginLoadProbe"/> 之后的第一次挂载记录，重复调用无副作用；探针关闭时是空操作.
+    /// </summary>
+    public static void CompleteWidgetMountProbe()
+    {
+        if (!IsEnabled || Interlocked.Exchange(ref _widgetMountArmed, 0) == 0)
+        {
+            return;
+        }
+
+        var elapsedMs = Stopwatch.GetElapsedTime(Volatile.Read(ref _widgetMountStartTimestamp)).TotalMilliseconds;
+        if (elapsedMs > MaxWidgetMountSampleMs)
+        {
+            // 隔了这么久说明这次 Loaded 不是本次加载引起的（覆盖层早就挂上了）,
+            // 这种区间不是我们要量的那段，丢掉不记.
+            return;
+        }
+
+        Record(LoadWidgetMountProbeName, elapsedMs);
+    }
+
+    /// <summary>
+    /// 记一段独立耗时的起点（毫秒口径）。
+    /// 用于包住单次 await 这类局部区间，例如 mpv 初始化：探针关闭时返回 0，配合
+    /// <see cref="EndLoadSegment"/> 就是空操作，不分配也不计时.
+    /// </summary>
+    /// <returns>起点时间戳；探针关闭时为 0.</returns>
+    public static long BeginLoadSegment()
+        => IsEnabled ? Stopwatch.GetTimestamp() : 0L;
+
+    /// <summary>
+    /// 记一段独立耗时的终点：起点为 0（探针关闭或没有起点）时直接返回.
+    /// </summary>
+    /// <param name="name">探针名.</param>
+    /// <param name="startTimestamp"><see cref="BeginLoadSegment"/> 返回的起点时间戳.</param>
+    public static void EndLoadSegment(string name, long startTimestamp)
+    {
+        if (startTimestamp == 0L)
+        {
+            return;
+        }
+
+        Record(name, Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
     }
 
     /// <summary>
