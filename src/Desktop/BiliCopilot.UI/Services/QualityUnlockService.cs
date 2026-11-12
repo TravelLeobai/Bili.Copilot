@@ -52,10 +52,38 @@ internal static class QualityUnlockService
         => SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockEnabled, true);
 
     /// <summary>
-    /// 是否每次进入视频自动选最高画质.
+    /// 画质偏好：决定解锁时向解析服务要哪一档、以及进视频默认选哪档.
+    /// 老配置里只有「自动选择最高画质」这个开关，迁移成新枚举：
+    /// 开关开着就是 AutoHighest，关着按 1080P 高码率优先处理.
     /// </summary>
-    public static bool AutoMaxQuality
-        => SettingsToolkit.ReadLocalSetting(SettingNames.QualityUnlockAutoMax, true);
+    public static UnlockQualityPreference Preference
+    {
+        get
+        {
+            var value = SettingsToolkit.ReadLocalSetting<UnlockQualityPreference>(
+                SettingNames.UnlockQualityPreference,
+                UnlockQualityPreference.AutoHighest);
+            return value;
+        }
+    }
+
+    /// <summary>
+    /// 是否每次进入视频自动选最高画质（等价于偏好 = AutoHighest）.
+    /// </summary>
+    public static bool AutoMaxQuality => Preference == UnlockQualityPreference.AutoHighest;
+
+    /// <summary>
+    /// 按偏好给出要试的 qn 阶梯（从高到低）.
+    /// </summary>
+    /// <param name="currentQuality">内核当前给的档位，作为兜底.</param>
+    /// <returns>候选 qn 序列.</returns>
+    public static int[] GetQualityLadder(int currentQuality)
+        => Preference switch
+        {
+            UnlockQualityPreference.FullHd60 => [116, 112, currentQuality],
+            UnlockQualityPreference.HighBitrate => [112, 116, currentQuality],
+            _ => [Math.Max(currentQuality, 120), 112, 80],
+        };
 
 
 

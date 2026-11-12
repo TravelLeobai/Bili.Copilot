@@ -8,7 +8,13 @@
     xmlns:ic="using:FluentIcons.WinUI"
     xmlns:local="using:BiliCopilot.UI.Controls.Settings"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:constants="using:BiliCopilot.UI.Models.Constants"
+    xmlns:converters="using:BiliCopilot.UI.Converters"
     mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <converters:UnlockQualityPreferenceConverter x:Key="UnlockQualityPreferenceConverter" />
+    </UserControl.Resources>
 
     <base:SettingsExpander
         Description="通过第三方解析服务器代取播放地址，绕过未登录 / 非大会员的画质限制"
@@ -24,13 +30,21 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.QualityUnlockEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
-            <base:SettingsCard Description="进入视频后自动切到当前可用的最高一档画质" Header="自动选择最高画质">
+            <base:SettingsCard Description="解锁时要哪一档：自动最高 / 1080P60 帧 / 1080P 高码率" Header="画质偏好">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="TopSpeed" />
                 </base:SettingsCard.HeaderIcon>
-                <ToggleSwitch
+                <ComboBox
+                    MinWidth="150"
                     IsEnabled="{x:Bind ViewModel.QualityUnlockEnabled, Mode=OneWay}"
-                    IsOn="{x:Bind ViewModel.QualityUnlockAutoMax, Mode=TwoWay}" />
+                    ItemsSource="{x:Bind ViewModel.UnlockQualityPreferenceCollection, Mode=OneWay}"
+                    SelectedItem="{x:Bind ViewModel.UnlockQualityPreference, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="constants:UnlockQualityPreference">
+                            <TextBlock Text="{x:Bind Converter={StaticResource UnlockQualityPreferenceConverter}}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </base:SettingsCard>
             <base:SettingsCard Description="油猴脚本里的 box.home，可手改；每天会自动从上游同步一次" Header="解析服务器">
                 <base:SettingsCard.HeaderIcon>

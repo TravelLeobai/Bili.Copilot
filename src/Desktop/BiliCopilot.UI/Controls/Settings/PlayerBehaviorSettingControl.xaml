@@ -70,21 +70,6 @@
                     Command="{x:Bind ViewModel.OpenMpvConfigInEditorCommand, Mode=OneWay}"
                     Content="{ext:Locale Name=OpenConfig}" />
             </base:SettingsCard>
-            <base:SettingsCard Header="{ext:Locale Name=PreferQuality}">
-                <base:SettingsCard.HeaderIcon>
-                    <ic:SymbolIcon Symbol="TopSpeed" />
-                </base:SettingsCard.HeaderIcon>
-                <ComboBox
-                    MinWidth="120"
-                    ItemsSource="{x:Bind ViewModel.PreferQualityCollection, Mode=OneWay}"
-                    SelectedItem="{x:Bind ViewModel.PreferQuality, Mode=TwoWay}">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="constants:PreferQualityType">
-                            <TextBlock Text="{x:Bind Converter={StaticResource PreferQualityConverter}}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-            </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=DefaultPlayerDisplayMode}">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="LayoutColumnTwo" />

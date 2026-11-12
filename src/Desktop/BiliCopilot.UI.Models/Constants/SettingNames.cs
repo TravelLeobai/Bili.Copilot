@@ -95,6 +95,7 @@ public enum SettingNames
     RememberPlaybackEnhancements,
     QualityUnlockEnabled,
     QualityUnlockAutoMax,
+    UnlockQualityPreference,
     QualityUnlockServer,
     QualityUnlockHomePage,
     QualityUnlockScriptUrl,

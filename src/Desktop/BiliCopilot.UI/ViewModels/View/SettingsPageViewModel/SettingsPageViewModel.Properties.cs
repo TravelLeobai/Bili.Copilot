@@ -118,7 +118,7 @@ public sealed partial class SettingsPageViewModel
     private bool _qualityUnlockEnabled;
 
     [ObservableProperty]
-    private bool _qualityUnlockAutoMax = true;
+    private UnlockQualityPreference _unlockQualityPreference = UnlockQualityPreference.AutoHighest;
 
 
     [ObservableProperty]
@@ -328,6 +328,12 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     private List<PreferQualityType> _preferQualityCollection;
 
+    /// <summary>
+    /// 画质偏好的可选项（自动最高 / 1080P60 / 1080P 高码率）.
+    /// </summary>
+    [ObservableProperty]
+    private List<UnlockQualityPreference> _unlockQualityPreferenceCollection = [];
+
     [ObservableProperty]
     private List<PreferDecodeType> _preferDecodeCollection;
 
@@ -473,3 +479,4 @@ public sealed partial class SettingsPageViewModel
 
 
 }
+

@@ -90,7 +90,8 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         DashScopeKey = SettingsToolkit.ReadLocalSetting(SettingNames.DashScopeKey, string.Empty);
         DashScopeModel = SettingsToolkit.ReadLocalSetting(SettingNames.DashScopeModel, "paraformer-v2");
         QualityUnlockEnabled = Services.QualityUnlockService.IsEnabled;
-        QualityUnlockAutoMax = Services.QualityUnlockService.AutoMaxQuality;
+        UnlockQualityPreferenceCollection = [.. Enum.GetValues<UnlockQualityPreference>()];
+        UnlockQualityPreference = Services.QualityUnlockService.Preference;
         QualityUnlockServer = Services.QualityUnlockService.Server;
         QualityUnlockHomePage = Services.QualityUnlockService.HomePage;
         QualityUnlockStatusText = Services.QualityUnlockService.LastSync == DateTimeOffset.UnixEpoch
@@ -933,8 +934,15 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     partial void OnQualityUnlockEnabledChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockEnabled, value);
 
-    partial void OnQualityUnlockAutoMaxChanged(bool value)
-        => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockAutoMax, value);
+    partial void OnUnlockQualityPreferenceChanged(UnlockQualityPreference value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.UnlockQualityPreference, value);
+
+        // 老的布尔开关保留一份镜像，避免回退到旧版时行为突变.
+        SettingsToolkit.WriteLocalSetting(
+            SettingNames.QualityUnlockAutoMax,
+            value == UnlockQualityPreference.AutoHighest);
+    }
 
     partial void OnQualityUnlockServerChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.QualityUnlockServer, value ?? string.Empty);
