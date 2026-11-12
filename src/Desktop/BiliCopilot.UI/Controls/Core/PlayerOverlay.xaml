@@ -511,7 +511,7 @@
                                         MaxWidth="220"
                                         VerticalAlignment="Center"
                                         MaxLines="1"
-                                        Text="{x:Bind ViewModel.SelectedSource.Name, Mode=OneWay}" />
+                                        Text="{x:Bind ViewModel.ActualQualityText, Mode=OneWay}" />
                                 </StackPanel>
 
                                 <DropDownButton.Flyout>
@@ -577,11 +577,6 @@
                                     </Flyout>
                                 </DropDownButton.Flyout>
                             </DropDownButton>
-                            <!--  直播不显示 CDN 节点指示器：直播走的是另一条拉流链路，这个指示器没用  -->
-                            <player:CdnIndicatorControl
-                                Margin="8,0,0,0"
-                                VerticalAlignment="Center"
-                                Visibility="{x:Bind local:PlayerOverlay.GetCdnVisibility(ViewModel.IsLive), Mode=OneWay}" />
                             <player:AdSkipIndicatorControl
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Center"

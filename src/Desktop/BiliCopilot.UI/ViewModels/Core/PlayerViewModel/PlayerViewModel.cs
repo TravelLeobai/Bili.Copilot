@@ -796,6 +796,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         var selected = Sources.FirstOrDefault(s => s.IsSelected);
         SelectedSource = selected;
+        UpdateActualQualityText();
 
         // 原实现只是 Player.ReplayAsync(Player.Position)：那是把"已经加载的旧媒体"原地重播一遍，
         // 解析器没有重跑、新清晰度的地址根本没取，所以切了等于没切；再加上重播后视频输出没接回去，
@@ -851,6 +852,30 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 videoResolver.ResetSnapshot(_snapshot);
             }
         }
+    }
+
+    /// <summary>
+    /// 按「真正生效的 qn」刷新顶栏画质文案.
+    /// 走过第三方解锁时 qn 可能比内核格式列表里最高一档还高（列表里没有这一项），
+    /// 所以匹配不到就直接显示 qn=xxx，而不是退回列表里的旧项.
+    /// </summary>
+    private void UpdateActualQualityText()
+    {
+        var qn = _sourceResolver switch
+        {
+            VideoMediaSourceResolver video => video.ActualQuality,
+            PgcMediaSourceResolver pgc => pgc.GetCurrentFormat()?.Quality ?? 0,
+            _ => 0,
+        };
+
+        if (qn <= 0)
+        {
+            ActualQualityText = Sources.FirstOrDefault(p => p.IsSelected)?.Name ?? "自动";
+            return;
+        }
+
+        var match = Sources.FirstOrDefault(p => p.Data.Quality == qn);
+        ActualQualityText = match?.Name ?? $"qn={qn}";
     }
 
     private void CheckBottomProgressBarVisible()

@@ -1203,6 +1203,7 @@ public sealed partial class PlayerViewModel
                     }
 
                     SelectedSource = Sources.FirstOrDefault(p => p.IsSelected);
+                    UpdateActualQualityText();
                 }
 
                 var c = ((VideoConnectorViewModel)Connector);
@@ -1231,6 +1232,7 @@ public sealed partial class PlayerViewModel
                     }
 
                     SelectedSource = Sources.FirstOrDefault(p => p.IsSelected);
+                    UpdateActualQualityText();
                 }
 
                 var c = ((PgcConnectorViewModel)Connector);

@@ -67,6 +67,12 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
     private string? _unlockedCodecs;
 
 
+    /// <summary>
+    /// 实际生效的清晰度 qn：走过第三方解锁就用解锁回来的那档，
+    /// 否则取当前格式的 qn。顶栏画质标签按它显示，避免"显示 1080P、实际 1080P60".
+    /// </summary>
+    internal int ActualQuality => _unlockedQuality > 0 ? _unlockedQuality : (GetCurrentFormat()?.Quality ?? 0);
+
     internal PlayerFormatInformation? GetCurrentFormat()
     {
         var preferFormatSetting = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.PreferQuality, PreferQualityType.Auto);

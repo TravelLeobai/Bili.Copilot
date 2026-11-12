@@ -189,6 +189,12 @@ public sealed partial class PlayerViewModel
     [ObservableProperty]
     public partial SourceItemViewModel? SelectedSource { get; set; }
 
+    /// <summary>
+    /// 顶栏显示的实际清晰度文案（跟着真正生效的 qn 走，不跟下拉列表项走）.
+    /// </summary>
+    [ObservableProperty]
+    public partial string ActualQualityText { get; set; } = "自动";
+
     [ObservableProperty]
     public partial string? BackwardTip { get; set; }
 
