@@ -93,6 +93,9 @@ public sealed partial class AppViewModel : ViewModelBase
     [RelayCommand]
     private async Task LaunchAsync()
     {
+        // 默认动作：启动时把访问令牌状态记一笔（打码），需要 App 鉴权的功能直接取这里.
+        Services.BiliAccessTokenService.LogTokenState(_tokenResolver);
+
         PreloadEmotePanel();
         StartVisorService();
 
@@ -427,3 +430,5 @@ public sealed partial class AppViewModel : ViewModelBase
         });
     }
 }
+
+
