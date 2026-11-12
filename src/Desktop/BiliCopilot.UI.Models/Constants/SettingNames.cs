@@ -219,6 +219,22 @@ public enum SettingNames
     BlockLowLevelUsers,
     DanmakuJumpEnabled,
     LastSeasonVideoIds,
+
+    /// <summary>
+    /// TV 扫码授权拿到的 access_token（只给 vc 转发接口用）.
+    /// </summary>
+    TvOAuthAccessToken,
+
+    /// <summary>
+    /// TV 授权的 refresh_token.
+    /// </summary>
+    TvOAuthRefreshToken,
+
+    /// <summary>
+    /// TV 授权的到期时间（Unix 秒）.
+    /// </summary>
+    TvOAuthExpiresAt,
+    TvOAuthMid,
 }
 
 

@@ -33,6 +33,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
     [RelayCommand]
     private async Task InitializeAsync()
     {
+        RefreshTvAuthStatus();
         if (_isInitialized)
         {
             await LoadCacheSizeAsync();
@@ -962,6 +963,80 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
             QualityUnlockStatusText = $"同步失败，继续使用当前服务器（{Services.QualityUnlockService.LastSync:MM-dd HH:mm} 尝试过）";
         }
     }
+
+    [RelayCommand]
+    private async Task AuthorizeTvAsync()
+    {
+        if (IsTvAuthBusy)
+        {
+            return;
+        }
+
+        IsTvAuthBusy = true;
+        try
+        {
+            var root = ResolveXamlRoot();
+            if (root is null)
+            {
+                // 拿不到窗口时别硬弹，直接告诉用户切回来再试（这里以前会抛 NRE）.
+                this.Get<AppViewModel>().ShowTipCommand.Execute(("拿不到当前窗口，切回主窗口再试", InfoType.Warning));
+                return;
+            }
+
+            var isAuthorized = await Controls.Dialogs.TvAuthDialog.ShowAsync(root);
+            RefreshTvAuthStatus();
+            if (isAuthorized)
+            {
+                this.Get<AppViewModel>().ShowTipCommand.Execute(("TV 授权成功，动态转发会带上 access_key", InfoType.Success));
+            }
+        }
+        catch (Exception ex)
+        {
+            this.Get<ILogger<SettingsPageViewModel>>().LogError(ex, "TV 扫码授权失败");
+            this.Get<AppViewModel>().ShowTipCommand.Execute(($"扫码授权失败：{ex.Message}", InfoType.Error));
+        }
+        finally
+        {
+            IsTvAuthBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// 取弹框用的 XamlRoot：主窗口拿不到就退回转发框记下的根.
+    /// </summary>
+    private Microsoft.UI.Xaml.XamlRoot? ResolveXamlRoot()
+    {
+        try
+        {
+            var root = this.Get<IXamlRootProvider>().XamlRoot;
+            if (root is not null)
+            {
+                return root;
+            }
+        }
+        catch (Exception ex)
+        {
+            this.Get<ILogger<SettingsPageViewModel>>().LogDebug(ex, "取 XamlRoot 失败，改用转发框记下的根");
+        }
+
+        return Controls.Dialogs.ForwardDialog.CurrentRoot;
+    }
+
+    [RelayCommand]
+    private void ClearTvAuth()
+    {
+        BiliOAuthService.Clear();
+        RefreshTvAuthStatus();
+        this.Get<AppViewModel>().ShowTipCommand.Execute(("已清除 TV 授权", InfoType.Success));
+    }
+
+    /// <summary>
+    /// 按本地保存的 token 刷新「当前状态」那一行.
+    /// </summary>
+    public void RefreshTvAuthStatus()
+        => TvAuthStatusText = BiliOAuthService.HasToken
+            ? $"已授权，到期 {BiliOAuthService.ExpiresAt:MM-dd HH:mm}"
+            : "未授权";
 
     [RelayCommand]
     private async Task RefreshCdnPoolAsync()

@@ -1,6 +1,7 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Controls.Components;
+using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -26,9 +27,18 @@ public sealed class MomentWaterfall : Component
     private ScrollView? _scrollView;
 
     /// <summary>
+    /// 底部哨兵的「滚到底再补一批」触发器（瀑布流没有虚拟化，一次只建一屏的卡片）.
+    /// </summary>
+    private readonly MomentSentinelPager _pager;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MomentWaterfall"/> class.
     /// </summary>
-    public MomentWaterfall(MomentUperSectionViewModel viewModel) => _viewModel = viewModel;
+    public MomentWaterfall(MomentUperSectionViewModel viewModel)
+    {
+        _viewModel = viewModel;
+        _pager = new MomentSentinelPager("综合", viewModel.LoadNextBatch);
+    }
 
     /// <inheritdoc/>
     public override Element Render()
@@ -87,11 +97,30 @@ public sealed class MomentWaterfall : Component
             ? (Element)TextBlock("正在加载…").FontSize(12).Opacity(0.6).Margin(0, 12, 0, 12)
             : TextBlock(string.Empty);
 
+        // 底部哨兵：1px 透明元素，挂载时由触发器找到外层 ScrollView；
+        // 之后只有「滚到底 + 又往下滚了一段」才补 12 张，不滚就不动.
+        var sentinel = new XamlHostElement(
+            () => new Border { Height = 1, Opacity = 0, IsHitTestVisible = false },
+            element => _pager.Attach(element))
+            .WithKey("moment-waterfall-sentinel")
+            .OnUnmountAdd(_ => _pager.Detach());
+
+        // 数据一变就先检查内容有没有撑满一屏，没撑满继续补（补到撑满就停）；
+        // 用户正停在底部时顺手放一批出来，不用再滚一下才动.
+        UseEffect(
+            () =>
+            {
+                _pager.QueueRevealIfAtBottom();
+                _pager.QueueFillCheck();
+            },
+            items.Count);
+
         return ScrollView(
             VStack(
                 8,
                 columnsElement,
-                footer)
+                footer,
+                sentinel)
             .Margin(CardGap, CardGap, CardGap, CardGap))
             .VerticalScrollMode(ScrollingScrollMode.Enabled)
             .OnMountAdd(element =>
@@ -129,6 +158,13 @@ public sealed class MomentWaterfall : Component
     {
         if (sender.ScrollableHeight - sender.VerticalOffset < LoadMoreThreshold)
         {
+            // 还有没铺出来的卡片时先别去拉新数据：列表只有一屏高，「到底了」的判定会一直成立，
+            // 就会一页接一页把整条动态拉干净；等滚到底把这一批补完再去拿下一页.
+            if (_viewModel.HasHiddenItems)
+            {
+                return;
+            }
+
             _viewModel.LoadItemsCommand.Execute(default);
         }
     }

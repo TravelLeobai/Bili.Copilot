@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -17,6 +17,11 @@ namespace BiliCopilot.UI.ViewModels.Items;
 /// </summary>
 public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentProfile>
 {
+    /// <summary>
+    /// 每次往界面补多少张卡片（瀑布流没有虚拟化，一次建太多卡片和封面会卡）.
+    /// </summary>
+    private const int PageBatchSize = 12;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MomentUperSectionViewModel"/> class.
     /// </summary>
@@ -39,12 +44,14 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
         _baseline = momentView.UpdateBaseline;
         this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, () =>
         {
-            Items.Clear();
+            _allItems.Clear();
             foreach (var item in momentView.Moments)
             {
-                Items.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment));
+                _allItems.Add(new MomentItemViewModel(item, MomentCardStyle.Comprehensive, ShowComment));
             }
 
+            _visibleCount = PageBatchSize;
+            ApplyVisibleWindow();
             ListUpdated?.Invoke(this, EventArgs.Empty);
         });
     }
@@ -72,6 +79,8 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
         _baseline = default;
         IsEmpty = false;
         _preventLoadMore = false;
+        _visibleCount = PageBatchSize;
+        _allItems.Clear();
         Items.Clear();
 
         this.Get<DispatcherQueue>().TryEnqueue(DispatcherQueuePriority.Low, async () =>
@@ -126,9 +135,10 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
             _preventLoadMore = view.HasMoreMoments != true;
             foreach (var item in view.Moments.Select(p => new MomentItemViewModel(p, MomentCardStyle.Comprehensive, ShowComment)))
             {
-                Items.Add(item);
+                _allItems.Add(item);
             }
 
+            ApplyVisibleWindow();
             ListUpdated?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -142,10 +152,51 @@ public sealed partial class MomentUperSectionViewModel : ViewModelBase<MomentPro
         {
             foreach (var item in moments.Select(p => new MomentItemViewModel(p, MomentCardStyle.Comprehensive, ShowComment)))
             {
-                Items.Add(item);
+                _allItems.Add(item);
             }
 
+            ApplyVisibleWindow();
             ListUpdated?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>
+    /// 已经加载、但还没铺到界面上的条目（等用户滚到底再补）.
+    /// </summary>
+    public bool HasHiddenItems => Items.Count < _allItems.Count;
+
+    /// <summary>
+    /// 再往界面补一批卡片（瀑布流滚到底时由界面调用）；没有更多就返回 <c>false</c>.
+    /// </summary>
+    /// <returns>是否真的补进来了新卡片.</returns>
+    public bool LoadNextBatch()
+    {
+        if (Items.Count >= _allItems.Count)
+        {
+            return false;
+        }
+
+        _visibleCount = Math.Min(_allItems.Count, Items.Count + PageBatchSize);
+        ApplyVisibleWindow();
+        Serilog.Log.Information("动态哨兵（综合）：补到 {Shown}/{Total}", Items.Count, _allItems.Count);
+        return true;
+    }
+
+    /// <summary>
+    /// 把已加载条目里落在当前窗口内的那一段铺到界面上。
+    /// 只往后追加，不动已有的卡片（<c>MomentWaterfall</c> 会按身份复用卡片，不会重建）.
+    /// </summary>
+    private void ApplyVisibleWindow()
+    {
+        var target = Math.Min(Math.Max(_visibleCount, 0), _allItems.Count);
+        for (var i = Items.Count; i < target; i++)
+        {
+            Items.Add(_allItems[i]);
+        }
+
+        while (Items.Count > target)
+        {
+            Items.RemoveAt(Items.Count - 1);
         }
     }
 

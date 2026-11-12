@@ -25,10 +25,21 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 {
     private const string SearchApi = "https://api.bilibili.com/x/web-interface/search/type?search_type=video&order=pubdate&page=1&keyword={0}";
 
+    /// <summary>
+    /// 每次往界面补多少张卡片.
+    /// </summary>
+    private const int PageBatchSize = 12;
+
     private static readonly string[] ReplayKeywords = ["直播回放", "录播"];
 
     private readonly ILogger<LiveMomentSectionDetailViewModel> _logger;
     private readonly List<LiveSectionCardViewModel> _allCards = [];
+
+    /// <summary>
+    /// 界面上最多铺多少张（滚到底再按批增长）.
+    /// </summary>
+    private int _visibleCount = PageBatchSize;
+
     private readonly Dictionary<string, string> _followedNames = [];
     private readonly Dictionary<string, Uri?> _followedAvatars = [];
 
@@ -91,6 +102,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 
     private async Task RefreshInternalAsync()
     {
+        _visibleCount = PageBatchSize;
         _allCards.Clear();
         Upers.Clear();
         Items.Clear();
@@ -208,7 +220,11 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 
         foreach (var card in cards)
         {
-            Items.Add(card);
+            // 界面上只铺窗口内的那些，多出来的等用户滚到底再补.
+            if (Items.Count < _visibleCount)
+            {
+                Items.Add(card);
+            }
         }
     }
 
@@ -229,6 +245,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         }
 
         SelectedUper = uper;
+        _visibleCount = PageBatchSize;
         ApplyFilter();
     }
 
@@ -239,7 +256,31 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     public void SetFilterType(LiveFilterType type)
     {
         FilterType = type;
+        _visibleCount = PageBatchSize;
         ApplyFilter();
+    }
+
+    /// <summary>
+    /// 再往界面补 12 张（滚动到底时由界面调用）；没有更多就返回 <c>false</c>.
+    /// </summary>
+    /// <returns>是否真的补进来了新卡片.</returns>
+    public bool LoadNextBatch()
+    {
+        var filtered = GetFilteredCards().ToList();
+        if (Items.Count >= filtered.Count)
+        {
+            return false;
+        }
+
+        var next = filtered.Skip(Items.Count).Take(PageBatchSize).ToList();
+        _visibleCount = Items.Count + next.Count;
+        foreach (var card in next)
+        {
+            Items.Add(card);
+        }
+
+        Serilog.Log.Information("动态哨兵（直播）：补到 {Shown}/{Total}", Items.Count, filtered.Count);
+        return next.Count > 0;
     }
 
     /// <summary>
@@ -248,24 +289,30 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     private void ApplyFilter()
     {
         Items.Clear();
+        foreach (var card in GetFilteredCards().Take(_visibleCount))
+        {
+            Items.Add(card);
+        }
+    }
+
+    /// <summary>
+    /// 按「选中的 UP 主 + 内容类型」筛出全部候选卡片（还没有按窗口截断）.
+    /// </summary>
+    private IEnumerable<LiveSectionCardViewModel> GetFilteredCards()
+    {
         IEnumerable<LiveSectionCardViewModel> source = _allCards;
         if (SelectedUper is { IsTotal: false })
         {
             source = source.Where(p => p.AuthorId == SelectedUper.UserId);
         }
 
-        source = FilterType switch
+        return FilterType switch
         {
             LiveFilterType.Live => source.Where(p => p.IsLive),
             LiveFilterType.Replay => source.Where(p => p.IsReplay),
             LiveFilterType.Clip => source.Where(p => p.IsClip),
             _ => source,
         };
-
-        foreach (var card in source)
-        {
-            Items.Add(card);
-        }
     }
 
     /// <summary>

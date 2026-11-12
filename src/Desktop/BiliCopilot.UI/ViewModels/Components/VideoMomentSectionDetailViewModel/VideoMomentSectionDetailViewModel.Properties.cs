@@ -23,6 +23,22 @@ public sealed partial class VideoMomentSectionDetailViewModel
     private string? _lastOpenedMomentId;
     private MomentVideoOpenedMarkStyle _openedMarkStyle;
     private readonly List<MomentItemViewModel> _allItems = new();
+
+    /// <summary>
+    /// 当前按 UP 主过滤后「没看过」的全部条目，界面只铺其中前 <see cref="_visibleCount"/> 条.
+    /// </summary>
+    private readonly List<MomentItemViewModel> _unwatched = new();
+
+    /// <summary>
+    /// 界面上最多铺多少张（滚到底再按批增长）.
+    /// </summary>
+    private int _visibleCount = PageBatchSize;
+
+    /// <summary>
+    /// 这一轮刷新要不要重建卡片元素.
+    /// </summary>
+    private bool _rebuildPending;
+
     private readonly List<(MomentItemViewModel Item, int Index)> _watchedTimeline = new();
     private readonly HashSet<string> _momentIds = new();
     private long _historyOffset;
@@ -71,6 +87,11 @@ public sealed partial class VideoMomentSectionDetailViewModel
     /// 列表已完成更新.
     /// </summary>
     public event EventHandler ListUpdated;
+
+    /// <summary>
+    /// 列表被整批换掉（点了刷新），界面需要重建卡片元素.
+    /// </summary>
+    public event EventHandler? ItemsRebuilt;
 
     /// <inheritdoc/>
     public MomentSectionType SectionType => MomentSectionType.Video;

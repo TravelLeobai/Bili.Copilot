@@ -121,6 +121,17 @@
                             </DataTemplate>
                         </repeater:AppRepeater.ItemTemplate>
                     </repeater:AppRepeater>
+
+                    <!--
+                        底部哨兵：1px 透明元素，只用来挂「滚到底再补一批」。
+                        它和列表平级、不包住列表，所以不影响 ItemsRepeater 的回收。
+                    -->
+                    <Border
+                        x:Name="MomentSentinel"
+                        Height="1"
+                        VerticalAlignment="Bottom"
+                        IsHitTestVisible="False"
+                        Opacity="0" />
                 </Grid>
             </controls:IncrementVerticalScrollControl.Element>
         </controls:IncrementVerticalScrollControl>

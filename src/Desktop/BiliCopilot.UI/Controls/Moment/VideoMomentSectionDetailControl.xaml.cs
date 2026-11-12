@@ -27,6 +27,8 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
     private bool _attached;
     private bool _paneResizeFrameQueued;
     private double? _pendingLeftWidth;
+    private MomentSentinelPager? _pager;
+    private bool _rebuildQueued;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoMomentSectionDetailControl"/> class.
@@ -34,6 +36,7 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
     public VideoMomentSectionDetailControl()
     {
         InitializeComponent();
+        _pager = new MomentSentinelPager("视频", OnPagerLoadNextBatch);
         ColumnResizer.AddHandler(PointerPressedEvent,
             new Microsoft.UI.Xaml.Input.PointerEventHandler(OnSplitterPointerPressed), true);
         ColumnResizer.AddHandler(PointerReleasedEvent,
@@ -113,6 +116,15 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         _savePaneWidthTimer.IsRepeating = false;
         _savePaneWidthTimer.Tick += OnSavePaneWidthTick;
         ApplyPaneWidths();
+        _pager?.Reset();
+        _pager?.Attach(MomentSentinel);
+
+        // 刷新重建时会把 ItemsSource 摘下来再挂回去；万一中途控件被卸载，
+        // 下一次加载得把列表重新接上，否则整个网格是空的.
+        if (ViewModel is not null && MomentRepeater.ItemsSource is null)
+        {
+            MomentRepeater.ItemsSource = ViewModel.Items;
+        }
 
         // 动态页的两个分区控件是常驻的（切 tab 只切 Visibility），
         // 切到「视频」之前这里的 ViewModel 还是 null。以前直接解引用，
@@ -139,6 +151,9 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         {
             Attach();
         }
+
+        _pager?.Reset();
+        _pager?.QueueFillCheck();
     }
 
     private void Attach()
@@ -151,6 +166,8 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
 
         _attached = true;
         viewModel.ListUpdated += OnListUpdatedAsync;
+        viewModel.ItemsRebuilt += OnItemsRebuilt;
+        viewModel.Items.CollectionChanged += OnItemsCollectionChanged;
         viewModel.Upers.CollectionChanged += OnUpersChanged;
         MomentWatchHistoryToolkit.WatchedChanged += OnWatchedChanged;
         UperView.SelectionChanged += OnUperSelectionChanged;
@@ -173,6 +190,8 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         }
 
         viewModel.ListUpdated -= OnListUpdatedAsync;
+        viewModel.ItemsRebuilt -= OnItemsRebuilt;
+        viewModel.Items.CollectionChanged -= OnItemsCollectionChanged;
         viewModel.Upers.CollectionChanged -= OnUpersChanged;
         MomentWatchHistoryToolkit.WatchedChanged -= OnWatchedChanged;
         UperView.SelectionChanged -= OnUperSelectionChanged;
@@ -183,6 +202,7 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
     protected override void OnControlUnloaded()
     {
         Detach();
+        _pager?.Detach();
         FlushPendingPaneWidth();
         _pendingLeftWidth = null;
         Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPaneResizeFrame;
@@ -226,6 +246,93 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
         }
 
         QueueAnchorUpdate();
+        _pager?.QueueFillCheck();
+        _pager?.QueueRevealIfAtBottom();
+        LogRealizedCardCount();
+    }
+
+    /// <summary>
+    /// 界面这一批卡片已经铺完，顺手记一下「列表里有多少条、真正建了多少张卡片」，
+    /// 用来判断列表到底有没有在虚拟化.
+    /// </summary>
+    private void LogRealizedCardCount()
+    {
+        var repeater = _itemsRepeater ?? FindRepeater(MomentRepeater);
+        if (repeater is null || ViewModel is null)
+        {
+            return;
+        }
+
+        Serilog.Log.Information(
+            "动态哨兵（视频）：列表 {Total} 条，已建卡片 {Realized} 张",
+            ViewModel.Items.Count,
+            Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(repeater));
+    }
+
+    private void OnItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => _pager?.QueueFillCheck();
+
+    private bool OnPagerLoadNextBatch()
+    {
+        if (ViewModel is null || !_isActive)
+        {
+            return false;
+        }
+
+        var loaded = ViewModel.LoadNextBatch();
+        if (loaded)
+        {
+            QueueAnchorUpdate();
+        }
+
+        return loaded;
+    }
+
+    /// <summary>
+    /// 刷新后重建卡片：先把已实现的卡片全部解绑、把 ItemsSource 摘下来，
+    /// 让 ItemsRepeater 释放旧元素；下一轮调度再挂回新集合，卡片就按新数据从零建。
+    /// 只清集合不摘 ItemsSource 的话，回收元素会留着上一条的封面/头像（刷新后串图）.
+    /// </summary>
+    private void OnItemsRebuilt(object? sender, EventArgs e)
+    {
+        if (!_isActive || _rebuildQueued)
+        {
+            return;
+        }
+
+        _rebuildQueued = true;
+        _pager?.Reset();
+
+        // 回收前先解绑，让卡片里的图片控件取消旧请求.
+        if (_itemsRepeater is not null)
+        {
+            for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(_itemsRepeater); i++)
+            {
+                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(_itemsRepeater, i)
+                    is Controls.Components.MomentCardControl card)
+                {
+                    card.ViewModel = null;
+                }
+            }
+        }
+
+        MomentRepeater.ItemsSource = null;
+        _lastAnchor = null;
+
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            _rebuildQueued = false;
+            if (!_isActive || ViewModel is null)
+            {
+                return;
+            }
+
+            MomentRepeater.ItemsSource = ViewModel.Items;
+            View.ResetScrollPosition();
+            QueueAnchorUpdate();
+            _pager?.QueueFillCheck();
+            Serilog.Log.Information("动态哨兵（视频）：刷新后重建卡片 {Count} 张", ViewModel.Items.Count);
+        });
     }
 
     private void OnWatchedChanged(object? sender, EventArgs e)
@@ -399,10 +506,28 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
 
     private void CheckWatchedLoadMore()
     {
-        if (_isActive && !_isPaneResizing && ViewModel.Items.Count == 0 && !ViewModel.IsHistoryLoading && !ViewModel.IsLoading
-            && WatchedView.ExtentHeight - WatchedView.ViewportHeight - WatchedView.VerticalOffset <= 400)
+        if (!_isActive || _isPaneResizing)
         {
-            ViewModel.LoadItemsCommand.Execute(default);
+            return;
+        }
+
+        var remaining = WatchedView.ExtentHeight - WatchedView.ViewportHeight - WatchedView.VerticalOffset;
+        if (remaining > 200)
+        {
+            return;
+        }
+
+        // 先补"已经拿到、但还没铺到界面"的那一批：哨兵没挂上时这条兜底仍然能工作.
+        if (ViewModel.HasHiddenItems)
+        {
+            ViewModel.LoadNextBatch();
+            return;
+        }
+
+        // 这一批已经全部铺完，再去拉下一页数据（LoadUnwatchedItems 内部会判断有没有更多）.
+        if (!ViewModel.IsHistoryLoading && !ViewModel.IsLoading)
+        {
+            ViewModel.LoadUnwatchedItemsCommand.Execute(default);
         }
     }
 
@@ -564,4 +689,5 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
 public abstract class VideoMomentSectionDetailControlBase : LayoutUserControlBase<VideoMomentSectionDetailViewModel>
 {
 }
+
 

@@ -62,6 +62,10 @@ public sealed partial class VideoMomentPresenter : MomentCardPresenter
             RootGrid.Children.Add(_host);
         }
 
+        // 卡片被回收后换绑新条目时，MomentVideoCard 里的头像/封面会按新条目重建元素：
+        // 那里给每个 XamlHostElement 带了按条目身份变化的 TypeKey，
+        // Reactor 认到 TypeKey 变了就会卸载旧元素、重新调工厂，
+        // 不会把上一条的头像和封面留在回收来的卡片上（刷新后串图就是这个原因）.
         _host.Mount(new MomentVideoCard(ViewModel, PreserveCoverAspectRatio));
     }
 }

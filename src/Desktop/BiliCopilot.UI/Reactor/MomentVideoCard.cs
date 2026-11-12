@@ -36,6 +36,13 @@ public sealed class MomentVideoCard : Component
     {
         var vm = _viewModel;
 
+        // 下面这些 XamlHostElement 的头像/封面是在工厂里按「当前条目」建的，
+        // 而 Reactor 复用宿主元素时不会再调工厂。列表把卡片回收给另一条动态时，
+        // 就会把上一条的头像和封面留在卡片上（刷新后串图就是这个原因）。
+        // TypeKey 参与 Reconciler 的匹配：带上条目身份后，换了条目就按「卸载 + 重新挂载」处理，
+        // 工厂会重新跑一遍，图片也就跟着换成新的.
+        var typeKeySuffix = vm.Data.Id ?? string.Empty;
+
         var userButton = new XamlHostElement(
             () =>
             {
@@ -55,6 +62,9 @@ public sealed class MomentVideoCard : Component
                 return button;
             },
             _ => { })
+            {
+            TypeKey = "moment-video-avatar-" + typeKeySuffix,
+        }
             .Size(36, 36)
             .VAlign(VerticalAlignment.Center);
 
@@ -90,6 +100,9 @@ public sealed class MomentVideoCard : Component
                 return panel;
             },
             _ => { })
+            {
+            TypeKey = "moment-video-cover-" + typeKeySuffix,
+        }
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Stretch);
 
@@ -118,8 +131,14 @@ public sealed class MomentVideoCard : Component
             new XamlHostElement(
                 () => new MomentItemOperationPanel { ViewModel = vm },
                 _ => { })
+            {
+                TypeKey = "moment-video-actions-" + typeKeySuffix,
+            }
                 .Grid(row: 0, column: 0),
             new XamlHostElement(() => CreateOpenButton(vm), _ => { })
+            {
+                TypeKey = "moment-video-open-" + typeKeySuffix,
+            }
                 .Grid(row: 0, column: 1));
 
         return Grid(
@@ -175,7 +194,10 @@ public sealed class MomentVideoCard : Component
                 button.Flyout = flyout;
                 return button;
             },
-            _ => { });
+            _ => { })
+        {
+            TypeKey = "moment-video-description-" + (vm.Data.Id ?? string.Empty),
+        };
 
 
     private static Button CreateOpenButton(MomentItemViewModel vm)

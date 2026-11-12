@@ -2,6 +2,7 @@
 
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
+using BiliCopilot.UI.Toolkits;
 using Richasy.WinUIKernel.Share.Base;
 using Windows.System;
 
@@ -20,6 +21,7 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
     private const double SidePadding = 32d;
 
     private double _lastItemWidth;
+    private MomentSentinelPager? _pager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiveMomentSectionDetailControl"/> class.
@@ -29,14 +31,93 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         Services.StartupTrace.Mark("LiveCard:ctor:begin");
         InitializeComponent();
         Services.StartupTrace.Mark("LiveCard:ctor:end");
+        _pager = new MomentSentinelPager("直播", OnPagerLoadNextBatch);
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _pager?.Detach();
+        if (ViewModel is not null)
+        {
+            ViewModel.Items.CollectionChanged -= OnItemsCollectionChanged;
+        }
+    }
+
+    private void OnItemsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        => _pager?.QueueFillCheck();
+
+    private bool OnPagerLoadNextBatch()
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+        {
+            return false;
+        }
+
+        var loaded = viewModel.LoadNextBatch();
+        if (loaded)
+        {
+            LogRealizedCardCount();
+        }
+
+        return loaded;
+    }
+
+    /// <summary>
+    /// 记一下「列表里有多少张、真正建了多少张卡片」，用来判断网格有没有在虚拟化.
+    /// </summary>
+    private void LogRealizedCardCount()
+    {
+        var repeater = FindRepeater(this);
+        if (repeater is null || ViewModel is null)
+        {
+            return;
+        }
+
+        Serilog.Log.Information(
+            "动态哨兵（直播）：列表 {Total} 条，已建卡片 {Realized} 张",
+            ViewModel.Items.Count,
+            Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(repeater));
+    }
+
+    private static ItemsRepeater? FindRepeater(DependencyObject parent)
+    {
+        for (var i = 0; i < Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(parent, i);
+            if (child is ItemsRepeater repeater)
+            {
+                return repeater;
+            }
+
+            if (FindRepeater(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         Services.StartupTrace.Mark("LiveCard:loaded", $"items={ViewModel?.Items.Count ?? -1}");
         UpdateItemWidth();
+
+        // 底部哨兵挂到外层 ScrollViewer 上；同时盯住集合变化，
+        // 首屏卡片到齐后补到撑满一屏就停.
+        _pager?.Reset();
+        _pager?.Attach(CardSentinel);
+        if (ViewModel is not null)
+        {
+            ViewModel.Items.CollectionChanged -= OnItemsCollectionChanged;
+            ViewModel.Items.CollectionChanged += OnItemsCollectionChanged;
+        }
+
+        LogRealizedCardCount();
 
         // 首帧尺寸可能还是 0，下一轮调度再算一次；顺手把滚动偏移归零，
         // 否则第一行卡片上半截（作者头像行）会被初始偏移切掉.

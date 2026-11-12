@@ -20,6 +20,9 @@ public static class DynamicShareService
     private const string CreateUrl = "https://api.bilibili.com/x/dynamic/feed/create/dyn";
     private const string VcRepostUrl = "https://api.vc.bilibili.com/dynamic_repost/v1/dynamic_repost/repost";
 
+    /// <summary>vc 发动态（视频等）.</summary>
+    private const string VcCreateUrl = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/create";
+
     /// <summary>普通动态的 scene.</summary>
     private const int SceneText = 1;
 
@@ -90,7 +93,7 @@ public static class DynamicShareService
     /// <param name="allowInteract">是否允许别人评论和转发.</param>
     /// <param name="logger">日志.</param>
     /// <returns>成功与否 + 提示文本.</returns>
-    public static Task<(bool Success, string Message)> ShareVideoAsync(
+    public static async Task<(bool Success, string Message)> ShareVideoAsync(
         string aidOrBvid,
         string content,
         string cookie,
@@ -98,10 +101,24 @@ public static class DynamicShareService
         ILogger? logger = null)
     {
         var id = aidOrBvid ?? string.Empty;
-        var link = id.StartsWith("BV", StringComparison.OrdinalIgnoreCase)
+        var isBvid = id.StartsWith("BV", StringComparison.OrdinalIgnoreCase);
+        var link = isBvid
             ? $"https://www.bilibili.com/video/{id}"
             : $"https://www.bilibili.com/video/av{id}";
-        return PublishAsync(Compose(content, link), cookie, allowInteract, logger, SceneText, null, "转发视频");
+
+        // 数字 aid 才有 vc 视频动态可走；BV 号得先换 aid，这里直接用 opus 的链接写法.
+        if (!isBvid && long.TryParse(id, out _))
+        {
+            var vc = await VcShareVideoAsync(id, content ?? string.Empty, cookie, logger).ConfigureAwait(false);
+            if (vc.Success)
+            {
+                return vc;
+            }
+
+            logger?.LogWarning("vc 视频转发未成功（{Message}），改用网页端 create/dyn 兜底", vc.Message);
+        }
+
+        return await PublishAsync(Compose(content, link), cookie, allowInteract, logger, SceneText, null, "转发视频").ConfigureAwait(false);
     }
 
     /// <summary>
@@ -261,6 +278,97 @@ public static class DynamicShareService
         }
     }
 
+    /// <summary>
+    /// 用 vc 的 dynamic_svr/create 发一条视频动态（type=8，rid=aid）.
+    /// 有 TV 授权时带 access_key 并用 TV 的 appkey 签名；没有就走 Android 签名.
+    /// </summary>
+    /// <param name="aid">视频 avid.</param>
+    /// <param name="content">附言.</param>
+    /// <param name="cookie">登录态.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>成功与否 + 提示文本.</returns>
+    private static async Task<(bool Success, string Message)> VcShareVideoAsync(
+        string aid,
+        string content,
+        string cookie,
+        ILogger? logger)
+    {
+        var uid = ExtractCookie(cookie, "DedeUserID");
+        if (string.IsNullOrWhiteSpace(uid) && BiliOAuthService.Mid > 0)
+        {
+            uid = BiliOAuthService.Mid.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(uid))
+        {
+            logger?.LogWarning("vc 视频转发跳过：拿不到 uid");
+            return (false, "拿不到账号 uid");
+        }
+
+        try
+        {
+            var accessToken = await BiliOAuthService.GetAccessTokenAsync(default).ConfigureAwait(false);
+            var hasTvToken = !string.IsNullOrWhiteSpace(accessToken);
+            var query = hasTvToken
+                ? BiliOAuthService.BuildSignedTvQuery(new[] { new KeyValuePair<string, string>("access_key", accessToken!) })
+                : BiliVcSigner.BuildSignedQuery([]);
+            logger?.LogInformation("vc 视频转发签名方式：{Mode}", hasTvToken ? "TV 授权（含 access_key）" : "Android 默认");
+
+            var form = new Dictionary<string, string>
+            {
+                ["uid"] = uid,
+                ["dynamic_id"] = "0",
+                ["type"] = "8",
+                ["rid"] = aid,
+                ["content"] = content ?? string.Empty,
+                ["at_uids"] = string.Empty,
+                ["at_control"] = string.Empty,
+                ["ctrl"] = "[]",
+                ["extension"] = "{\"emoji_type\":1,\"from\":{\"emoji_type\":1},\"flag_cfg\":{}}",
+            };
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"{VcCreateUrl}?{query}")
+            {
+                Content = new FormUrlEncodedContent(form),
+            };
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            request.Headers.TryAddWithoutValidation(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            request.Headers.TryAddWithoutValidation("Referer", "https://t.bilibili.com/");
+
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            if ((int)response.StatusCode == 412)
+            {
+                logger?.LogWarning("vc 视频转发被风控（HTTP 412）");
+                return (false, "vc 接口被风控拦下（HTTP 412）");
+            }
+
+            var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var document = JsonDocument.Parse(text);
+            var root = document.RootElement;
+            var code = root.TryGetProperty("code", out var codeNode) ? codeNode.GetInt32() : -1;
+            var message = root.TryGetProperty("message", out var messageNode) ? messageNode.GetString() : null;
+
+            if (code == 0)
+            {
+                var dynId = ReadDynamicId(root);
+                logger?.LogInformation("vc 视频转发成功：{DynId}", dynId);
+                return (true, string.IsNullOrEmpty(dynId) ? "转发成功" : $"转发成功（{dynId}）");
+            }
+
+            logger?.LogWarning("vc 视频转发失败：code={Code} message={Message}", code, message);
+            return (false, string.IsNullOrWhiteSpace(message) ? $"vc 视频转发失败（code={code}）" : $"vc 视频转发失败：{message}");
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "vc 视频转发出错");
+            return (false, $"vc 视频转发出错：{ex.Message}");
+        }
+    }
+
     private static async Task<(bool Success, string Message)> VcRepostAsync(
         string dynamicId,
         string content,
@@ -268,14 +376,29 @@ public static class DynamicShareService
         ILogger? logger)
     {
         var uid = ExtractCookie(cookie, "DedeUserID");
+        if (string.IsNullOrWhiteSpace(uid) && BiliOAuthService.Mid > 0)
+        {
+            // Cookie 里没有 DedeUserID 时用 TV 授权拿到的 mid 兜底（vc 的 body 必须要 uid）.
+            uid = BiliOAuthService.Mid.ToString();
+            logger?.LogDebug("vc 转发 uid 取自身份授权：{Uid}", uid);
+        }
+
         if (string.IsNullOrWhiteSpace(uid))
         {
-            return (false, "登录态里缺 DedeUserID，重新登录一次");
+            logger?.LogWarning("vc 转发跳过：拿不到 uid（Cookie 无 DedeUserID，也没做过 TV 授权）");
+            return (false, "拿不到账号 uid（Cookie 里没有 DedeUserID，也没做过 TV 授权）");
         }
 
         try
         {
-            var query = BiliVcSigner.BuildSignedQuery([]);
+            // vc 转发要 App 鉴权：设置里做过 TV 扫码就带上 access_key 并用 TV 的 appkey 签名，
+            // 没做过就还是原来的 Android 签名（不带 access_key），行为不变.
+            var accessToken = await BiliOAuthService.GetAccessTokenAsync(default).ConfigureAwait(false);
+            var hasTvToken = !string.IsNullOrWhiteSpace(accessToken);
+            var query = hasTvToken
+                ? BiliOAuthService.BuildSignedTvQuery(new[] { new KeyValuePair<string, string>("access_key", accessToken!) })
+                : BiliVcSigner.BuildSignedQuery([]);
+            logger?.LogInformation("vc 转发签名方式：{Mode}", hasTvToken ? "TV 授权（含 access_key）" : "Android 默认");
             var url = $"{VcRepostUrl}?{query}";
             var form = new Dictionary<string, string>
             {

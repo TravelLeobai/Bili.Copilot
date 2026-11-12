@@ -217,19 +217,32 @@
             HorizontalScrollMode="Disabled"
             VerticalScrollBarVisibility="Auto"
             VerticalScrollMode="Auto">
-            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
-                <ItemsRepeater.Layout>
-                    <UniformGridLayout
-                        x:Name="CardLayout"
-                        ItemsStretch="None"
-                        MinColumnSpacing="16"
-                        MinItemWidth="240"
-                        MinRowSpacing="16" />
-                </ItemsRepeater.Layout>
-                <ItemsRepeater.ItemTemplate>
-                    <StaticResource ResourceKey="LiveCardTemplate" />
-                </ItemsRepeater.ItemTemplate>
-            </ItemsRepeater>
+            <Grid>
+                <ItemsRepeater ItemsSource="{x:Bind ViewModel.Items, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <UniformGridLayout
+                            x:Name="CardLayout"
+                            ItemsStretch="None"
+                            MinColumnSpacing="16"
+                            MinItemWidth="240"
+                            MinRowSpacing="16" />
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <StaticResource ResourceKey="LiveCardTemplate" />
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
+
+                <!--
+                    底部哨兵：1px 透明元素，只用来挂「滚到底再补一批」。
+                    它和列表平级、不包住列表，所以不影响 ItemsRepeater 的回收。
+                -->
+                <Border
+                    x:Name="CardSentinel"
+                    Height="1"
+                    VerticalAlignment="Bottom"
+                    IsHitTestVisible="False"
+                    Opacity="0" />
+            </Grid>
         </ScrollViewer>
     </Grid>
 </local:LiveSectionControlBase>

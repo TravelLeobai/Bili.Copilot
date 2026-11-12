@@ -21,6 +21,11 @@ namespace BiliCopilot.UI.ViewModels.Components;
 public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, IMomentSectionDetailViewModel
 {
     /// <summary>
+    /// 每次往界面补多少张卡片（这个网格是两到三列，12 张差不多一屏）.
+    /// </summary>
+    private const int PageBatchSize = 12;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="VideoMomentSectionDetailViewModel"/> class.
     /// </summary>
     public VideoMomentSectionDetailViewModel(
@@ -59,6 +64,9 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
         _baseline = default;
         IsEmpty = false;
         _preventLoadMore = false;
+        _rebuildPending = true;
+        _visibleCount = PageBatchSize;
+        _unwatched.Clear();
         Items.Clear();
         _allItems.Clear();
         _watchedTimeline.Clear();
@@ -81,6 +89,13 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
     [RelayCommand]
     private async Task LoadUnwatchedItemsAsync()
     {
+        // 还有没铺出来的卡片时先别去拉新数据：列表只有一屏高，「到底了」的判定会一直成立，
+        // 后台就会一页接一页把整条动态拉干净；等用户滚到底把这一批补完再去拿下一页.
+        if (HasHiddenItems)
+        {
+            return;
+        }
+
         // 左侧空了以后由右侧滚动触发加载，避免空列表自动拉完整条动态.
         if (Items.Count > 0 || _allItems.Count == 0)
         {
@@ -133,6 +148,13 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
 
         await SynchronizeHistoryAsync();
         ListUpdated?.Invoke(this, EventArgs.Empty);
+
+        if (_rebuildPending)
+        {
+            // 刷新后整批重来：通知界面把卡片元素从零重建，避免回收元素留着上一条的封面/头像.
+            _rebuildPending = false;
+            ItemsRebuilt?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void ShowComment(MomentItemViewModel item)
@@ -222,7 +244,7 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
             return;
         }
 
-        var unwatched = new List<MomentItemViewModel>();
+        _unwatched.Clear();
         _watchedTimeline.Clear();
         for (var i = 0; i < _allItems.Count; i++)
         {
@@ -238,14 +260,43 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
             }
             else
             {
-                unwatched.Add(item);
+                _unwatched.Add(item);
             }
         }
 
-        UpdateCollection(Items, unwatched);
-        IsUnwatchedEmpty = _allItems.Count > 0 && Items.Count == 0;
+        ApplyVisibleWindow();
+        IsUnwatchedEmpty = _allItems.Count > 0 && _unwatched.Count == 0;
         UpdateWatchedTimeline();
     }
+
+    /// <summary>
+    /// 已经加载、但还没铺到界面上的条目（等用户滚到底再补）.
+    /// </summary>
+    public bool HasHiddenItems => Items.Count < _unwatched.Count;
+
+    /// <summary>
+    /// 再往界面补一批卡片（滚动到底时由界面调用）；已经没有隐藏的条目就返回 <c>false</c>.
+    /// </summary>
+    /// <returns>是否真的补进来了新卡片.</returns>
+    public bool LoadNextBatch()
+    {
+        if (Items.Count >= _unwatched.Count)
+        {
+            return false;
+        }
+
+        _visibleCount = Math.Min(_unwatched.Count, _visibleCount + PageBatchSize);
+        ApplyVisibleWindow();
+        Serilog.Log.Information("动态哨兵（视频）：补到 {Shown}/{Total}", Items.Count, _unwatched.Count);
+        return true;
+    }
+
+    /// <summary>
+    /// 把已经加载的动态里「未看过」的那一段按当前窗口大小铺到界面上。
+    /// 只铺窗口内的条目，其余等用户滚到底再补，避免一次把整条动态都建成卡片.
+    /// </summary>
+    private void ApplyVisibleWindow()
+        => UpdateCollection(Items, _unwatched.Take(Math.Max(_visibleCount, 0)).ToList());
 
     /// <summary>
     /// 跟随左侧顶部一行最右边的视频定位已看时间线.
