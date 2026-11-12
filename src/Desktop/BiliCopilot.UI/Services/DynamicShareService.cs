@@ -18,6 +18,7 @@ namespace BiliCopilot.UI.Services;
 public static class DynamicShareService
 {
     private const string CreateUrl = "https://api.bilibili.com/x/dynamic/feed/create/dyn";
+    private const string VcRepostUrl = "https://api.vc.bilibili.com/dynamic_repost/v1/dynamic_repost/repost";
 
     /// <summary>普通动态的 scene.</summary>
     private const int SceneText = 1;
@@ -43,13 +44,27 @@ public static class DynamicShareService
     /// <param name="allowInteract">是否允许别人评论和转发.</param>
     /// <param name="logger">日志.</param>
     /// <returns>成功与否 + 提示文本.</returns>
-    public static Task<(bool Success, string Message)> RepostAsync(
+    public static async Task<(bool Success, string Message)> RepostAsync(
         string dynamicId,
         string content,
         string cookie,
         bool allowInteract = true,
         ILogger? logger = null)
-        => PublishAsync(content, cookie, allowInteract, logger, SceneRepost, dynamicId, "转发动态");
+    {
+        // 先走 vc 的 dynamic_repost/repost（真正的"转发"接口，BiliUWP-Lite 走的这条）.
+        var vc = await VcRepostAsync(dynamicId, content, cookie, logger).ConfigureAwait(false);
+        if (vc.Success)
+        {
+            return vc;
+        }
+
+        // 兜底：网页端 create/dyn + scene=4 + web_repost_src.
+        logger?.LogWarning("vc 转发未成功（{Message}），改用网页端 create/dyn 兜底", vc.Message);
+        var web = await PublishAsync(content, cookie, allowInteract, logger, SceneRepost, dynamicId, "转发动态").ConfigureAwait(false);
+        return web.Success
+            ? web
+            : (false, $"{vc.Message}；兜底也失败：{web.Message}");
+    }
 
     /// <summary>
     /// 发一条纯文字动态（评论转发、以及视频没有 aid 时的兜底）.
@@ -246,6 +261,73 @@ public static class DynamicShareService
         }
     }
 
+    private static async Task<(bool Success, string Message)> VcRepostAsync(
+        string dynamicId,
+        string content,
+        string cookie,
+        ILogger? logger)
+    {
+        var uid = ExtractCookie(cookie, "DedeUserID");
+        if (string.IsNullOrWhiteSpace(uid))
+        {
+            return (false, "登录态里缺 DedeUserID，重新登录一次");
+        }
+
+        try
+        {
+            var query = BiliVcSigner.BuildSignedQuery([]);
+            var url = $"{VcRepostUrl}?{query}";
+            var form = new Dictionary<string, string>
+            {
+                ["uid"] = uid,
+                ["dynamic_id"] = dynamicId,
+                ["content"] = content ?? string.Empty,
+                ["at_uids"] = string.Empty,
+                ["at_control"] = string.Empty,
+                ["extension"] = "{\"emoji_type\":1}",
+            };
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new FormUrlEncodedContent(form),
+            };
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            request.Headers.TryAddWithoutValidation(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            request.Headers.TryAddWithoutValidation("Referer", "https://t.bilibili.com/");
+
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            if ((int)response.StatusCode == 412)
+            {
+                logger?.LogWarning("vc 转发被风控（HTTP 412）");
+                return (false, "vc 接口被风控拦下（HTTP 412）");
+            }
+
+            var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var document = JsonDocument.Parse(text);
+            var root = document.RootElement;
+            var code = root.TryGetProperty("code", out var codeNode) ? codeNode.GetInt32() : -1;
+            var message = root.TryGetProperty("message", out var messageNode) ? messageNode.GetString() : null;
+
+            if (code == 0)
+            {
+                var dynId = ReadDynamicId(root);
+                logger?.LogInformation("vc 转发成功：{DynId}", dynId);
+                return (true, string.IsNullOrEmpty(dynId) ? "转发成功" : $"转发成功（{dynId}）");
+            }
+
+            logger?.LogWarning("vc 转发失败：code={Code} message={Message}", code, message);
+            return (false, string.IsNullOrWhiteSpace(message) ? $"vc 转发失败（code={code}）" : $"vc 转发失败：{message}");
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "vc 转发出错");
+            return (false, $"vc 转发出错：{ex.Message}");
+        }
+    }
+
+
     private static string ReadDynamicId(JsonElement root)
     {
         if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
@@ -286,3 +368,5 @@ public static class DynamicShareService
         return string.Empty;
     }
 }
+
+
