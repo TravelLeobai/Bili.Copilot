@@ -112,3 +112,78 @@ public static ApiKeyInfo AndroidTVKey = new ApiKeyInfo("4409e2ce8ffd12b8", "59b4
 - 二维码登录（含 TV 端 auth_code / poll）：<https://gitee.com/Gongzx_0313/bilibili-API-collect/blob/master/login/login_action/QR.md>
 - 同文档关于 appkey 与 token 绑定的 `-663` 说明：<https://github.com/zzxqasdcc/bilibili-API-collectforfork/blob/master/docs/login/login_action/QR.md>
 - refresh_token 用法示例（第三方客户端）：<https://github.com/bilive/bilive_client/blob/master/bilive/lib/app_client.ts>
+
+---
+
+## 8. 更正：Cookie 是能换出 access_key 的（我上一版说错了）
+
+上一版写"没有 SESSDATA → access_token 的兑换接口"，这句话不准确。BiliUWP-Lite 里有一条两跳的兑换路径：
+
+```csharp
+// Modules/User/Account.cs:237-253
+public async void LoginByCookie(List<HttpCookieItem> cookies, string refreshToken)
+{
+    m_cookieService.Cookies = cookies;
+    var appKey = SettingConstants.Account.DefaultLoginAppKeySecret;
+    var cookieToAccessKeyConfirmUrl = await GetCookieToAccessKeyConfirmUrl(appKey); // 第 1 跳
+    var accessKey = await GetAccessKey(cookieToAccessKeyConfirmUrl);                // 第 2 跳
+    ...
+}
+
+// AccountApi.cs:410-421  第 1 跳：拿 confirm_uri
+baseUrl = "https://passport.bilibili.com/login/app/third"
+parameter = $"appkey={appKey.Appkey}&api=http://link.acg.tv/forum.php" + sign
+
+// Account.cs:318-333    第 2 跳：跟随 confirm_uri，从重定向 URL 的 query 里取 access_key
+var uri = new Uri(result.results);
+var accessKey = HttpUtility.ParseQueryString(uri.Query).Get("access_key");
+```
+
+所以准确说法是：**没有"OAuth2 兑换接口"，但有"网页登录态换 App 令牌"的两跳接口**（`login/app/third` + `confirm_uri`）。
+这也意味着：想让 Cookie 登录的客户端补一个 access_key，不必扫码，走这两跳即可。本次没有采用，因为 vc 接口已失效（见 PROTOCOL_INVESTIGATION / 提交 ecb7f32），token 换出来也没有能用的写入接口。
+
+## 9. BiliUWP-Lite 的「TV 扫码」到底是干什么的
+
+它的登录页默认扫码走的就是 **TV（iPad）通道**，不是网页通道：
+
+```csharp
+// Modules/User/LoginVM.cs:619-635
+private async void GetQRAuthInfo()
+{
+    var result = await account.GetQRAuthInfoTV(ApiHelper.IPadOsKey);   // TV/iPad appkey
+    var img = await qrCodeService.GenerateQrCode(qrAuthInfo.url);
+    ...
+}
+// LoginVM.cs:673 轮询
+var result = await account.PollQRAuthInfoTV(qrAuthInfo.auth_code, ApiHelper.IPadOsKey);
+```
+
+TV 扫码成功时一次性返回全套身份（`Account.cs:397-400`）：
+
+```csharp
+SettingService.SetValue(SettingConstants.Account.IS_WEB_LOGIN, false);
+await SaveLogin(token_info.access_token, token_info.refresh_token, token_info.expires_in,
+                token_info.mid, sso, cookie_info, appKey);
+```
+
+即 **access_token + refresh_token + sso + cookie_info 一次拿齐**，Cookie 与 App 令牌都有。
+
+它同时保留了 web 扫码通道（`AccountApi.QRLoginAuthCode` / `PollQRAuthInfo`），那条只给 Cookie，之后必须补 `login/app/third` 两跳换成 access_key。
+
+### 为什么要区分
+
+access_key 在这个客户端里是硬需求：
+
+| 用途 | 位置 |
+|---|---|
+| gRPC 鉴权头 | `BiliLite.gRPC/Api/AndroidGrpcRequestHeader.cs:21` `authorization: identify_v1 <AccessKey>` |
+| 部分 REST | `UserDetailAPI.cs:59` `MustParameter(AppKey, needAccesskey: true)` |
+| vc 写接口（转发/发动态） | `DynamicAPI.cs:244-255` |
+
+而动态列表、动态详情、空间、视频列表这些**读**接口全走 gRPC，没有 access_key 直接不可用。所以"扫码就能拿到 token"对它是省事：web 扫码还得再赌一次 `login/app/third` 兑换。
+
+### 结论
+
+- 在 BiliUWP-Lite 里，TV 扫码 = **一条通道同时拿到 Cookie 与 App 令牌**，是主登录方式，不是附属功能。
+- 对我们没有借鉴价值的部分：vc 写接口已经 404/4126001，token 换出来也没有可写的转发接口。
+- 有借鉴价值的部分：`login/app/third` 两跳换取 access_key —— 将来若需要 App 鉴权接口（gRPC 之类），不用让用户再扫一次码。
