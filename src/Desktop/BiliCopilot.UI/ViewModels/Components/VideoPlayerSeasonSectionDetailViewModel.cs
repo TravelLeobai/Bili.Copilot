@@ -22,8 +22,8 @@ public sealed partial class VideoPlayerSeasonSectionDetailViewModel : ViewModelB
     /// </summary>
     private readonly string _videoId;
 
-    /// <summary>分批加载的取消源，切换合集时取消上一轮.</summary>
-    private CancellationTokenSource? _batchCts;
+    /// <summary>每次往界面补多少张卡片.</summary>
+    private const int BatchSize = 6;
 
     [ObservableProperty]
     private List<VideoSeason> _seasons;
@@ -88,57 +88,28 @@ public sealed partial class VideoPlayerSeasonSectionDetailViewModel : ViewModelB
             item.IsSelected = item.Data.Identifier.Id == _videoId;
         }
 
-        // 上一轮分批还没铺完就取消，避免切换合集后旧批次继续追加.
-        _batchCts?.Cancel();
-        _batchCts = new CancellationTokenSource();
-        VisibleItems = [];
-        _ = FillInBatchesAsync(_batchCts.Token);
+        // 先只铺第一批，剩下的等用户滚到底部再补.
+        VisibleItems = [.. Items.Take(BatchSize)];
+        HasMoreItems = Items.Count > BatchSize;
     }
 
     /// <summary>
-    /// 六个六个往界面上铺：先给首屏 6 张，然后每 6 张让出一次 UI 线程，
-    /// 让封面解码和布局插空完成，而不是一口气建完整组.
+    /// 往上再铺 6 张（由界面滚动到底部时调用；已经铺完就什么也不做）.
     /// </summary>
-    /// <param name="token">切换合集时用来取消上一轮.</param>
-    /// <returns><see cref="Task"/>.</returns>
-    private async Task FillInBatchesAsync(CancellationToken token)
+    public void LoadNextBatch()
     {
-        const int batchSize = 6;
         var total = Items?.Count ?? 0;
-        if (total == 0)
+        var shown = VisibleItems?.Count ?? 0;
+        if (shown >= total)
         {
-            VisibleItems = [];
             HasMoreItems = false;
             return;
         }
 
-        var shown = 0;
-        try
-        {
-            while (shown < total)
-            {
-                if (token.IsCancellationRequested)
-                {
-                    return;
-                }
-
-                shown = Math.Min(total, shown + batchSize);
-                VisibleItems = [.. Items.Take(shown)];
-                HasMoreItems = shown < total;
-                Serilog.Log.Information("合集分批加载：{Shown}/{Total}", shown, total);
-
-                if (shown >= total)
-                {
-                    break;
-                }
-
-                // 让出 UI 线程：下一批等封面解码完再来.
-                await Task.Delay(120, token);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
+        shown = Math.Min(total, shown + BatchSize);
+        VisibleItems = [.. Items.Take(shown)];
+        HasMoreItems = shown < total;
+        Serilog.Log.Information("合集滚动加载：{Shown}/{Total}", shown, total);
     }
 
     private void Play(VideoItemViewModel vm)

@@ -231,6 +231,12 @@ public sealed class VideoSeasonPanel : Component
 {
     private readonly VideoPlayerSeasonSectionDetailViewModel _viewModel;
 
+    /// <summary>上次触发补载时的滚动偏移，用来保证"用户真的又滚了一段"才继续补.</summary>
+    private double _lastTriggerOffset = -1d;
+
+    /// <summary>已经挂过事件的那个 ScrollView.</summary>
+    private ScrollView? _scrollView;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="VideoSeasonPanel"/> class.
     /// </summary>
@@ -285,6 +291,31 @@ public sealed class VideoSeasonPanel : Component
             cards.Add(card);
         }
 
+        // 底部哨兵：挂到外层 ScrollView 的 ViewChanged 上，只有用户滚到底才补 6 张.
+        // 不能用 EffectiveViewportChanged：列表刚渲染、内容还没撑开时它会连触发，
+        // 会在打开面板的瞬间把整组合集都补完.
+        cards.Add(new XamlHostElement(
+            () => new Border { Height = 1, Opacity = 0 },
+            element =>
+            {
+                if (_scrollView is not null)
+                {
+                    return;
+                }
+
+                var border = (Border)element;
+                var scroll = FindAncestor<ScrollView>(border);
+                if (scroll is null)
+                {
+                    return;
+                }
+
+                _scrollView = scroll;
+                _lastTriggerOffset = -1d;
+                scroll.ViewChanged += OnSeasonViewChanged;
+            })
+            .WithKey("season-sentinel"));
+
         var list = ScrollView(VStack(0, [.. cards]).Padding(12, 0, 12, 12))
             .Padding(0)
             .VerticalScrollMode(ScrollingScrollMode.Enabled);
@@ -294,6 +325,45 @@ public sealed class VideoSeasonPanel : Component
             new[] { GridSize.Auto, GridSize.Star() },
             comboBox.Grid(row: 0),
             list.Grid(row: 1));
+    }
+
+    /// <summary>
+    /// 滚到底（离尾部 8px 以内）并且比上次触发又往下滚了，就再要 6 张.
+    /// </summary>
+    private void OnSeasonViewChanged(ScrollView sender, object args)
+    {
+        var remaining = sender.ExtentHeight - sender.ViewportHeight - sender.VerticalOffset;
+        if (remaining > 8)
+        {
+            return;
+        }
+
+        if (Math.Abs(sender.VerticalOffset - _lastTriggerOffset) < 24)
+        {
+            return;
+        }
+
+        _lastTriggerOffset = sender.VerticalOffset;
+        _viewModel.LoadNextBatch();
+    }
+
+    /// <summary>
+    /// 往上找指定类型的祖先元素.
+    /// </summary>
+    private static T? FindAncestor<T>(DependencyObject? element)
+        where T : DependencyObject
+    {
+        while (element is not null)
+        {
+            if (element is T target)
+            {
+                return target;
+            }
+
+            element = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(element);
+        }
+
+        return null;
     }
 
     private static ComboBox BuildSeasonComboBox(IEnumerable<VideoSeason> seasons, VideoSeason? selected)
