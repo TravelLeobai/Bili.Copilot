@@ -98,6 +98,29 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             return;
         }
 
+        // 有缓存就先把上次的卡片铺出来（切走再切回来不该白等一轮网络），
+        // 内容过期了再在后台补新的.
+        await Services.LiveSectionCache.EnsureLoadedAsync();
+        if (Services.LiveSectionCache.HasContent)
+        {
+            _allCards.AddRange(Services.LiveSectionCache.GetCards());
+            BuildUpers(_allCards);
+            SelectedUper ??= Upers.FirstOrDefault();
+            ApplyFilter();
+            IsEmpty = _allCards.Count == 0;
+            _logger.LogInformation(
+                "直播分区：命中缓存 {Count} 张（{Age:F1} 分钟前）",
+                _allCards.Count,
+                (DateTimeOffset.Now - Services.LiveSectionCache.UpdatedAt).TotalMinutes);
+
+            if (Services.LiveSectionCache.IsStale)
+            {
+                _ = RefreshInternalAsync();
+            }
+
+            return;
+        }
+
         await LoadAsync();
     }
 
@@ -106,22 +129,24 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 
     private async Task RefreshInternalAsync()
     {
-        _visibleCount = PageBatchSize;
-        _allCards.Clear();
-        Upers.Clear();
-        Items.Clear();
-        await LoadAsync();
+        // 刷新不再推倒重来：保留已经渲染好的卡片，把新开播的房间插到最前面、
+        // 新回放追加到后面，界面上只多出新增的那几张.
+        await LoadAsync(appendMode: true);
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(bool appendMode = false)
     {
         if (IsLoading)
         {
             return;
         }
 
-        IsLoading = true;
-        IsEmpty = false;
+        // 追加模式下不显示整页 loading，也不清空任何东西.
+        IsLoading = !appendMode;
+        if (!appendMode)
+        {
+            IsEmpty = false;
+        }
         try
         {
             var cookies = this.Get<IBiliCookiesResolver>();
@@ -131,10 +156,20 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             var lives = await LiveFollowService.GetLiveRoomsAsync(cookies, relationship);
             _logger.LogInformation("直播分区：在播 {Count} 个", lives.Count);
 
-            _allCards.Clear();
+            var knownRoomIds = _allCards
+                .Where(p => p.IsLive && p.RoomId > 0)
+                .Select(p => p.RoomId)
+                .ToHashSet();
+            var liveCards = new List<LiveSectionCardViewModel>();
             foreach (var live in lives.OrderByDescending(p => p.Online))
             {
-                _allCards.Add(new LiveSectionCardViewModel(
+                if (appendMode && knownRoomIds.Contains(live.RoomId))
+                {
+                    // 已经在列表里了，别重复插.
+                    continue;
+                }
+
+                liveCards.Add(new LiveSectionCardViewModel(
                     string.IsNullOrEmpty(live.Title) ? $"{live.UserName} 的直播间" : live.Title,
                     // 封面优先用直播间封面，拿不到再退回主播头像.
                     NormalizeCover(string.IsNullOrEmpty(live.Cover) ? live.Face : live.Cover),
@@ -149,9 +184,22 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 });
             }
 
-            BuildUpers(_allCards);
-            SelectedUper ??= Upers.FirstOrDefault();
-            ApplyFilter();
+            if (appendMode)
+            {
+                // 新开播的插到最前面，旧卡片保持原位.
+                _allCards.InsertRange(0, liveCards);
+                AppendUpers(liveCards);
+                PrependCards(liveCards);
+            }
+            else
+            {
+                _allCards.Clear();
+                _allCards.AddRange(liveCards);
+                BuildUpers(_allCards);
+                SelectedUper ??= Upers.FirstOrDefault();
+                ApplyFilter();
+            }
+
             IsLoading = false;
             IsEmpty = _allCards.Count == 0;
 
@@ -161,6 +209,15 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 
             var replays = await LoadReplaysAsync(cookies, followedIds);
             _logger.LogInformation("直播分区：回放 {Count} 个", replays.Count);
+            if (appendMode)
+            {
+                var knownBvids = _allCards
+                    .Where(p => !string.IsNullOrEmpty(p.Bvid))
+                    .Select(p => p.Bvid)
+                    .ToHashSet();
+                replays = [.. replays.Where(p => string.IsNullOrEmpty(p.Bvid) || knownBvids.Add(p.Bvid))];
+            }
+
             _allCards.AddRange(replays);
 
             // 增量追加：只把新卡片塞进列表、只把新作者塞进过滤栏，
@@ -168,6 +225,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
             AppendUpers(replays);
             AppendCards(replays);
             IsEmpty = _allCards.Count == 0;
+            Services.LiveSectionCache.Save(_allCards);
         }
         catch (Exception ex)
         {
@@ -230,6 +288,31 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 Items.Add(card);
             }
         }
+    }
+
+    /// <summary>
+    /// 把新开播的卡片插到列表最前面：只往头部插，已有的卡片不动.
+    /// </summary>
+    /// <param name="cards">新卡片（按人气从高到低）.</param>
+    private void PrependCards(IReadOnlyList<LiveSectionCardViewModel> cards)
+    {
+        if (cards.Count == 0)
+        {
+            return;
+        }
+
+        if (SelectedUper is { IsTotal: false } || FilterType != LiveFilterType.All)
+        {
+            ApplyFilter();
+            return;
+        }
+
+        for (var i = cards.Count - 1; i >= 0; i--)
+        {
+            Items.Insert(0, cards[i]);
+        }
+
+        _visibleCount = Math.Max(_visibleCount, Items.Count);
     }
 
     /// <summary>
@@ -443,6 +526,8 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
+
 
 
 
