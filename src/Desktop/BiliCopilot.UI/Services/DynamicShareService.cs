@@ -9,14 +9,22 @@ using Microsoft.Extensions.Logging;
 namespace BiliCopilot.UI.Services;
 
 /// <summary>
-/// 把内容发到自己的动态时间线.
-/// 走 opus 的新接口 x/dynamic/feed/create/dyn：wbi 签名 + JSON 的 dyn_req，
+/// 把内容发到自己的动态时间线 / 转发别人的动态.
+/// 走 opus 的 <c>x/dynamic/feed/create/dyn</c>：wbi 签名 + JSON 的 dyn_req，
 /// 认证只要 cookie 里的 SESSDATA + bili_jct（csrf）.
-/// 转发统一用「正文 + 原内容链接」的写法：B 站会把链接解析成对应卡片，
-/// 比去猜各类型动态的 dyn_req 结构可靠.
+/// 转发不是"发一条带链接的文字"：网页端转发走的是同一个接口，但有两点不同——
+/// <c>dyn_req.scene = 4</c>，且根节点多一个 <c>web_repost_src.dyn_id_str</c> 指向原动态.
 /// </summary>
 public static class DynamicShareService
 {
+    private const string CreateUrl = "https://api.bilibili.com/x/dynamic/feed/create/dyn";
+
+    /// <summary>普通动态的 scene.</summary>
+    private const int SceneText = 1;
+
+    /// <summary>转发的 scene（网页端实测值）.</summary>
+    private const int SceneRepost = 4;
+
     private static readonly HttpClient Client = new(new SocketsHttpHandler
     {
         AutomaticDecompression = DecompressionMethods.All,
@@ -27,7 +35,7 @@ public static class DynamicShareService
     };
 
     /// <summary>
-    /// 转发一条动态：正文 + 原动态链接.
+    /// 转发一条动态（真正挂在原动态下面，不是发链接）.
     /// </summary>
     /// <param name="dynamicId">被转发动态的 id.</param>
     /// <param name="content">附言.</param>
@@ -41,16 +49,134 @@ public static class DynamicShareService
         string cookie,
         bool allowInteract = true,
         ILogger? logger = null)
-        => PostTextAsync(Compose(content, $"https://t.bilibili.com/{dynamicId}"), cookie, allowInteract, logger);
+        => PublishAsync(content, cookie, allowInteract, logger, SceneRepost, dynamicId, "转发动态");
 
     /// <summary>
-    /// 发一条纯文字动态（评论转发也走这里）.
+    /// 发一条纯文字动态（评论转发、以及视频没有 aid 时的兜底）.
     /// </summary>
-    public static async Task<(bool Success, string Message)> PostTextAsync(
+    /// <param name="content">正文.</param>
+    /// <param name="cookie">登录态.</param>
+    /// <param name="allowInteract">是否允许别人评论和转发.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>成功与否 + 提示文本.</returns>
+    public static Task<(bool Success, string Message)> PostTextAsync(
         string content,
         string cookie,
         bool allowInteract = true,
         ILogger? logger = null)
+        => PublishAsync(content, cookie, allowInteract, logger, SceneText, null, "发表动态");
+
+    /// <summary>
+    /// 把视频作为动态发出去：正文 + 视频链接（B 站会把链接解析成视频卡片）.
+    /// </summary>
+    /// <param name="aidOrBvid">avid 或 BV 号.</param>
+    /// <param name="content">附言.</param>
+    /// <param name="cookie">登录态.</param>
+    /// <param name="allowInteract">是否允许别人评论和转发.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>成功与否 + 提示文本.</returns>
+    public static Task<(bool Success, string Message)> ShareVideoAsync(
+        string aidOrBvid,
+        string content,
+        string cookie,
+        bool allowInteract = true,
+        ILogger? logger = null)
+    {
+        var id = aidOrBvid ?? string.Empty;
+        var link = id.StartsWith("BV", StringComparison.OrdinalIgnoreCase)
+            ? $"https://www.bilibili.com/video/{id}"
+            : $"https://www.bilibili.com/video/av{id}";
+        return PublishAsync(Compose(content, link), cookie, allowInteract, logger, SceneText, null, "转发视频");
+    }
+
+    /// <summary>
+    /// 拼请求体（抽出来便于离线检查结构，不含发送逻辑）.
+    /// </summary>
+    /// <param name="csrf">bili_jct.</param>
+    /// <param name="content">正文.</param>
+    /// <param name="scene">1 = 普通动态，4 = 转发.</param>
+    /// <param name="allowInteract">是否允许评论和转发.</param>
+    /// <param name="repostSourceId">被转发动态 id；普通动态传 null.</param>
+    /// <returns>JSON 字符串.</returns>
+    internal static string BuildPayload(
+        string csrf,
+        string content,
+        int scene,
+        bool allowInteract,
+        string? repostSourceId)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("csrf", csrf);
+
+            writer.WritePropertyName("dyn_req");
+            writer.WriteStartObject();
+            writer.WritePropertyName("content");
+            writer.WriteStartObject();
+            writer.WritePropertyName("contents");
+            writer.WriteStartArray();
+
+            // 转发且没写附言时，contents 是空数组（网页端行为）.
+            if (scene != SceneRepost || !string.IsNullOrWhiteSpace(content))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("raw_text", content ?? string.Empty);
+                writer.WriteNumber("type", 1);
+                writer.WriteString("biz_id", string.Empty);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+
+            writer.WriteNumber("scene", scene);
+
+            writer.WritePropertyName("option");
+            writer.WriteStartObject();
+            writer.WriteNumber("close_comment", allowInteract ? 0 : 1);
+            writer.WriteNumber("close_repost", allowInteract ? 0 : 1);
+            writer.WriteEndObject();
+
+            if (scene == SceneRepost)
+            {
+                writer.WritePropertyName("attach_card");
+                writer.WriteNullValue();
+            }
+
+            writer.WritePropertyName("meta");
+            writer.WriteStartObject();
+            writer.WritePropertyName("app_meta");
+            writer.WriteStartObject();
+            writer.WriteString("from", "create.dynamic.web");
+            writer.WriteString("mobi_app", "web");
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+
+            if (!string.IsNullOrEmpty(repostSourceId))
+            {
+                writer.WritePropertyName("web_repost_src");
+                writer.WriteStartObject();
+                writer.WriteString("dyn_id_str", repostSourceId);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    private static async Task<(bool Success, string Message)> PublishAsync(
+        string content,
+        string cookie,
+        bool allowInteract,
+        ILogger? logger,
+        int scene,
+        string? repostSourceId,
+        string action)
     {
         if (string.IsNullOrWhiteSpace(cookie) || !cookie.Contains("SESSDATA=", StringComparison.OrdinalIgnoreCase))
         {
@@ -66,51 +192,15 @@ public static class DynamicShareService
         try
         {
             var query = await BiliWbiSigner.SignAsync(new Dictionary<string, string> { ["csrf"] = csrf }, cookie, logger).ConfigureAwait(false);
-            var url = $"https://api.bilibili.com/x/dynamic/feed/create/dyn?{query}";
+            var url = $"{CreateUrl}?{query}";
+            var payloadText = BuildPayload(csrf, content, scene, allowInteract, repostSourceId);
 
-            using var payload = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(payload))
-            {
-                writer.WriteStartObject();
-                writer.WriteString("csrf", csrf);
-                writer.WritePropertyName("dyn_req");
-                writer.WriteStartObject();
-                writer.WritePropertyName("content");
-                writer.WriteStartObject();
-                writer.WritePropertyName("contents");
-                writer.WriteStartArray();
-                writer.WriteStartObject();
-                writer.WriteString("raw_text", content ?? string.Empty);
-                writer.WriteNumber("type", 1);
-                writer.WriteString("biz_id", string.Empty);
-                writer.WriteEndObject();
-                writer.WriteEndArray();
-                writer.WriteEndObject();
-                writer.WriteNumber("scene", 1);
-                writer.WritePropertyName("option");
-                writer.WriteStartObject();
-                writer.WriteNumber("close_comment", allowInteract ? 0 : 1);
-                writer.WriteNumber("close_repost", allowInteract ? 0 : 1);
-                writer.WriteEndObject();
-                writer.WritePropertyName("meta");
-                writer.WriteStartObject();
-                writer.WritePropertyName("app_meta");
-                writer.WriteStartObject();
-                writer.WriteString("from", "create.dynamic.web");
-                writer.WriteString("mobi_app", "web");
-                writer.WriteEndObject();
-                writer.WriteEndObject();
-                writer.WriteEndObject();
-                writer.WriteEndObject();
-            }
-
-            var payloadText = Encoding.UTF8.GetString(payload.ToArray());
-            // 日志里要把 csrf 打码，别把凭据写进日志文件.
-            logger?.LogInformation("动态报文：{Payload}", payloadText.Replace(csrf, "***"));
+            // 日志里把 csrf 打码，别把凭据写进日志文件.
+            logger?.LogInformation("动态报文（{Action}）：{Payload}", action, payloadText.Replace(csrf, "***"));
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {
-                Content = new StringContent(Encoding.UTF8.GetString(payload.ToArray()), Encoding.UTF8, "application/json"),
+                Content = new StringContent(payloadText, Encoding.UTF8, "application/json"),
             };
             request.Headers.TryAddWithoutValidation("Cookie", cookie);
             request.Headers.TryAddWithoutValidation(
@@ -121,6 +211,14 @@ public static class DynamicShareService
 
             using var response = await Client.SendAsync(request).ConfigureAwait(false);
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            // 412 是风控页（HTML），别再重试，直接报出去.
+            if ((int)response.StatusCode == 412)
+            {
+                logger?.LogWarning("动态{Action}被风控（HTTP 412），不重试", action);
+                return (false, "被 B 站风控拦下（HTTP 412），稍后再试，别连续重试");
+            }
+
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
             var code = root.TryGetProperty("code", out var codeNode) ? codeNode.GetInt32() : -1;
@@ -128,48 +226,39 @@ public static class DynamicShareService
 
             if (code == 0)
             {
-                var dynId = string.Empty;
-                if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
-                {
-                    if (data.TryGetProperty("dyn_id_str", out var strNode))
-                    {
-                        dynId = strNode.ValueKind == JsonValueKind.String ? strNode.GetString() ?? string.Empty : strNode.ToString();
-                    }
-                    else if (data.TryGetProperty("dyn_id", out var numNode))
-                    {
-                        dynId = numNode.ToString();
-                    }
-                }
-
-                logger?.LogInformation("动态发表成功：{DynId}", dynId);
-                return (true, string.IsNullOrEmpty(dynId) ? "发表成功" : $"发表成功（{dynId}）");
+                var dynId = ReadDynamicId(root);
+                logger?.LogInformation("动态{Action}成功：{DynId}", action, dynId);
+                return (true, string.IsNullOrEmpty(dynId) ? $"{action}成功" : $"{action}成功（{dynId}）");
             }
 
-            logger?.LogWarning("动态发表失败：code={Code} message={Message} body={Body}", code, message, text.Length > 300 ? text[..300] : text);
-            return (false, string.IsNullOrWhiteSpace(message) ? $"发表失败（code={code}）" : message!);
+            logger?.LogWarning(
+                "动态{Action}失败：code={Code} message={Message} body={Body}",
+                action,
+                code,
+                message,
+                text.Length > 300 ? text[..300] : text);
+            return (false, string.IsNullOrWhiteSpace(message) ? $"{action}失败（code={code}）" : message!);
         }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "动态发表出错");
-            return (false, $"发表出错：{ex.Message}");
+            logger?.LogWarning(ex, "动态{Action}出错", action);
+            return (false, $"{action}出错：{ex.Message}");
         }
     }
 
-    /// <summary>
-    /// 把视频作为动态发出去：正文 + 视频链接（B 站会把链接解析成视频卡片）.
-    /// </summary>
-    public static Task<(bool Success, string Message)> ShareVideoAsync(
-        string aidOrBvid,
-        string content,
-        string cookie,
-        bool allowInteract = true,
-        ILogger? logger = null)
+    private static string ReadDynamicId(JsonElement root)
     {
-        var id = aidOrBvid ?? string.Empty;
-        var link = id.StartsWith("BV", StringComparison.OrdinalIgnoreCase)
-            ? $"https://www.bilibili.com/video/{id}"
-            : $"https://www.bilibili.com/video/av{id}";
-        return PostTextAsync(Compose(content, link), cookie, allowInteract, logger);
+        if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+        {
+            return string.Empty;
+        }
+
+        if (data.TryGetProperty("dyn_id_str", out var strNode))
+        {
+            return strNode.ValueKind == JsonValueKind.String ? strNode.GetString() ?? string.Empty : strNode.ToString();
+        }
+
+        return data.TryGetProperty("dyn_id", out var numNode) ? numNode.ToString() : string.Empty;
     }
 
     private static string Compose(string? content, string link)
@@ -197,4 +286,3 @@ public static class DynamicShareService
         return string.Empty;
     }
 }
-
