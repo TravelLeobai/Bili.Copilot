@@ -104,15 +104,41 @@ public static class ForwardDialog
         toolbar.Children.Add(emojiButton);
 
         // 右半边：允许评论和转发 + 字数，整体靠右.
+        // 勾选框和文字分开摆：CheckBox 自带 Content 时文字基线跟方框对不齐，
+        // 这里把方框和 TextBlock 各自垂直居中、再并成一行.
         var allowBox = new CheckBox
         {
-            Content = "允许评论和转发",
             IsChecked = true,
             MinWidth = 0,
+            MinHeight = 0,
             Padding = new Thickness(0),
+            Margin = new Thickness(0),
             VerticalAlignment = VerticalAlignment.Center,
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(allowBox, "允许评论和转发");
+
+        var allowText = new TextBlock
+        {
+            Text = "允许评论和转发",
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(6, 0, 0, 0),
+        };
+
+        // 点文字也能切换，别让用户非得瞄准那个小方框.
+        allowText.Tapped += (_, e) =>
+        {
+            allowBox.IsChecked = allowBox.IsChecked != true;
+            e.Handled = true;
+        };
+
+        var allowGroup = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 0,
+        };
+        allowGroup.Children.Add(allowBox);
+        allowGroup.Children.Add(allowText);
 
         var right = new StackPanel
         {
@@ -121,7 +147,7 @@ public static class ForwardDialog
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        right.Children.Add(allowBox);
+        right.Children.Add(allowGroup);
         right.Children.Add(counter);
         Grid.SetColumn(right, 1);
         toolbar.Children.Add(right);

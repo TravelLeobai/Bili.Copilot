@@ -144,6 +144,7 @@ public static class DynamicShareService
 
             writer.WritePropertyName("option");
             writer.WriteStartObject();
+            // 0/1 才能被服务端接受；写成布尔会直接回「请求错误」.
             writer.WriteNumber("close_comment", allowInteract ? 0 : 1);
             writer.WriteNumber("close_repost", allowInteract ? 0 : 1);
             writer.WriteEndObject();
@@ -237,7 +238,13 @@ public static class DynamicShareService
             {
                 var dynId = ReadDynamicId(root);
                 logger?.LogInformation("动态{Action}成功：{DynId}", action, dynId);
-                return (true, string.IsNullOrEmpty(dynId) ? $"{action}成功" : $"{action}成功（{dynId}）");
+
+                // 发完回查一次：确认「允许评论」真的写进去了，而不是只改了报文.
+                var commentState = string.IsNullOrEmpty(dynId)
+                    ? string.Empty
+                    : await CheckCommentStateAsync(dynId!, cookie, logger).ConfigureAwait(false);
+                var suffix = string.IsNullOrEmpty(dynId) ? string.Empty : $"（{dynId}）";
+                return (true, $"{action}成功{suffix}{commentState}");
             }
 
             logger?.LogWarning(
@@ -297,6 +304,204 @@ public static class DynamicShareService
         }
     }
 
+    /// <summary>
+    /// 回查刚发出去的动态，确认评论开关的实际状态.
+    /// 判据：basic.comment_id_str 非空 = 评论开着；为空 = 评论已关.
+    /// 刚发出来的动态要过一会儿才进详情索引（会回 MISS_OPUS_DETAIL_DATA），
+    /// 所以先重试两次，还不行就翻自己的空间动态去找这一条.
+    /// </summary>
+    /// <param name="dynId">动态 id.</param>
+    /// <param name="cookie">登录态.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>给用户看的补充说明.</returns>
+    private static async Task<string> CheckCommentStateAsync(string dynId, string cookie, ILogger? logger)
+    {
+        try
+        {
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                if (attempt > 0)
+                {
+                    await Task.Delay(1500).ConfigureAwait(false);
+                }
+
+                var state = await ReadCommentStateFromDetailAsync(dynId, cookie, logger).ConfigureAwait(false);
+                if (state is not null)
+                {
+                    return DescribeCommentState(state.Value.HasComment, state.Value.Count, state.Value.Forbidden, dynId, logger);
+                }
+            }
+
+            // 详情接口还没索引到：翻自己的空间动态，按 id 找这一条.
+            var fromFeed = await ReadCommentStateFromSpaceAsync(dynId, cookie, logger).ConfigureAwait(false);
+            if (fromFeed is not null)
+            {
+                return DescribeCommentState(fromFeed.Value.HasComment, fromFeed.Value.Count, fromFeed.Value.Forbidden, dynId, logger);
+            }
+
+            logger?.LogWarning("回查动态评论状态：详情与空间列表都没找到 {DynId}", dynId);
+            return string.Empty;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "回查动态评论状态出错");
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// 把详情接口里能看到的评论字段如实报出来.
+    /// 注意：能不能评论在看客视角上表现为 comment.forbidden，
+    /// 关闭评论时详情接口未必换一套字段，所以这里不硬断言"开/关".
+    /// </summary>
+    private static string DescribeCommentState(bool hasComment, int count, bool forbidden, string dynId, ILogger? logger)
+    {
+        logger?.LogInformation(
+            "动态 {DynId} 评论字段：comment_id_str={HasId} forbidden={Forbidden} 现有评论 {Count} 条",
+            dynId,
+            hasComment ? "有" : "无",
+            forbidden,
+            count);
+
+        return forbidden
+            ? " · 接口标记：不可评论"
+            : $" · 接口标记：可评论（{count} 条）";
+    }
+
+    /// <summary>
+    /// 诊断用：把某条动态的 basic / module_stat 原样打出来，用来确认「评论是否关闭」到底看哪个字段.
+    /// </summary>
+    /// <param name="dynId">动态 id.</param>
+    /// <param name="cookie">登录态.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>等待任务.</returns>
+    internal static async Task DumpDynamicAsync(string dynId, string cookie, ILogger? logger)
+    {
+        try
+        {
+            var text = await GetAsync($"https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id={Uri.EscapeDataString(dynId)}", cookie).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(text);
+            if (!document.RootElement.TryGetProperty("data", out var data) || !data.TryGetProperty("item", out var item))
+            {
+                logger?.LogInformation("诊断 {DynId}: 详情没数据 {Head}", dynId, text.Length > 150 ? text[..150] : text);
+                return;
+            }
+
+            var basic = item.TryGetProperty("basic", out var b) ? b.GetRawText() : "(无)";
+            var stat = item.TryGetProperty("modules", out var m) && m.TryGetProperty("module_stat", out var s) ? s.GetRawText() : "(无)";
+            logger?.LogInformation("诊断 {DynId} basic={Basic}", dynId, basic.Length > 600 ? basic[..600] : basic);
+            logger?.LogInformation("诊断 {DynId} module_stat={Stat}", dynId, stat.Length > 600 ? stat[..600] : stat);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "诊断 {DynId} 出错", dynId);
+        }
+    }
+
+    private static async Task<(bool HasComment, int Count, bool Forbidden)?> ReadCommentStateFromDetailAsync(
+        string dynId,
+        string cookie,
+        ILogger? logger)
+    {
+        var text = await GetAsync(
+            $"https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id={Uri.EscapeDataString(dynId)}",
+            cookie).ConfigureAwait(false);
+
+        using var document = JsonDocument.Parse(text);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("code", out var codeNode) || codeNode.GetInt32() != 0)
+        {
+            logger?.LogDebug(
+                "详情接口暂未返回（{Head}）",
+                text.Length > 120 ? text[..120] : text);
+            return null;
+        }
+
+        if (!root.TryGetProperty("data", out var data) || !data.TryGetProperty("item", out var item))
+        {
+            return null;
+        }
+
+        return ReadStateFromItem(item);
+    }
+
+    private static async Task<(bool HasComment, int Count, bool Forbidden)?> ReadCommentStateFromSpaceAsync(
+        string dynId,
+        string cookie,
+        ILogger? logger)
+    {
+        var mid = ExtractCookie(cookie, "DedeUserID");
+        if (string.IsNullOrWhiteSpace(mid))
+        {
+            return null;
+        }
+
+        var text = await GetAsync(
+            $"https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid={Uri.EscapeDataString(mid)}&features=itemOpusStyle",
+            cookie).ConfigureAwait(false);
+
+        using var document = JsonDocument.Parse(text);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("code", out var codeNode) || codeNode.GetInt32() != 0
+            || !root.TryGetProperty("data", out var data)
+            || !data.TryGetProperty("items", out var items)
+            || items.ValueKind != JsonValueKind.Array)
+        {
+            logger?.LogDebug("空间动态列表没拿到（{Head}）", text.Length > 120 ? text[..120] : text);
+            return null;
+        }
+
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.TryGetProperty("id_str", out var idNode)
+                && string.Equals(idNode.GetString(), dynId, StringComparison.Ordinal))
+            {
+                return ReadStateFromItem(item);
+            }
+        }
+
+        return null;
+    }
+
+    private static (bool HasComment, int Count, bool Forbidden) ReadStateFromItem(JsonElement item)
+    {
+        var hasComment = item.TryGetProperty("basic", out var basic)
+            && basic.TryGetProperty("comment_id_str", out var cid)
+            && !string.IsNullOrEmpty(cid.GetString());
+
+        var count = 0;
+        var forbidden = false;
+        if (item.TryGetProperty("modules", out var modules)
+            && modules.TryGetProperty("module_stat", out var stat)
+            && stat.TryGetProperty("comment", out var comment))
+        {
+            if (comment.TryGetProperty("count", out var countNode) && countNode.ValueKind == JsonValueKind.Number)
+            {
+                count = countNode.GetInt32();
+            }
+
+            if (comment.TryGetProperty("forbidden", out var forbiddenNode) && forbiddenNode.ValueKind == JsonValueKind.True)
+            {
+                forbidden = true;
+            }
+        }
+
+        return (hasComment, count, forbidden);
+    }
+
+    private static async Task<string> GetAsync(string url, string cookie)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("Cookie", cookie);
+        request.Headers.TryAddWithoutValidation(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+        request.Headers.TryAddWithoutValidation("Referer", "https://t.bilibili.com/");
+        request.Headers.TryAddWithoutValidation("Origin", "https://t.bilibili.com");
+        using var response = await Client.SendAsync(request).ConfigureAwait(false);
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+    }
+
     private static string ReadDynamicId(JsonElement root)
     {
         if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
@@ -337,6 +542,9 @@ public static class DynamicShareService
         return string.Empty;
     }
 }
+
+
+
 
 
 
