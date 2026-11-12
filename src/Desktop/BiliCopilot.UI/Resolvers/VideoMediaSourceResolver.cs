@@ -345,8 +345,12 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             // 档位要按「片源真实上限」来试：直接要 120(4K) 遇到只有 1080P 的片源，
             // 服务端上游会失败并回 {"code":2,"message":"fail"}（实测：1080P 片源要 4K 必挂）。
             // 所以从高到低逐个试，成功即停；每失败一次会消耗一次解析额度，最多试 3 档.
-            // 按设置里的画质偏好决定要哪几档（自动最高 / 1080P60 优先 / 1080P 高码率优先）.
+            // 按设置里的画质偏好决定要哪几档（自动最高 / 1080P60 优先）.
             var ladder = QualityUnlockService.GetQualityLadder(selectedFormat.Quality);
+            logger.LogInformation(
+                "画质解锁：偏好={Preference} 阶梯=[{Ladder}]",
+                QualityUnlockService.PreferenceName,
+                string.Join(",", ladder));
             QualityUnlockResult unlocked = default;
             foreach (var candidate in ladder.Distinct())
             {

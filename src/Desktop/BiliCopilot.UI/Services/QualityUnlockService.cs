@@ -60,12 +60,30 @@ internal static class QualityUnlockService
     {
         get
         {
-            var value = SettingsToolkit.ReadLocalSetting<UnlockQualityPreference>(
+            // 用字符串存：ApplicationData 只认基本类型，枚举读回来会掉回默认值
+            // （表现为"选了 1080P60 却还在先申请 4K"）.
+            var raw = SettingsToolkit.ReadLocalSetting(
                 SettingNames.UnlockQualityPreference,
-                UnlockQualityPreference.AutoHighest);
-            return Enum.IsDefined(value) ? value : UnlockQualityPreference.AutoHighest;
+                UnlockQualityPreference.AutoHighest.ToString());
+            return Enum.TryParse<UnlockQualityPreference>(raw, ignoreCase: true, out var parsed)
+                ? parsed
+                : UnlockQualityPreference.AutoHighest;
         }
     }
+
+    /// <summary>
+    /// 写入画质偏好.
+    /// </summary>
+    /// <param name="preference">偏好.</param>
+    public static void SetPreference(UnlockQualityPreference preference)
+        => SettingsToolkit.WriteLocalSetting(
+            SettingNames.UnlockQualityPreference,
+            preference.ToString());
+
+    /// <summary>
+    /// 当前偏好的可读名字，排查用.
+    /// </summary>
+    public static string PreferenceName => Preference.ToString();
 
     /// <summary>
     /// 是否每次进入视频自动选最高画质（等价于偏好 = AutoHighest）.
@@ -363,7 +381,7 @@ internal static class QualityUnlockService
         logger?.LogInformation("画质解锁请求体：{Body}", maskedBody);
         logger?.LogInformation("画质解锁请求 URL：{Url}", playUrl);
 
-        return await SendToServerAsync("api/bzview2", ui, body, context, logger).ConfigureAwait(false);
+        return await SendToServerAsync("api/bzview2", ui, body, qn, context, logger).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -403,7 +421,7 @@ internal static class QualityUnlockService
         var context = $"服务器={Server} ep={epId} season={seasonId} cid={cid} qn={qn}";
 
         logger?.LogInformation("画质解锁（番剧）请求：{Context}", context);
-        return await SendToServerAsync("api/bzview3", ui, body, context, logger).ConfigureAwait(false);
+        return await SendToServerAsync("api/bzview3", ui, body, qn, context, logger).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -598,6 +616,7 @@ internal static class QualityUnlockService
         string apiPath,
         string ui,
         string body,
+        int preferredQuality,
         string context,
         ILogger? logger)
     {
@@ -646,7 +665,7 @@ internal static class QualityUnlockService
                     $"{context} · 卡在=服务端替我们取 playurl · code={code} · 服务器返回={Shorten(text, 120)}");
             }
 
-            var (video, audio, quality, width, height, bandwidth, codecs) = ParseDash(root);
+            var (video, audio, quality, width, height, bandwidth, codecs) = ParseDash(root, preferredQuality);
             if (string.IsNullOrEmpty(video) && string.IsNullOrEmpty(audio))
             {
                 logger?.LogWarning("画质解锁返回里没有 dash 地址");
@@ -753,7 +772,7 @@ internal static class QualityUnlockService
         }
     }
 
-    private static (string? Video, string? Audio, int Quality, int Width, int Height, long Bandwidth, string? Codecs) ParseDash(JsonElement root)
+    private static (string? Video, string? Audio, int Quality, int Width, int Height, long Bandwidth, string? Codecs) ParseDash(JsonElement root, int preferredQuality)
     {
         // 服务器直接把 playurl 的 JSON 返回回来，结构同 B 站：data.dash.video[] / data.dash.audio[].
         // 番剧那条（ogv/player/playview）不是这个形状，dash 可能埋在 data.result 或
@@ -778,9 +797,29 @@ internal static class QualityUnlockService
             return (null, null, 0, 0, 0, 0, null);
         }
 
-        var quality = dash.TryGetProperty("video", out var videos) && videos.ValueKind == JsonValueKind.Array
-            ? videos.EnumerateArray().Select(p => p.TryGetProperty("id", out var id) ? id.GetInt32() : 0).DefaultIfEmpty(0).Max()
-            : 0;
+        // 服务器把整条 dash 阶梯都返回回来，以前这里直接取 id 最大值，
+        // 于是"选了 1080P60 却拿到 4K"——现在按调用方要的 qn 挑.
+        var availableIds = dash.TryGetProperty("video", out var videos) && videos.ValueKind == JsonValueKind.Array
+            ? videos.EnumerateArray().Select(p => p.TryGetProperty("id", out var id) ? id.GetInt32() : 0).Where(p => p > 0).ToList()
+            : [];
+
+        var wantedId = 0;
+        if (availableIds.Count > 0)
+        {
+            if (preferredQuality > 0 && availableIds.Contains(preferredQuality))
+            {
+                wantedId = preferredQuality;
+            }
+            else
+            {
+                // 没有正好这档时，退到「不超过它」里最高的一档；仍没有就取最高.
+                wantedId = preferredQuality > 0
+                    ? availableIds.Where(p => p <= preferredQuality).DefaultIfEmpty(availableIds.Max()).Max()
+                    : availableIds.Max();
+            }
+        }
+
+        var quality = wantedId;
 
         string? video = null;
         var width = 0;
@@ -790,7 +829,8 @@ internal static class QualityUnlockService
         if (dash.TryGetProperty("video", out var videoArray) && videoArray.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in videoArray.EnumerateArray()
-                .OrderByDescending(p => p.TryGetProperty("id", out var vid) ? vid.GetInt32() : 0))
+                .OrderBy(p => (p.TryGetProperty("id", out var vid) ? vid.GetInt32() : 0) == wantedId ? 0 : 1)
+                .ThenByDescending(p => p.TryGetProperty("id", out var vid2) ? vid2.GetInt32() : 0))
             {
                 var url = item.TryGetProperty("baseUrl", out var u1) ? u1.GetString()
                     : item.TryGetProperty("base_url", out var u2) ? u2.GetString() : null;
@@ -958,6 +998,8 @@ internal sealed class QualityUnlockSyncResult
 
     public bool Success => !string.IsNullOrEmpty(Server);
 }
+
+
 
 
 
