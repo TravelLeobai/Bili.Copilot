@@ -30,7 +30,11 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     /// </summary>
     private const int PageBatchSize = 12;
 
-    private static readonly string[] ReplayKeywords = ["直播回放", "录播"];
+    /// <summary>
+    /// 标题里出现这些词就当成录播。
+    /// 「录像」放最后：它最宽，先让「直播录像 / 直播回放 / 录播」这些更具体的词命中.
+    /// </summary>
+    private static readonly string[] ReplayKeywords = ["直播回放", "直播录像", "录播", "回放", "录像"];
 
     private readonly ILogger<LiveMomentSectionDetailViewModel> _logger;
     private readonly List<LiveSectionCardViewModel> _allCards = [];
@@ -439,6 +443,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 
