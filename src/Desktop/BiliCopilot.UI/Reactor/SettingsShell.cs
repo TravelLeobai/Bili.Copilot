@@ -47,7 +47,6 @@ public sealed class SettingsShell : Component
             new ProxySettingControl(),
             new AdSkipSettingControl(),
             new QualityUnlockSettingControl(),
-            new TvAuthSettingControl(),
         });
     }
 
@@ -77,8 +76,6 @@ public sealed class SettingsShell : Component
             SectionTitle("网络与加速"),
             Control<ProxySettingControl>(),
             Control<QualityUnlockSettingControl>(),
-            SectionTitle("账户"),
-            Control<TvAuthSettingControl>(),
             SectionTitle("通用"),
             Control<ThemeSettingControl>(),
             Control<LayoutSettingSection>(),

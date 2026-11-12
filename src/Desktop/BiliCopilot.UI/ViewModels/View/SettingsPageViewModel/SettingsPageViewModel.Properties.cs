@@ -468,19 +468,8 @@ public sealed partial class SettingsPageViewModel
     /// </summary>
     public ObservableCollection<string> GpuDevices { get; } = [];
 
-    /// <summary>
-    /// 转发授权（TV 扫码）的状态文本：未授权 / 已授权，到期 MM-dd HH:mm.
-    /// </summary>
-    [ObservableProperty]
-    private string _tvAuthStatusText = "未授权";
 
-    /// <summary>
-    /// 扫码授权流程是否正在进行（避免重复弹框）.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isTvAuthBusy;
+
+
+
 }
-
-
-
-
