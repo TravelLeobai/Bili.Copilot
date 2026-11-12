@@ -115,9 +115,14 @@ public static class DynamicShareService
     {
         var id = aidOrBvid ?? string.Empty;
         var isBvid = id.StartsWith("BV", StringComparison.OrdinalIgnoreCase);
-        var link = isBvid
-            ? $"https://www.bilibili.com/video/{id}"
-            : $"https://www.bilibili.com/video/av{id}";
+
+        // B 站只把 BV 链接解析成视频卡，av 链接会原样当普通文本发出去——
+        // 拿到的是 aid 时先换成 BV 再发.
+        var bvid = isBvid ? id : await ResolveBvidAsync(id, cookie, logger).ConfigureAwait(false);
+        var link = string.IsNullOrEmpty(bvid)
+            ? $"https://www.bilibili.com/video/av{id}"
+            : $"https://www.bilibili.com/video/{bvid}";
+        logger?.LogInformation("转发视频链接：{Link}（原始 id {Id}）", link, id);
 
         // 数字 aid 才有 vc 视频动态可走；BV 号得先换 aid，这里直接用 opus 的链接写法.
         if (UseLegacyVcApi && !isBvid && long.TryParse(id, out _))
@@ -479,6 +484,48 @@ public static class DynamicShareService
     }
 
 
+    /// <summary>
+    /// aid 转 BV 号；拿不到就返回空（调用方退回 av 链接）.
+    /// </summary>
+    /// <param name="aid">视频 aid.</param>
+    /// <param name="cookie">登录态（可选）.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>BV 号或空串.</returns>
+    private static async Task<string> ResolveBvidAsync(string aid, string cookie, ILogger? logger)
+    {
+        if (!long.TryParse(aid, out _))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"https://api.bilibili.com/x/web-interface/view?aid={aid}");
+            request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            request.Headers.TryAddWithoutValidation(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+            request.Headers.TryAddWithoutValidation("Referer", "https://www.bilibili.com/");
+
+            using var response = await Client.SendAsync(request).ConfigureAwait(false);
+            var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.TryGetProperty("data", out var data)
+                && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("bvid", out var bvidNode)
+                && bvidNode.ValueKind == JsonValueKind.String
+                ? bvidNode.GetString() ?? string.Empty
+                : string.Empty;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "aid 转 BV 失败：{Aid}", aid);
+            return string.Empty;
+        }
+    }
+
     private static string ReadDynamicId(JsonElement root)
     {
         if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
@@ -519,6 +566,7 @@ public static class DynamicShareService
         return string.Empty;
     }
 }
+
 
 
 
