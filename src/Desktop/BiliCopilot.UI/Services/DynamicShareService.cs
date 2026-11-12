@@ -18,6 +18,14 @@ namespace BiliCopilot.UI.Services;
 public static class DynamicShareService
 {
     private const string CreateUrl = "https://api.bilibili.com/x/dynamic/feed/create/dyn";
+    /// <summary>
+    /// vc 老接口是否可用.
+    /// 实测（2026-11-12）：dynamic_repost/repost 返回 HTTP 404（HTML），dynamic_svr/create 返回
+    /// 4126001 请求数据发生错误——两个接口都已经不可用，留着只会每次转发白跑一次请求，
+    /// 所以默认关掉；万一以后恢复，把这个开关打开即可.
+    /// </summary>
+    private static readonly bool UseLegacyVcApi = false;
+
     private const string VcRepostUrl = "https://api.vc.bilibili.com/dynamic_repost/v1/dynamic_repost/repost";
 
     /// <summary>vc 发动态（视频等）.</summary>
@@ -54,19 +62,24 @@ public static class DynamicShareService
         bool allowInteract = true,
         ILogger? logger = null)
     {
-        // 先走 vc 的 dynamic_repost/repost（真正的"转发"接口，BiliUWP-Lite 走的这条）.
-        var vc = await VcRepostAsync(dynamicId, content, cookie, logger).ConfigureAwait(false);
-        if (vc.Success)
+        string? vcMessage = null;
+        if (UseLegacyVcApi)
         {
-            return vc;
+            var vc = await VcRepostAsync(dynamicId, content, cookie, logger).ConfigureAwait(false);
+            if (vc.Success)
+            {
+                return vc;
+            }
+
+            vcMessage = vc.Message;
+            logger?.LogWarning("vc 转发未成功（{Message}），改用网页端 create/dyn 兜底", vc.Message);
         }
 
-        // 兜底：网页端 create/dyn + scene=4 + web_repost_src.
-        logger?.LogWarning("vc 转发未成功（{Message}），改用网页端 create/dyn 兜底", vc.Message);
+        // 网页端 create/dyn + scene=4 + web_repost_src：这条是真转发（挂在原动态下面），不是发链接.
         var web = await PublishAsync(content, cookie, allowInteract, logger, SceneRepost, dynamicId, "转发动态").ConfigureAwait(false);
-        return web.Success
+        return web.Success || vcMessage is null
             ? web
-            : (false, $"{vc.Message}；兜底也失败：{web.Message}");
+            : (false, $"{vcMessage}；兜底也失败：{web.Message}");
     }
 
     /// <summary>
@@ -107,7 +120,7 @@ public static class DynamicShareService
             : $"https://www.bilibili.com/video/av{id}";
 
         // 数字 aid 才有 vc 视频动态可走；BV 号得先换 aid，这里直接用 opus 的链接写法.
-        if (!isBvid && long.TryParse(id, out _))
+        if (UseLegacyVcApi && !isBvid && long.TryParse(id, out _))
         {
             var vc = await VcShareVideoAsync(id, content ?? string.Empty, cookie, logger).ConfigureAwait(false);
             if (vc.Success)
@@ -314,6 +327,8 @@ public static class DynamicShareService
                 : BiliVcSigner.BuildSignedQuery([]);
             logger?.LogInformation("vc 视频转发签名方式：{Mode}", hasTvToken ? "TV 授权（含 access_key）" : "Android 默认");
 
+            // 字段照 BiliUWP-Lite 的 CreateDynamicText/CreateDynamicPhoto 抄齐：
+            // 少了 setting / jumpfrom / up_*_comment 会被服务端判成"请求数据发生错误"(4126001).
             var form = new Dictionary<string, string>
             {
                 ["uid"] = uid,
@@ -321,10 +336,13 @@ public static class DynamicShareService
                 ["type"] = "8",
                 ["rid"] = aid,
                 ["content"] = content ?? string.Empty,
+                ["setting"] = "{\"copy_forbidden\":0}",
                 ["at_uids"] = string.Empty,
                 ["at_control"] = string.Empty,
-                ["ctrl"] = "[]",
-                ["extension"] = "{\"emoji_type\":1,\"from\":{\"emoji_type\":1},\"flag_cfg\":{}}",
+                ["jumpfrom"] = "110",
+                ["up_choose_comment"] = "0",
+                ["up_close_comment"] = "0",
+                ["extension"] = "{\"emoji_type\":1}",
             };
 
             using var request = new HttpRequestMessage(
@@ -337,10 +355,12 @@ public static class DynamicShareService
             request.Headers.TryAddWithoutValidation(
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            request.Headers.TryAddWithoutValidation("Referer", "https://t.bilibili.com/");
+            request.Headers.TryAddWithoutValidation("Referer", "https://www.bilibili.com/");
+            request.Headers.TryAddWithoutValidation("Origin", "https://www.bilibili.com");
 
             using var response = await Client.SendAsync(request).ConfigureAwait(false);
-            if ((int)response.StatusCode == 412)
+            var status = (int)response.StatusCode;
+            if (status == 412)
             {
                 logger?.LogWarning("vc 视频转发被风控（HTTP 412）");
                 return (false, "vc 接口被风控拦下（HTTP 412）");
@@ -418,16 +438,24 @@ public static class DynamicShareService
             request.Headers.TryAddWithoutValidation(
                 "User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
-            request.Headers.TryAddWithoutValidation("Referer", "https://t.bilibili.com/");
+            request.Headers.TryAddWithoutValidation("Referer", "https://www.bilibili.com/");
+            request.Headers.TryAddWithoutValidation("Origin", "https://www.bilibili.com");
 
             using var response = await Client.SendAsync(request).ConfigureAwait(false);
-            if ((int)response.StatusCode == 412)
+            var status = (int)response.StatusCode;
+            if (status == 412)
             {
                 logger?.LogWarning("vc 转发被风控（HTTP 412）");
                 return (false, "vc 接口被风控拦下（HTTP 412）");
             }
 
             var text = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (!text.TrimStart().StartsWith("{"))
+            {
+                logger?.LogWarning("vc 转发返回非 JSON（HTTP {Status}）：{Head}", status, text.Length > 160 ? text[..160] : text);
+                return (false, $"vc 接口返回 HTTP {status} 的非 JSON 内容（多半被风控页拦了）");
+            }
+
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
             var code = root.TryGetProperty("code", out var codeNode) ? codeNode.GetInt32() : -1;
@@ -491,5 +519,11 @@ public static class DynamicShareService
         return string.Empty;
     }
 }
+
+
+
+
+
+
 
 
