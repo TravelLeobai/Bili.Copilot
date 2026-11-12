@@ -66,7 +66,7 @@
                         Margin="0,0,8,0"
                         Command="{x:Bind ViewModel.PlayPreviousCommand, Mode=OneWay}"
                         IsEnabled="{x:Bind ViewModel.IsPrevButtonEnabled, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        Style="{StaticResource PlayerGlassCircleButtonStyle}"
                         ToolTipService.ToolTip="{x:Bind ViewModel.PrevButtonToolTip, Mode=OneWay}"
                         Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
                         <ic:SymbolIcon
@@ -78,7 +78,7 @@
                         x:Name="BackwardButton"
                         Margin="0,0,8,0"
                         Command="{x:Bind ViewModel.SkipBackwardCommand, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        Style="{StaticResource PlayerGlassCircleButtonStyle}"
                         ToolTipService.ToolTip="{x:Bind ViewModel.BackwardTip, Mode=OneWay}"
                         Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
                         <ic:SymbolIcon
@@ -110,7 +110,7 @@
                         x:Name="ForwardButton"
                         Margin="8,0,0,0"
                         Command="{x:Bind ViewModel.SkipForwardCommand, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        Style="{StaticResource PlayerGlassCircleButtonStyle}"
                         ToolTipService.ToolTip="{x:Bind ViewModel.ForwardTip, Mode=OneWay}"
                         Visibility="{x:Bind IsSkipButtonsVisible, Mode=OneWay}">
                         <ic:SymbolIcon
@@ -123,7 +123,7 @@
                         Margin="8,0,0,0"
                         Command="{x:Bind ViewModel.PlayNextCommand, Mode=OneWay}"
                         IsEnabled="{x:Bind ViewModel.IsNextButtonEnabled, Mode=OneWay}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        Style="{StaticResource PlayerGlassCircleButtonStyle}"
                         ToolTipService.ToolTip="{x:Bind ViewModel.NextButtonToolTip, Mode=OneWay}"
                         Visibility="{x:Bind ViewModel.IsVideoNavigationAvailable, Mode=OneWay}">
                         <ic:SymbolIcon
@@ -153,7 +153,7 @@
                         Height="32"
                         Command="{x:Bind ViewModel.ToggleMuteStateCommand, Mode=OneWay}"
                         CornerRadius="16"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}">
+                        Style="{StaticResource PlayerGlassCircleButtonStyle}">
                         <Grid>
                             <ic:SymbolIcon
                                 VerticalAlignment="Center"
@@ -189,7 +189,7 @@
                     x:Name="SlimVolumeButton"
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
-                    Style="{StaticResource BasicPlayerIconButtonStyle}"
+                    Style="{StaticResource PlayerGlassCircleButtonStyle}"
                     ToolTipService.ToolTip="{ext:Locale Name=CurrentVolume}"
                     Visibility="Collapsed">
                     <Grid>
@@ -256,7 +256,7 @@
                     x:Name="SpeedButton"
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
-                    Style="{StaticResource BasicPlayerIconButtonStyle}"
+                    Style="{StaticResource PlayerGlassCircleButtonStyle}"
                     ToolTipService.ToolTip="{x:Bind GetSpeedText(ViewModel.Player.PlaybackRate), Mode=OneWay}"
                     Visibility="{x:Bind local:OverlayTransportControls.GetLiveHidden(ViewModel.IsLive), Mode=OneWay}">
                     <ic:SymbolIcon FontSize="14" Symbol="TopSpeed" />
@@ -366,7 +366,7 @@
                         x:Name="SubtitleButton"
                         Margin="0,0,8,0"
                         VerticalAlignment="Center"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        Style="{StaticResource PlayerGlassCircleButtonStyle}"
                         ToolTipService.ToolTip="{ext:Locale Name=Subtitle}"
                         Visibility="{x:Bind ViewModel.IsSubtitleEmpty, Mode=OneWay, Converter={StaticResource BoolToVisibilityReverseConverter}}">
                         <ic:SymbolIcon FontSize="14" Symbol="Subtitles" />
@@ -450,7 +450,7 @@
                         AutomationProperties.Name="{ext:Locale Name=DanmakuDisplaySettings}"
                         Click="OnDanmakuOptionsButtonClick"
                         IsEnabled="{x:Bind ViewModel.IsDanmakuLoading, Mode=OneWay, Converter={StaticResource ObjectToBoolReverseConverter}}"
-                        Style="{StaticResource BasicPlayerIconButtonStyle}"
+                        Style="{StaticResource PlayerGlassCircleButtonStyle}"
                         ToolTipService.ToolTip="{ext:Locale Name=DanmakuDisplaySettings}"
                         Visibility="{x:Bind local:OverlayTransportControls.GetLiveHidden(ViewModel.IsLive), Mode=OneWay}">
                         <ic:SymbolIcon FontSize="14" Symbol="ContentSettings" />
@@ -474,7 +474,7 @@
                     x:Name="LiveDanmakuFilterButton"
                     Margin="0,0,8,0"
                     AutomationProperties.Name="弹幕过滤"
-                    Style="{StaticResource BasicPlayerIconButtonStyle}"
+                    Style="{StaticResource PlayerGlassCircleButtonStyle}"
                     ToolTipService.ToolTip="弹幕过滤"
                     Visibility="{x:Bind local:OverlayTransportControls.GetLiveOnly(ViewModel.IsLive), Mode=OneWay}">
                     <Grid
@@ -515,7 +515,7 @@
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
                     Command="{x:Bind ViewModel.ToggleCompactOverlayCommand, Mode=OneWay}"
-                    Style="{StaticResource BasicPlayerIconButtonStyle}"
+                    Style="{StaticResource PlayerGlassCircleButtonStyle}"
                     ToolTipService.ToolTip="{x:Bind GetCompactOverlayTip(ViewModel.Player.IsCompactOverlay), Mode=OneWay}">
                     <ic:SymbolIcon FontSize="14" Symbol="{x:Bind GetCompactOverlaySymbol(ViewModel.Player.IsCompactOverlay), Mode=OneWay}" />
                 </Button>
@@ -524,7 +524,7 @@
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
                     Command="{x:Bind ViewModel.ToggleFullScreenCommand, Mode=OneWay}"
-                    Style="{StaticResource BasicPlayerIconButtonStyle}"
+                    Style="{StaticResource PlayerGlassCircleButtonStyle}"
                     ToolTipService.ToolTip="{x:Bind GetFullScreenTip(ViewModel.Player.IsFullScreen), Mode=OneWay}">
                     <ic:SymbolIcon FontSize="14" Symbol="{x:Bind GetFullScreenSymbol(ViewModel.Player.IsFullScreen), Mode=OneWay}" />
                 </Button>
@@ -532,7 +532,7 @@
                     x:Name="OverflowButton"
                     Margin="0,0,8,0"
                     VerticalAlignment="Center"
-                    Style="{StaticResource BasicPlayerIconButtonStyle}"
+                    Style="{StaticResource PlayerGlassCircleButtonStyle}"
                     ToolTipService.ToolTip="{ext:Locale Name=MoreOptions}"
                     Visibility="Collapsed">
                     <ic:SymbolIcon FontSize="14" Symbol="MoreVertical" />
@@ -745,5 +745,6 @@
         </VisualStateManager.VisualStateGroups>
     </Grid>
 </local:PlayerControlBase>
+
 
 
