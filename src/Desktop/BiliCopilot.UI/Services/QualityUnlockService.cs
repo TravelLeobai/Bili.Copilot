@@ -53,8 +53,8 @@ internal static class QualityUnlockService
 
     /// <summary>
     /// 画质偏好：决定解锁时向解析服务要哪一档、以及进视频默认选哪档.
-    /// 老配置里只有「自动选择最高画质」这个开关，迁移成新枚举：
-    /// 开关开着就是 AutoHighest，关着按 1080P 高码率优先处理.
+    /// 存进去的值可能是旧版本写下的（比如已删掉的「1080P 高码率优先」），
+    /// 这里统一收敛到两个合法值上.
     /// </summary>
     public static UnlockQualityPreference Preference
     {
@@ -63,7 +63,7 @@ internal static class QualityUnlockService
             var value = SettingsToolkit.ReadLocalSetting<UnlockQualityPreference>(
                 SettingNames.UnlockQualityPreference,
                 UnlockQualityPreference.AutoHighest);
-            return value;
+            return Enum.IsDefined(value) ? value : UnlockQualityPreference.AutoHighest;
         }
     }
 
@@ -80,10 +80,42 @@ internal static class QualityUnlockService
     public static int[] GetQualityLadder(int currentQuality)
         => Preference switch
         {
+            // 1080P 60 帧优先：没有 60 帧就退 1080P 高码率，最后才退当前档位.
             UnlockQualityPreference.FullHd60 => [116, 112, currentQuality],
-            UnlockQualityPreference.HighBitrate => [112, 116, currentQuality],
             _ => [Math.Max(currentQuality, 120), 112, 80],
         };
+
+    /// <summary>
+    /// 按偏好挑一档「进视频后默认选这个」的 qn；返回 0 表示不干预.
+    /// </summary>
+    /// <param name="available">当前片源可选的 qn 集合.</param>
+    /// <returns>要选的 qn，0 表示交给后续逻辑.</returns>
+    public static int PickPreferredQuality(IEnumerable<int> available)
+    {
+        var list = available?.ToList() ?? [];
+        if (list.Count == 0)
+        {
+            return 0;
+        }
+
+        if (Preference == UnlockQualityPreference.FullHd60)
+        {
+            // 60 帧 → 高码率 → 最高可用.
+            if (list.Contains(116))
+            {
+                return 116;
+            }
+
+            if (list.Contains(112))
+            {
+                return 112;
+            }
+
+            return list.Max();
+        }
+
+        return list.Max();
+    }
 
 
 

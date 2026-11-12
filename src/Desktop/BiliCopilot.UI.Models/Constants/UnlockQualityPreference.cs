@@ -13,12 +13,8 @@ public enum UnlockQualityPreference
     AutoHighest,
 
     /// <summary>
-    /// 1080P 60 帧优先（qn=116）.
+    /// 1080P 60 帧优先（qn=116）；没有 60 帧时退 1080P 高码率（qn=112），
+    /// 两者都没有才退到当前档位.
     /// </summary>
     FullHd60,
-
-    /// <summary>
-    /// 1080P 高码率优先（qn=112）.
-    /// </summary>
-    HighBitrate,
 }

@@ -82,14 +82,23 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             availableFormats = [.. availableFormats.Where(p => p.IsEnabled)];
         }
 
-        // 画质解锁开启且勾了「自动最高画质」时，直接选当前可用的最高一档.
-        if (QualityUnlockService.IsEnabled && QualityUnlockService.AutoMaxQuality && availableFormats.Count > 0)
+        // 开了画质解锁就按「画质偏好」直接挑一档：
+        //   自动最高 → 当前可用最高；
+        //   1080P 60 帧 → 116，没有就退 112（高码率），再没有才退最高可用.
+        if (QualityUnlockService.IsEnabled && availableFormats.Count > 0)
         {
-            var maxFormat = availableFormats.OrderByDescending(p => p.Data.Quality).First();
-            this.Get<ILogger<VideoMediaSourceResolver>>().LogInformation(
-                "画质解锁：自动选中最高画质 qn={Quality}",
-                maxFormat.Data.Quality);
-            return maxFormat.Data;
+            var targetQuality = QualityUnlockService.PickPreferredQuality(
+                availableFormats.Select(p => p.Data.Quality));
+            if (targetQuality > 0)
+            {
+                var preferred = availableFormats.FirstOrDefault(p => p.Data.Quality == targetQuality)
+                    ?? availableFormats.OrderByDescending(p => p.Data.Quality).First();
+                this.Get<ILogger<VideoMediaSourceResolver>>().LogInformation(
+                    "画质解锁：按偏好选 qn={Quality}（偏好={Preference}）",
+                    preferred.Data.Quality,
+                    QualityUnlockService.Preference);
+                return preferred.Data;
+            }
         }
 
         SourceItemViewModel? selectedFormat = default;

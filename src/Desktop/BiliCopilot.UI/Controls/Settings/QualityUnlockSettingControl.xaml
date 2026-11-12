@@ -30,7 +30,7 @@
                 </base:SettingsCard.HeaderIcon>
                 <ToggleSwitch IsOn="{x:Bind ViewModel.QualityUnlockEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
-            <base:SettingsCard Description="解锁时要哪一档：自动最高 / 1080P60 帧 / 1080P 高码率" Header="画质偏好">
+            <base:SettingsCard Description="解锁时要哪一档：自动最高，或 1080P 60 帧（没有 60 帧时退 1080P 高码率）" Header="画质偏好">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="TopSpeed" />
                 </base:SettingsCard.HeaderIcon>
@@ -78,3 +78,4 @@
         </base:SettingsExpander.Items>
     </base:SettingsExpander>
 </local:SettingsPageControlBase>
+

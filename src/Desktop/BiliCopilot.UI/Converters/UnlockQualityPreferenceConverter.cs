@@ -15,8 +15,7 @@ internal sealed partial class UnlockQualityPreferenceConverter : IValueConverter
         => value is UnlockQualityPreference preference
             ? preference switch
             {
-                UnlockQualityPreference.FullHd60 => "1080P 60 帧优先",
-                UnlockQualityPreference.HighBitrate => "1080P 高码率优先",
+                UnlockQualityPreference.FullHd60 => "1080P 60 帧优先（无 60 帧时退高码率）",
                 _ => "自动选择最高画质",
             }
             : string.Empty;

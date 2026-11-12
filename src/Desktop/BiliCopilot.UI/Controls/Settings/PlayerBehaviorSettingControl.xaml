@@ -70,6 +70,24 @@
                     Command="{x:Bind ViewModel.OpenMpvConfigInEditorCommand, Mode=OneWay}"
                     Content="{ext:Locale Name=OpenConfig}" />
             </base:SettingsCard>
+            <base:SettingsCard
+                Description="仅在关闭画质解锁时生效；开着画质解锁时以上面「画质解锁 → 画质偏好」为准"
+                Header="{ext:Locale Name=PreferQuality}"
+                Visibility="{x:Bind local:PlayerBehaviorSettingControl.GetPreferQualityVisibility(ViewModel.QualityUnlockEnabled), Mode=OneWay}">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="TopSpeed" />
+                </base:SettingsCard.HeaderIcon>
+                <ComboBox
+                    MinWidth="120"
+                    ItemsSource="{x:Bind ViewModel.PreferQualityCollection, Mode=OneWay}"
+                    SelectedItem="{x:Bind ViewModel.PreferQuality, Mode=TwoWay}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="constants:PreferQualityType">
+                            <TextBlock Text="{x:Bind Converter={StaticResource PreferQualityConverter}}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </base:SettingsCard>
             <base:SettingsCard Header="{ext:Locale Name=DefaultPlayerDisplayMode}">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="LayoutColumnTwo" />
