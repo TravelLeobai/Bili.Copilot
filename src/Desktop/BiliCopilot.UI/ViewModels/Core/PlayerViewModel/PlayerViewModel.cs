@@ -155,6 +155,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         // 性能探针：本轮加载的计时起点（顺带作废上一轮还没收尾的样本，保证一次加载只有一个 Total）.
         var loadToken = Services.PerfProbe.BeginLoadProbe();
 
+        // 性能探针（三级）：同一段的内部拆分 widget-ctor / layout / first-frame，只写日志.
+        Services.PerfWidgetMountTrace.Begin();
+
         // 上一轮初始化如果还在飞，先取消：不然两个初始化会同时往 Player 上写状态.
         if (_initCts is not null)
         {
@@ -289,6 +292,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         ForwardTip = string.Format(ResourceToolkit.GetLocalizedString(StringNames.ForwardTemplate), SettingsToolkit.ReadLocalSetting(SettingNames.StepForwardSecond, 30d));
         RequestHideNextTip?.Invoke(this, EventArgs.Empty);
 
+        // 性能探针（三级）：同步 UI 段的边界，用来把 layout 拆成「同步活」与「await 之后」两半.
+        Services.PerfWidgetMountTrace.MarkFirstAwait();
+
         // 性能探针：同步段到此为止——下面是第一个真的可能让出线程的 await（暂停/停止，或 mpv client 创建）.
         // 这段覆盖窗口显示、播放器覆盖层构建与绑定属性重置，是纯 UI 线程上的活.
         Services.PerfProbe.RecordLoadSnapshot(loadToken);
@@ -309,6 +315,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
         try
         {
+            // 性能探针（三级）：检查点，进 PERFWM3:layout 的 detail 时间线.
+            Services.PerfWidgetMountTrace.Mark("initialize-internal-start");
             await InitializeInternalAsync();
         }
         catch (Exception ex)
@@ -472,6 +480,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
             logger.LogInformation("初始化：创建播放器");
             var createWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "create-player");
+            Services.PerfWidgetMountTrace.Mark("surface-ctor-start");
             Player = new PlayerSurface(new Richasy.MpvKernel.Player.MpvPlayer(
                 Client!,
                 _sourceResolver,
@@ -479,9 +488,12 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 logger: new MpvLogWatcher(logger, OnMpvSuspectLog)));
             Player.PropertyChanged += OnPlayerPropertyChanged;
             Player.Mpv!.UpdateResolvers(_sourceResolver, _historyResolver);
+            Services.PerfWidgetMountTrace.Mark("surface-ctor-end");
 
             // 性能探针：只量下面这一次 await（mpv 实例初始化），前面的拆旧实例不算在内.
             var mpvInitWatch = Services.PerfProbe.BeginLoadSegment();
+            // 性能探针（三级）：mpv 初始化那次 await 的起止，用来把 layout 段里的等待与布局分开.
+            Services.PerfWidgetMountTrace.MarkMpvAwaitStart();
             try
             {
                 // mpv 建实例偶尔会卡死（同一窗口里连着换视频时实测过，45 秒都不返回，
@@ -523,6 +535,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             }
             finally
             {
+                // 性能探针（三级）：mpv await 收尾（正常/超时/取消都到这儿）.
+                Services.PerfWidgetMountTrace.MarkMpvAwaitEnd();
+
                 // 性能探针：超时/取消也算这次 await 的耗时，照记（探针关闭时为空操作）.
                 Services.PerfProbe.EndLoadSegment(Services.PerfProbe.LoadMpvInitProbeName, mpvInitWatch);
             }
@@ -711,6 +726,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private void ShowPlayerWindow()
     {
+        // 性能探针（三级）：检查点，只进 PERFWM3:layout 的 detail 时间线.
+        Services.PerfWidgetMountTrace.Mark("show-window-start");
+
         if (Window?.IsDisposed != false)
         {
             Window = new PlayerWindow();
@@ -724,6 +742,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             keyboardSource.KeyUp += OnWindowKeyUp;
         }
 
+        Services.PerfWidgetMountTrace.Mark("player-window-ready");
+
         var hideMainWindowOnPlay = SettingsToolkit.ReadLocalSetting(SettingNames.HideMainWindowOnPlay, true);
 
         if (!Window.GetWindow().IsVisible)
@@ -731,11 +751,20 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             Window!.Show(Player == null && !hideMainWindowOnPlay);
         }
 
+        Services.PerfWidgetMountTrace.Mark("window-shown");
+
         var isFirstLoad = !_uiElementSetted;
         if (!_uiElementSetted)
         {
+            // 性能探针（三级）第一级：播放器覆盖层控件实例化（XAML InitializeComponent）.
+            Services.PerfWidgetMountTrace.MarkCtorStart();
             var overlay = new PlayerOverlay { ViewModel = this };
+            Services.PerfWidgetMountTrace.MarkCtorEnd("control=PlayerOverlay host=DesktopWindowXamlSource");
+
+            // 性能探针（三级）第二级起点：控件挂进窗口可视树.
+            Services.PerfWidgetMountTrace.MarkMount();
             Window!.SetUIElement(overlay);
+            Services.PerfWidgetMountTrace.Mark("set-ui-element-done");
             _uiElementSetted = true;
 
             var currentTheme = SettingsToolkit.ReadLocalSetting(SettingNames.AppTheme, ElementTheme.Default);
@@ -779,6 +808,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             ? Window.GetWindow().Size.Height > Window.GetWindow().Size.Width
             : Window.GetWindow().Size.Height >= Window.GetWindow().Size.Width;
         CheckBlackBackgroundVisible();
+        Services.PerfWidgetMountTrace.Mark("show-window-end");
     }
 
     private async Task SelectSourceAsync(SourceItemViewModel source)

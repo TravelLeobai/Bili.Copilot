@@ -57,9 +57,13 @@ public sealed partial class PlayerViewModel
 
         Subtitles.Clear();
         IsSubtitleEmpty = true;
+        // 性能探针（三级）：检查点，进 PERFWM3:layout 的 detail 时间线（连接器已就绪）.
+        Services.PerfWidgetMountTrace.Mark("connector-ready");
 
         if (Client?.IsDisposed != false)
         {
+            // 性能探针（三级）：检查点，用来量 Windows.Media.Playback.MediaPlayer + SMTC 这段同步开销.
+            Services.PerfWidgetMountTrace.Mark("native-mp-create");
             _nativeMp = new Windows.Media.Playback.MediaPlayer();
             _nativeMp.CommandManager.IsEnabled = false; // 禁用原生播放器的命令管理器.
             _smtc = _nativeMp.SystemMediaTransportControls;
@@ -67,7 +71,12 @@ public sealed partial class PlayerViewModel
             _smtc.IsPlayEnabled = true;
             _smtc.IsPauseEnabled = true;
             _smtc.ButtonPressed += OnSmtcButtonPressed;
+            Services.PerfWidgetMountTrace.Mark("native-mp-ready");
+
+            // 性能探针（三级）：检查点，用来量 DXGI 适配器枚举这段同步开销.
+            Services.PerfWidgetMountTrace.Mark("gpu-names-start");
             var gpuNames = AppToolkit.GetGpuNames();
+            Services.PerfWidgetMountTrace.Mark("gpu-names-ready");
             HasNvidiaGpu = gpuNames.Any(p => p.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase));
             var mpvPath = SettingsToolkit.ReadLocalSetting(SettingNames.CustomLibmpvPath, string.Empty);
             if (string.IsNullOrEmpty(mpvPath) || !File.Exists(mpvPath))
@@ -101,8 +110,12 @@ public sealed partial class PlayerViewModel
             // mpv 的 "Device lost / DXGI_ERROR_DEVICE_RESET" 是 Client 这一层打出来的（不是 MpvPlayer），
             // 所以 client 的 logger 也得包上，否则恢复逻辑收不到信号.
             var clientWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "create-mpv-client");
+            // 性能探针（三级）：检查点，进 PERFWM3:layout 的 detail 时间线（client 创建之前的同步活到此为止）.
+            Services.PerfWidgetMountTrace.Mark("mpv-client-create-start");
             Client = await MpvClient.CreateAsync(mpvPath, options, logger: new MpvLogWatcher(logger, OnMpvSuspectLog));
             Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "create-mpv-client", clientWatch);
+            // 性能探针（三级）：检查点，进 PERFWM3:layout 的 detail 时间线（区分 mpv client 创建与后面建实例）.
+            Services.PerfWidgetMountTrace.Mark("mpv-client-ready");
             Client.ErrorOccurred += OnClientErrorOccurred;
             Client.CacheStateChanged += OnClientCacheStateChanged;
             SetSubtitleDelaySecondsCommand.Execute(SubtitleDelaySeconds);

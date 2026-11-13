@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -31,14 +31,15 @@ public sealed partial class DownloadViewModel : ViewModelBase
         _cookiesResolver = cookiesResolver;
         _bbdownPath = this.Get<AppViewModel>().BBDownPath;
         _ffmpegPath = this.Get<AppViewModel>().FFmpegPath;
+        // 打包应用里 Environment.SpecialFolder.MyVideos 可能返回空串，
+        // Path.Combine("", "Bili Downloads") 就变成相对路径，按进程工作目录解析成
+        // C:\WINDOWS\system32\Bili Downloads → UnauthorizedAccessException；
+        // 这段在 PlayerViewModel 的初始化链里，一炸就是"进播放器闪退".
         var localDownloadFolder = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DownloadFolder, string.Empty);
-        _downloadPath = string.IsNullOrEmpty(localDownloadFolder) || !Directory.Exists(localDownloadFolder)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Bili Downloads")
-            : localDownloadFolder;
-        if (!Directory.Exists(_downloadPath))
-        {
-            Directory.CreateDirectory(_downloadPath);
-        }
+        // 性能探针（三级）：下载目录解析会在 UI 线程上真的去建目录（网络盘掉线时会阻塞），记检查点.
+        Services.PerfWidgetMountTrace.Mark("download-path-resolve-start");
+        _downloadPath = ResolveDownloadPath(localDownloadFolder, logger);
+        Services.PerfWidgetMountTrace.Mark("download-path-resolve-end");
 
         _openFolderAfterDownload = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.OpenFolderAfterDownload, true);
     }
@@ -226,4 +227,145 @@ public sealed partial class DownloadViewModel : ViewModelBase
             }
         });
     }
+
+    /// <summary>
+    /// 解析好的下载目录（一次运行只探一次）.
+    /// </summary>
+    private static string? _cachedDownloadPath;
+
+    private static readonly object DownloadPathLock = new();
+
+    /// <summary>
+    /// 决定下载目录：配置的优先，其次我的视频，最后退回应用自己的 LocalState。
+    /// <para>
+    /// 这段**绝不能无条件在 UI 线程上做 I/O**：实测配置里留着已断开的网络盘
+    /// （G:\Videos\Bili Downloads，映射到 \\192.168.2.126\pc）时，
+    /// Directory.CreateDirectory 会固定卡 21.030 秒才抛「找不到网络路径」，
+    /// 而它是在播放器初始化链（VideoConnectorViewModel 构造）里同步调用的，
+    /// 于是点视频后 UI 线程被按住 21 秒 —— 用户看到的就是白屏卡死。
+    /// </para>
+    /// <para>
+    /// 所以这里只在 UI 线程上等最多 300ms：够本地磁盘瞬间返回；
+    /// 网络盘/掉线盘直接走兜底目录，探测放到后台继续跑，成功了下次启动就用上.
+    /// </para>
+    /// </summary>
+    /// <param name="configured">设置里配置的目录.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>可用的下载目录.</returns>
+    private static string ResolveDownloadPath(string configured, ILogger? logger)
+    {
+        lock (DownloadPathLock)
+        {
+            if (_cachedDownloadPath is not null)
+            {
+                return _cachedDownloadPath;
+            }
+        }
+
+        // 兜底目录（本地 LocalState，建起来是毫秒级），先准备好.
+        var fallback = Path.Combine(Windows.Storage.ApplicationData.Current.LocalFolder.Path, "Downloads");
+
+        var probe = Task.Run(() => ProbeDownloadPath(configured, logger));
+
+        // UI 线程最多等 300ms；本地盘正常情况远小于这个数.
+        if (probe.Wait(TimeSpan.FromMilliseconds(300)) && probe.Result is { } resolved)
+        {
+            lock (DownloadPathLock)
+            {
+                _cachedDownloadPath = resolved;
+            }
+
+            return resolved;
+        }
+
+        // 超时（典型就是掉线的网络盘）：先用兜底目录，别让播放器初始化干等.
+        logger?.LogWarning("下载目录探测超过 300ms（多半是掉线的网络盘），先用兜底目录：{Path}", fallback);
+        try
+        {
+            Directory.CreateDirectory(fallback);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "兜底下载目录也建不出来：{Path}", fallback);
+        }
+
+        _ = probe.ContinueWith(
+            t =>
+            {
+                if (t.Status == TaskStatus.RanToCompletion && t.Result is { } late)
+                {
+                    lock (DownloadPathLock)
+                    {
+                        _cachedDownloadPath = late;
+                    }
+
+                    Serilog.Log.Information("下载目录后台探测完成：{Path}", late);
+                }
+            },
+            TaskScheduler.Default);
+
+        lock (DownloadPathLock)
+        {
+            if (_cachedDownloadPath is null)
+            {
+                _cachedDownloadPath = fallback;
+            }
+
+            return _cachedDownloadPath;
+        }
+    }
+
+    /// <summary>
+    /// 真正去试每个候选目录（可能很慢，一律在后台线程跑）.
+    /// </summary>
+    /// <param name="configured">设置里配置的目录.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>可用的下载目录；全不可用时返回 <c>null</c>.</returns>
+    private static string? ProbeDownloadPath(string configured, ILogger? logger)
+    {
+        var candidates = new List<string>();
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            candidates.Add(configured);
+        }
+
+        var videos = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+        if (!string.IsNullOrWhiteSpace(videos))
+        {
+            candidates.Add(Path.Combine(videos, "Bili Downloads"));
+        }
+
+        candidates.Add(Path.Combine(Windows.Storage.ApplicationData.Current.LocalFolder.Path, "Downloads"));
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                if (!Path.IsPathRooted(candidate))
+                {
+                    continue;
+                }
+
+                Directory.CreateDirectory(candidate);
+                if (!Directory.Exists(candidate))
+                {
+                    continue;
+                }
+
+                if (!string.Equals(candidate, configured, StringComparison.OrdinalIgnoreCase))
+                {
+                    logger?.LogInformation("下载目录改用：{Path}", candidate);
+                }
+
+                return candidate;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "下载目录不可用：{Path}", candidate);
+            }
+        }
+
+        return null;
+    }
 }
+

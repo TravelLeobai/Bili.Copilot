@@ -116,6 +116,9 @@ public sealed partial class PlayerOverlay : PlayerControlBase
     {
         // 性能探针：播放器覆盖层第一次挂到可视树上，正好对应"加载入口 → 控件可用"这一段.
         Services.PerfProbe.CompleteWidgetMountProbe();
+
+        // 性能探针（三级）第二级终点 / 第三级起点：记 PERFWM3:layout，并起算首帧渲染.
+        Services.PerfWidgetMountTrace.CompleteLoaded();
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         ApplyLiveHeaderAlignment();
         ViewModel.WarningOccurred += OnWarningOccurred;

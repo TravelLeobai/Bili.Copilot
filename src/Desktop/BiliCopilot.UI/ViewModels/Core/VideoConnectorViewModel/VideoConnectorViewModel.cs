@@ -18,10 +18,15 @@ public sealed partial class VideoConnectorViewModel : ViewModelBase, IPlayerConn
 {
     public VideoConnectorViewModel(PlayerViewModel parent)
     {
+        // 性能探针（三级）：构造函数在播放器初始化的同步段里跑，这里记检查点定位耗时来源.
+        Services.PerfWidgetMountTrace.Mark("connector-ctor-start");
         Parent = parent;
         _comments = this.Get<CommentMainViewModel>();
+        Services.PerfWidgetMountTrace.Mark("comments-vm-ready");
         Downloader = this.Get<DownloadViewModel>();
+        Services.PerfWidgetMountTrace.Mark("downloader-vm-ready");
         AI = this.Get<AIViewModel>();
+        Services.PerfWidgetMountTrace.Mark("ai-vm-ready");
     }
 
     public async Task InitializeAsync(MediaSnapshot snapshot, IMpvMediaSourceResolver sourceResolver)

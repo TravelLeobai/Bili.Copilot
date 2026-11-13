@@ -348,8 +348,23 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             // 按设置里的画质偏好决定要哪几档（自动最高 / 1080P60 优先 / 1080P 高码率优先）.
             var ladder = QualityUnlockService.GetQualityLadder(selectedFormat.Quality);
             QualityUnlockResult unlocked = default;
+            // 整条阶梯要有时间预算：mpv 初始化在等这个地址，超过 20 秒就会被判超时、
+            // 整轮播放被放弃（现象就是点视频后白屏、连接中半天不动）。
+            // 实测单次解锁请求 4~6 秒（含服务端取 playurl），三次阶梯轻松破 20 秒，
+            // 所以给 8 秒预算，超了就直接用普通地址，画质解锁下次再说.
+            var unlockBudget = TimeSpan.FromSeconds(8);
+            var unlockStart = System.Diagnostics.Stopwatch.GetTimestamp();
             foreach (var candidate in ladder.Distinct())
             {
+                if (System.Diagnostics.Stopwatch.GetElapsedTime(unlockStart) > unlockBudget)
+                {
+                    logger.LogWarning(
+                        "画质解锁：阶梯预算 {Budget}s 用完，改用普通播放地址（中断于 qn={Candidate}）",
+                        unlockBudget.TotalSeconds,
+                        candidate);
+                    break;
+                }
+
                 unlocked = await QualityUnlockService.GetPlayUrlsAsync(
                     _snapshot.Video.Identifier.Id,
                     _part.Identifier.Id,
