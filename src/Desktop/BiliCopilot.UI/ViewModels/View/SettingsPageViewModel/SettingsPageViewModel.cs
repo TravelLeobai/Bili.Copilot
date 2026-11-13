@@ -936,7 +936,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnUnlockQualityPreferenceChanged(UnlockQualityPreference value)
     {
-        Services.QualityUnlockService.SetPreference(value);
+        SettingsToolkit.WriteLocalSetting(SettingNames.UnlockQualityPreference, value);
 
         // 老的布尔开关保留一份镜像，避免回退到旧版时行为突变.
         SettingsToolkit.WriteLocalSetting(

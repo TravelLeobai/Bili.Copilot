@@ -31,12 +31,14 @@ public sealed partial class DownloadViewModel : ViewModelBase
         _cookiesResolver = cookiesResolver;
         _bbdownPath = this.Get<AppViewModel>().BBDownPath;
         _ffmpegPath = this.Get<AppViewModel>().FFmpegPath;
-        // 打包应用里 Environment.SpecialFolder.MyVideos 可能返回空串，
-        // Path.Combine("", "Bili Downloads") 就变成相对路径，按进程工作目录解析成
-        // C:\WINDOWS\system32\Bili Downloads → UnauthorizedAccessException；
-        // 这段在 PlayerViewModel 的初始化链里，一炸就是"进播放器闪退".
         var localDownloadFolder = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.DownloadFolder, string.Empty);
-        _downloadPath = ResolveDownloadPath(localDownloadFolder, logger);
+        _downloadPath = string.IsNullOrEmpty(localDownloadFolder) || !Directory.Exists(localDownloadFolder)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Bili Downloads")
+            : localDownloadFolder;
+        if (!Directory.Exists(_downloadPath))
+        {
+            Directory.CreateDirectory(_downloadPath);
+        }
 
         _openFolderAfterDownload = SettingsToolkit.ReadLocalSetting(Models.Constants.SettingNames.OpenFolderAfterDownload, true);
     }
@@ -223,61 +225,5 @@ public sealed partial class DownloadViewModel : ViewModelBase
                 }
             }
         });
-    }
-
-    /// <summary>
-    /// 决定下载目录：配置的优先，其次我的视频，最后退回应用自己的 LocalState。
-    /// 任何一步建不出来都往下退，绝不从构造函数里抛出去.
-    /// </summary>
-    /// <param name="configured">设置里配置的目录.</param>
-    /// <param name="logger">日志.</param>
-    /// <returns>可用的下载目录.</returns>
-    private static string ResolveDownloadPath(string configured, ILogger? logger)
-    {
-        var candidates = new List<string>();
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            candidates.Add(configured);
-        }
-
-        var videos = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
-        if (!string.IsNullOrWhiteSpace(videos))
-        {
-            candidates.Add(Path.Combine(videos, "Bili Downloads"));
-        }
-
-        // 兜底：包自己的 LocalState，一定可写.
-        candidates.Add(Path.Combine(
-            Windows.Storage.ApplicationData.Current.LocalFolder.Path,
-            "Downloads"));
-
-        foreach (var candidate in candidates)
-        {
-            try
-            {
-                if (!Path.IsPathRooted(candidate))
-                {
-                    continue;
-                }
-
-                Directory.CreateDirectory(candidate);
-                if (Directory.Exists(candidate))
-                {
-                    if (!string.Equals(candidate, configured, StringComparison.OrdinalIgnoreCase))
-                    {
-                        logger?.LogInformation("下载目录改用：{Path}", candidate);
-                    }
-
-                    return candidate;
-                }
-            }
-            catch (Exception ex)
-            {
-                logger?.LogWarning(ex, "下载目录不可用：{Path}", candidate);
-            }
-        }
-
-        logger?.LogWarning("所有下载目录都不可用，退回包 LocalFolder");
-        return Windows.Storage.ApplicationData.Current.LocalFolder.Path;
     }
 }
