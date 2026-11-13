@@ -135,8 +135,33 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _initCts = null;
         _lifetimeCts.Dispose();
 
+        // 拆完之后立刻把待终结的 WinRT 引用收掉（见方法注释里的崩溃栈）.
+        FlushPendingFinalizers();
+
         this.Get<AppViewModel>().Players.Remove(this);
         Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "dispose", disposeWatch);
+    }
+
+    /// <summary>
+    /// 在 UI 线程上主动跑一次 GC + 终结.
+    /// 崩溃栈是 WinRT.IObjectReference.Finalize → ObjectReferenceWithContext.Release →
+    /// Context.CallInContext → CoGetContextToken → combase 0x80004003(E_POINTER)：
+    /// 也就是「绑定过 COM 上下文的对象，在上下文已经失效之后才在终结器线程上被释放」。
+    /// 播放器每次开关都会造出一堆短命的 WinRT 对象，攒着等终结就容易撞上这个；
+    /// 在拆完播放器、UI 线程还活着的时候主动收一次，能把这类引用赶在上下文消失前放掉。
+    /// </summary>
+    private void FlushPendingFinalizers()
+    {
+        try
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", "finalizers flushed");
+        }
+        catch (Exception ex)
+        {
+            Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", $"flush failed: {ex.GetType().Name}");
+        }
     }
 
     [RelayCommand]
