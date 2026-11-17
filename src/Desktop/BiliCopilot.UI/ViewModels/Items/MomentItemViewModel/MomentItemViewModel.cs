@@ -111,6 +111,13 @@ public sealed partial class MomentItemViewModel : ViewModelBase<MomentInformatio
                 return;
             }
 
+            // 诊断：正文真的出了输入框吗？长度 + 开头 20 字 + 允许互动标记.
+            _logger.LogInformation(
+                "转发框返回：长度={Length} 允许互动={Allow} 开头=\"{Head}\"",
+                text.Length,
+                allowInteract,
+                text.Length > 20 ? text[..20] : text);
+
             var (ok, message) = await ForwardCoreAsync(cookie, text, allowInteract);
             _logger.LogInformation("转发动态结果：{Ok} {Message}", ok, message);
             this.Get<AppViewModel>().ShowTipCommand.Execute((message, ok ? InfoType.Success : InfoType.Error));

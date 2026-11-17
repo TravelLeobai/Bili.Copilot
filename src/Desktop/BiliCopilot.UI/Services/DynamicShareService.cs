@@ -145,8 +145,11 @@ public static class DynamicShareService
             writer.WritePropertyName("option");
             writer.WriteStartObject();
             // 0/1 才能被服务端接受；写成布尔会直接回「请求错误」.
+            // 官方文档（bilibili-API-collect · dynamic/publish）里 option 只有两个字段：
+            // up_choose_comment（精选评论）与 close_comment（关闭评论）。
+            // close_repost 文档里没有，B 站不认，留着只会让人以为"允许转发"这个开关有用.
+            writer.WriteNumber("up_choose_comment", 0);
             writer.WriteNumber("close_comment", allowInteract ? 0 : 1);
-            writer.WriteNumber("close_repost", allowInteract ? 0 : 1);
             writer.WriteEndObject();
 
             if (scene == SceneRepost)
@@ -542,6 +545,7 @@ public static class DynamicShareService
         return string.Empty;
     }
 }
+
 
 
 

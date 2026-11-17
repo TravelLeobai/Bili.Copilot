@@ -23,7 +23,11 @@ public sealed record ForwardPreview(string? Name, Uri? Avatar, Uri? Cover, strin
 
 /// <summary>
 /// 转发动态的输入框：标题 + 说点什么吧 + 缩略卡片 + 表情面板 + 字数 + 发表/取消.
-/// 输入框用 RichEditBox：表情以图片形式内嵌，发表时再还原成 [emote] 文本.
+/// <para>
+/// 表情一律以 <c>[名字]</c> 占位文本插入。早先是把表情图内嵌进 RichEditBox（整篇重建 RTF），
+/// 那条路会把正文里的中文连同图片一起弄坏 —— 表现就是"发表情包之后，表情和写好的评论都没了"。
+/// B 站动态正文本来就用 <c>[名字]</c> 认表情，直接插文本既不会丢内容，发出去也能正常渲染。
+/// </para>
 /// </summary>
 public static class ForwardDialog
 {
@@ -31,14 +35,6 @@ public static class ForwardDialog
     /// 当前可用的 XamlRoot（由承载按钮的控件在 Loaded 时写入）.
     /// </summary>
     public static XamlRoot? CurrentRoot { get; set; }
-
-    private static readonly HttpClient ImageClient = new(new SocketsHttpHandler
-    {
-        AutomaticDecompression = System.Net.DecompressionMethods.All,
-    })
-    {
-        Timeout = TimeSpan.FromSeconds(15),
-    };
 
     /// <summary>
     /// 弹出转发框.
@@ -64,7 +60,6 @@ public static class ForwardDialog
         };
 
         // 插进去的表情 token，按顺序记下来；发表时把文档里的图片占位符换回 token.
-        var tokens = new List<string>();
 
         var counter = new TextBlock
         {
@@ -74,7 +69,7 @@ public static class ForwardDialog
             HorizontalAlignment = HorizontalAlignment.Right,
         };
 
-        box.TextChanged += (_, _) => counter.Text = ReadPlain(box, tokens).Length.ToString();
+        box.TextChanged += (_, _) => counter.Text = ReadPlain(box).Length.ToString();
 
         var panel = new StackPanel { Spacing = 10, Width = 560 };
         panel.Children.Add(box);
@@ -91,7 +86,7 @@ public static class ForwardDialog
             },
         };
         ToolTipService.SetToolTip(emojiButton, "表情");
-        emojiButton.Flyout = BuildEmoteFlyout(box, tokens);
+        emojiButton.Flyout = BuildEmoteFlyout(box);
 
         var toolbar = new Grid
         {
@@ -174,42 +169,19 @@ public static class ForwardDialog
         }
 
         var allowInteract = allowBox.IsChecked == true;
-        return (ReadPlain(box, tokens).Trim(), allowInteract);
+        return (ReadPlain(box).Trim(), allowInteract);
     }
 
     /// <summary>
-    /// 读出正文：文档里的图片占位符按插入顺序替换回表情 token.
+    /// 读出正文。表情现在是纯文本 <c>[名字]</c>，直接取文档文本即可.
     /// </summary>
-    private static string ReadPlain(RichEditBox box, List<string> tokens)
+    private static string ReadPlain(RichEditBox box)
     {
         box.Document.GetText(TextGetOptions.NoHidden, out var text);
-        if (string.IsNullOrEmpty(text))
-        {
-            return string.Empty;
-        }
-
-        text = text.TrimEnd('\r');
-        var builder = new StringBuilder(text.Length + (tokens.Count * 8));
-        var index = 0;
-        foreach (var ch in text)
-        {
-            // RichEdit 里内嵌对象读出来是 U+FFFC（对象替换符）.
-            if (ch == '\uFFFC')
-            {
-                builder.Append(index < tokens.Count ? tokens[index] : string.Empty);
-                index++;
-            }
-            else
-            {
-                builder.Append(ch);
-            }
-        }
-
-        // 多出来的 token（比如用户删了图片）直接忽略，避免重复.
-        return builder.ToString();
+        return string.IsNullOrEmpty(text) ? string.Empty : text.TrimEnd('\r');
     }
 
-    private static Flyout BuildEmoteFlyout(RichEditBox box, List<string> tokens)
+    private static Flyout BuildEmoteFlyout(RichEditBox box)
     {
         var host = new Grid { Width = 320, Height = 420 };
         var flyout = new Flyout
@@ -229,82 +201,22 @@ public static class ForwardDialog
                 Width = 320,
                 Height = 420,
             };
-            emotePanel.ItemClick += async (_, key) => await InsertEmoteAsync(box, tokens, key);
+            emotePanel.ItemClick += (_, key) => InsertEmote(box, key);
             host.Children.Add(emotePanel);
         };
 
         return flyout;
     }
 
-    private static async Task InsertEmoteAsync(RichEditBox box, List<string> tokens, string key)
+    private static void InsertEmote(RichEditBox box, string key)
     {
         if (string.IsNullOrWhiteSpace(key))
         {
             return;
         }
 
-        var emote = BiliEmoteService.TryGet(key);
-        var imageUri = string.IsNullOrWhiteSpace(emote?.Url) ? null : new Uri(emote!.Url);
-        if (imageUri is null)
-        {
-            // 拿不到图就退回文字 token，至少不丢内容.
-            InsertPlain(box, key);
-            tokens.Add(key);
-            return;
-        }
-
-        byte[]? bytes = null;
-        try
-        {
-            using var response = await ImageClient.GetAsync(imageUri);
-            if (response.IsSuccessStatusCode)
-            {
-                bytes = await response.Content.ReadAsByteArrayAsync();
-            }
-        }
-        catch
-        {
-            bytes = null;
-        }
-
-        if (bytes is null || bytes.Length == 0)
-        {
-            InsertPlain(box, key);
-            tokens.Add(key);
-            return;
-        }
-
-        var (width, height) = GetEmoteSize(emote);
-        InsertPicture(box, bytes, width, height);
-        tokens.Add(key);
-    }
-
-    private static (int Width, int Height) GetEmoteSize(BiliEmote? emote)
-    {
-        // 面板没给像素尺寸，按档位估：普通 24，大表情 36.
-        var side = emote?.Size == 2 ? 36 : 24;
-        return (side, side);
-    }
-
-    /// <summary>
-    /// 把图片插到光标处：RichEdit 的 ITextRange 没有 InsertImage，只能整篇按 RTF 重建.
-    /// </summary>
-    private static void InsertPicture(RichEditBox box, byte[] imageBytes, int width, int height)
-    {
-        box.Document.GetText(TextGetOptions.NoHidden, out var raw);
-        raw = raw.TrimEnd('\r');
-
-        var caret = box.Document.Selection.StartPosition;
-        caret = Math.Clamp(caret, 0, raw.Length);
-
-        var before = EscapeRtf(raw[..caret]);
-        var after = EscapeRtf(raw[caret..]);
-        var hex = Convert.ToHexString(imageBytes);
-        var pict = $@"{{\pict\pngblip\picw{width * 15}\pich{height * 15}\picwgoal{width * 15}\pichgoal{height * 15} {hex}}}";
-        var rtf = $@"{{\rtf1\ansi\deff0{{\fonttbl{{\f0 Segoe UI;}}}}\f0\fs22 {before}{pict}{after}}}";
-
-        box.Document.SetText(TextSetOptions.FormatRtf, rtf);
-        box.Document.Selection.SetRange(caret + 1, caret + 1);
+        // 直接插 "[名字]"。B 站动态正文按这个占位认表情，发出去就是图.
+        InsertPlain(box, key);
     }
 
     private static void InsertPlain(RichEditBox box, string text)
@@ -315,14 +227,6 @@ public static class ForwardDialog
         box.Document.SetText(TextSetOptions.None, raw.Insert(caret, text));
         box.Document.Selection.SetRange(caret + text.Length, caret + text.Length);
     }
-
-    private static string EscapeRtf(string value)
-        => value
-            .Replace("\\", "\\\\")
-            .Replace("{", "\\{")
-            .Replace("}", "\\}")
-            .Replace("\r", "\\par ")
-            .Replace("\n", "\\par ");
 
     private static FrameworkElement BuildPreviewCard(ForwardPreview preview)
     {

@@ -372,3 +372,5 @@ src/Desktop/BiliCopilot.UI/Assets/WheelScrollService.dll
 src/Desktop/BiliCopilot.UI/Assets/WheelScrollService.runtimeconfig.json
 
 dist/
+
+tools/wm3-shots/

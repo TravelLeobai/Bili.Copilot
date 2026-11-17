@@ -83,6 +83,10 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
 
             var preview = new Controls.Dialogs.ForwardPreview(UserName, Avatar, null, excerpt);
             var (text, allowInteract) = await Controls.Dialogs.ForwardDialog.ShowAsync(xamlRoot, preview);
+            _logger.LogInformation(
+                "转发框返回（评论）：长度={Length} 允许互动={Allow}",
+                text?.Length ?? -1,
+                allowInteract);
             if (text is null)
             {
                 return;
