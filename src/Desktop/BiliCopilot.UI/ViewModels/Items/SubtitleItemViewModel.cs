@@ -24,13 +24,28 @@ public sealed partial class SubtitleItemViewModel : ViewModelBase<SubtitleMeta>
         _deactiveFunc = deactiveFunc;
         Name = meta.LanguageName;
         IsAI = meta.IsAI;
+
+        // AI 字幕标记：B 站把生成字幕的地址放在 ai_subtitle 路径下，BiliKernel 据此置 IsAI.
+        this.Get<ILogger<SubtitleItemViewModel>>().LogInformation(
+            "AI 字幕标记：语言={Language} IsAI={IsAI} 地址={Url}",
+            meta.LanguageName,
+            IsAI,
+            meta.Url);
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AccessibleName))]
     public partial string Name { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AccessibleName))]
     public partial bool IsAI { get; set; }
+
+    /// <summary>
+    /// 读屏时念的名字：语言名后面补一句"AI 生成"，因为上传字幕和 AI 字幕可能同叫"中文".
+    /// </summary>
+    public string AccessibleName
+        => IsAI ? $"{Name}{GetAIGeneratedSuffix()}" : Name;
 
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
@@ -121,5 +136,31 @@ public sealed partial class SubtitleItemViewModel : ViewModelBase<SubtitleMeta>
 
         // 注意格式用逗号和前导零
         return string.Format("{0:D2}:{1:D2}:{2:D2},{3:D3}", hours, minutes, secs, millis);
+    }
+
+    /// <summary>
+    /// 取本地化的"AI 生成"后缀；资源缺失时退回中文写法.
+    /// </summary>
+    /// <returns>后缀（带前导逗号）.</returns>
+    private static string GetAIGeneratedSuffix()
+    {
+        try
+        {
+            var template = Windows.ApplicationModel.Resources.ResourceLoader
+                .GetForViewIndependentUse()
+                .GetString("SubtitleAIGeneratedTemplate");
+            if (!string.IsNullOrWhiteSpace(template))
+            {
+                // 模板是 "{0}，AI 生成"，这里只要后缀那一段.
+                var formatted = string.Format(template, string.Empty);
+                return formatted;
+            }
+        }
+        catch
+        {
+            // 资源取不到就走下面的兜底.
+        }
+
+        return "，AI 生成";
     }
 }

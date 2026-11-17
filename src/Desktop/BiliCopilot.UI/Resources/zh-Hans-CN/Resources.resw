@@ -3269,7 +3269,7 @@
   </data>
   <data name="MomentResizePanesDescription" xml:space="preserve">
     <value>左右拖动调整宽度；双击恢复默认；方向键微调</value>
+  </data>  <data name="SubtitleAIGeneratedTemplate" xml:space="preserve">
+    <value>{0}，AI 生成</value>
   </data>
 </root>
-
-

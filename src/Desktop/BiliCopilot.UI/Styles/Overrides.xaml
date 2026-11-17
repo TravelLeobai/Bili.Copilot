@@ -1513,4 +1513,22 @@
             </Setter.Value>
         </Setter>
     </Style>
+    <!--  小号中性标签，用在 AI 生成字幕这类需要单独标注的地方.  -->
+    <Style x:Key="TagBorderStyle" TargetType="Border">
+        <Setter Property="Padding" Value="5,1" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+    </Style>
+
+    <Style
+        x:Key="TagTextStyle"
+        BasedOn="{StaticResource CaptionTextBlockStyle}"
+        TargetType="TextBlock">
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+    </Style>
+
 </ResourceDictionary>

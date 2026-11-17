@@ -407,14 +407,32 @@
                                                             MinWidth="200"
                                                             MaxWidth="280"
                                                             HorizontalAlignment="Stretch"
+                                                            AutomationProperties.Name="{x:Bind AccessibleName, Mode=OneWay}"
                                                             BorderBrush="Transparent"
                                                             BorderThickness="2"
                                                             Command="{x:Bind ActiveCommand, Mode=OneWay}"
                                                             IsChecked="{x:Bind IsSelected, Mode=OneWay}"
                                                             IsEnableCheck="False">
-                                                            <StackPanel>
-                                                                <base:TrimTextBlock MaxLines="1" Text="{x:Bind Name, Mode=OneWay}" />
-                                                            </StackPanel>
+                                                            <!--  左对齐，标签跟在名字后面；名字太长时被裁掉，标签仍在原位.  -->
+                                                            <Grid HorizontalAlignment="Left" ColumnSpacing="6">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <base:TrimTextBlock
+                                                                    VerticalAlignment="Center"
+                                                                    MaxLines="1"
+                                                                    Text="{x:Bind Name, Mode=OneWay}" />
+                                                                <Border
+                                                                    Grid.Column="1"
+                                                                    Style="{StaticResource TagBorderStyle}"
+                                                                    Visibility="{x:Bind IsAI, Mode=OneWay}">
+                                                                    <TextBlock
+                                                                        AutomationProperties.AccessibilityView="Raw"
+                                                                        Style="{StaticResource TagTextStyle}"
+                                                                        Text="AI" />
+                                                                </Border>
+                                                            </Grid>
                                                         </base:AppToggleCard>
                                                     </DataTemplate>
                                                 </ItemsRepeater.ItemTemplate>

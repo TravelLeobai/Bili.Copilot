@@ -190,9 +190,9 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 return;
             }
 
-            // 限定条件 4：live_status 只有 0 才算下播；1 直播中、2 轮播都算还在.
+            // 限定条件 4：只有 live_status == 1（正在直播）才算还在；0 未开播、2 轮播都清理.
             var offline = liveCards
-                .Where(p => !statuses.TryGetValue(ParseAuthorId(p.AuthorId), out var status) || status == 0)
+                .Where(p => !statuses.TryGetValue(ParseAuthorId(p.AuthorId), out var status) || status != 1)
                 .ToList();
             if (offline.Count == 0)
             {
@@ -636,6 +636,7 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         return value.Replace("http://", "https://");
     }
 }
+
 
 
 
