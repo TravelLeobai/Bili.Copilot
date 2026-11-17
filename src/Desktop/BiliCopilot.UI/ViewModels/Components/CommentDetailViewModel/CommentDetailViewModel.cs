@@ -1,10 +1,14 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.Input;
+using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Models.Constants;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Richasy.BiliKernel.Bili.Comment;
+using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
 
 namespace BiliCopilot.UI.ViewModels.Components;
@@ -116,12 +120,14 @@ public sealed partial class CommentDetailViewModel : ViewModelBase<CommentItemVi
         try
         {
             await _service.SendTextCommentAsync(content, targetId, Data.Data.CommentType, rootId, replyCommentId);
+            this.Get<AppViewModel>().ShowTipCommand.Execute(("回复已发送", InfoType.Success));
             await Task.Delay(500);
             Refresh();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "回复评论时出错");
+            this.Get<AppViewModel>().ShowTipCommand.Execute(($"回复发送失败：{ex.Message}", InfoType.Error));
         }
         finally
         {
@@ -142,3 +148,5 @@ public sealed partial class CommentDetailViewModel : ViewModelBase<CommentItemVi
         ReplyTarget = item?.Data.User.User.Name;
     }
 }
+
+

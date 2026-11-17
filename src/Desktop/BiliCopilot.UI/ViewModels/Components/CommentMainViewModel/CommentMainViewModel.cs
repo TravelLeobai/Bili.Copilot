@@ -1,11 +1,15 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.ViewModels.Core;
 using BiliCopilot.UI.ViewModels.Items;
 using CommunityToolkit.Mvvm.Input;
+using BiliCopilot.UI.Models;
+using BiliCopilot.UI.Models.Constants;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Richasy.BiliKernel.Bili.Comment;
 using Richasy.BiliKernel.Models;
+using Richasy.WinUIKernel.Share.Base;
 using Richasy.WinUIKernel.Share.ViewModels;
 
 namespace BiliCopilot.UI.ViewModels.Components;
@@ -144,6 +148,7 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         try
         {
             await _service.SendTextCommentAsync(content, Id, _targetType, "0", replyCommentId);
+            this.Get<AppViewModel>().ShowTipCommand.Execute(("评论已发送", InfoType.Success));
             if (SortType == CommentSortType.Time)
             {
                 await Task.Delay(500);
@@ -153,6 +158,7 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         catch (Exception ex)
         {
             _logger.LogError(ex, "回复评论时出错");
+            this.Get<AppViewModel>().ShowTipCommand.Execute(($"评论发送失败：{ex.Message}", InfoType.Error));
         }
         finally
         {
@@ -210,5 +216,7 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
         ResetReplyTarget();
     }
 }
+
+
 
 
