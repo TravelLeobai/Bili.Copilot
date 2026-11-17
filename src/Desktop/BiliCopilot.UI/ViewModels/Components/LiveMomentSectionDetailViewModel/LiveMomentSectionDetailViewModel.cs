@@ -50,6 +50,16 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
     private readonly IMomentDiscoveryService? _momentService;
 
     /// <summary>
+    /// 上次按开播状态核对卡片的时间：进页面时受冷却限制，避免来回切页把接口打爆.
+    /// </summary>
+    private DateTimeOffset _lastPruneAt = DateTimeOffset.MinValue;
+
+    /// <summary>
+    /// 进页面自动核对的冷却时长；手动刷新不受这个限制.
+    /// </summary>
+    private static readonly TimeSpan PruneCooldown = TimeSpan.FromSeconds(60);
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="LiveMomentSectionDetailViewModel"/> class.
     /// </summary>
     /// <param name="momentService">动态服务（用来拿关注 UP 主的投稿）.</param>
@@ -113,6 +123,9 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
                 _allCards.Count,
                 (DateTimeOffset.Now - Services.LiveSectionCache.UpdatedAt).TotalMinutes);
 
+            // 缓存里可能留着早就下播的房间卡片：顺手按真实开播状态核一遍.
+            await PruneOfflineLiveCardsAsync(force: false);
+
             if (Services.LiveSectionCache.IsStale)
             {
                 _ = RefreshInternalAsync();
@@ -122,6 +135,9 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
         }
 
         await LoadAsync();
+
+        // 刚拉过一次网络，顺手核一遍卡片是不是都还在播.
+        await PruneOfflineLiveCardsAsync(force: false);
     }
 
     [RelayCommand]
@@ -129,10 +145,104 @@ public sealed partial class LiveMomentSectionDetailViewModel : LayoutPageViewMod
 
     private async Task RefreshInternalAsync()
     {
+        // 手动刷新是用户主动点的：先按真实开播状态清掉已下播的卡片，不受冷却限制.
+        await PruneOfflineLiveCardsAsync(force: true);
+
         // 刷新不再推倒重来：保留已经渲染好的卡片，把新开播的房间插到最前面、
         // 新回放追加到后面，界面上只多出新增的那几张.
         await LoadAsync(appendMode: true);
     }
+
+    /// <summary>
+    /// 按"这个人现在还在不在播"清掉缓存里残留的直播间卡片。
+    /// </summary>
+    /// <param name="force">true = 手动刷新触发，忽略冷却.</param>
+    /// <returns>任务.</returns>
+    private async Task PruneOfflineLiveCardsAsync(bool force)
+    {
+        // 限定条件 1：只有标了"直播中"的卡片才核对；回放/切片卡片不碰.
+        var liveCards = _allCards
+            .Where(static p => p.IsLive && !string.IsNullOrEmpty(p.AuthorId))
+            .ToList();
+        if (liveCards.Count == 0)
+        {
+            return;
+        }
+
+        // 限定条件 2：进页面自动核对有冷却，免得切来切去一直打接口.
+        if (!force && DateTimeOffset.Now - _lastPruneAt < PruneCooldown)
+        {
+            return;
+        }
+
+        _lastPruneAt = DateTimeOffset.Now;
+        try
+        {
+            var cookie = this.Get<IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+            var statuses = await Services.Live.LiveFollowService.GetLiveStatusByUidsAsync(
+                liveCards.Select(static p => p.AuthorId),
+                cookie);
+
+            // 限定条件 3：接口一批都没查成（网络不通）就原样保留，不能拿"查不到"当"没开播".
+            if (statuses is null)
+            {
+                _logger.LogWarning("直播分区：开播状态接口没返回，跳过本次清理");
+                return;
+            }
+
+            // 限定条件 4：live_status 只有 0 才算下播；1 直播中、2 轮播都算还在.
+            var offline = liveCards
+                .Where(p => !statuses.TryGetValue(ParseAuthorId(p.AuthorId), out var status) || status == 0)
+                .ToList();
+            if (offline.Count == 0)
+            {
+                _logger.LogInformation("直播分区：核对 {Count} 个主播，没有下播残留", liveCards.Count);
+                return;
+            }
+
+            foreach (var card in offline)
+            {
+                _allCards.Remove(card);
+            }
+
+            // 作者可能因此没有卡片了：过滤栏一起重建，选中项尽量保住.
+            var keepUserId = SelectedUper is { IsTotal: false } ? SelectedUper.UserId : null;
+            BuildUpers(_allCards);
+            SelectedUper = keepUserId is null
+                ? Upers.FirstOrDefault()
+                : Upers.FirstOrDefault(p => p.UserId == keepUserId) ?? Upers.FirstOrDefault();
+            if (SelectedUper is not null)
+            {
+                SelectedUper.IsSelected = true;
+            }
+
+            _visibleCount = Math.Max(_visibleCount, PageBatchSize);
+            ApplyFilter();
+            IsEmpty = _allCards.Count == 0;
+
+            // 磁盘缓存也一起更新，否则下次进来又把下播的卡片铺回去.
+            Services.LiveSectionCache.Save(_allCards);
+
+            _logger.LogInformation(
+                "直播分区：清理已下播卡片 {Removed} 张（核对 {Checked} 张，触发={Trigger}）",
+                offline.Count,
+                liveCards.Count,
+                force ? "手动刷新" : "进入页面");
+        }
+        catch (Exception ex)
+        {
+            // 清理失败不影响页面：卡片保持原样.
+            _logger.LogWarning(ex, "直播分区：清理已下播卡片失败");
+        }
+    }
+
+    /// <summary>
+    /// 把卡片里的作者 id 转成 uid（转不出来返回 0）.
+    /// </summary>
+    /// <param name="authorId">作者 id.</param>
+    /// <returns>uid.</returns>
+    private static long ParseAuthorId(string authorId)
+        => long.TryParse(authorId, out var uid) ? uid : 0;
 
     private async Task LoadAsync(bool appendMode = false)
     {

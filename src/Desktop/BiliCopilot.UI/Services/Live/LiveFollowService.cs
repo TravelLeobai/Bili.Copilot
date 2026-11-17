@@ -86,6 +86,131 @@ public sealed class LiveFollowService
     }
 
     /// <summary>
+    /// 按 uid 批量查开播状态（用来核对缓存里那些"直播中"卡片是不是真的还在播）。
+    /// </summary>
+    /// <param name="uids">要查的主播 uid.</param>
+    /// <param name="cookie">登录态（接口本身不需要，带上更稳）.</param>
+    /// <param name="cancellationToken">取消令牌.</param>
+    /// <returns>uid → live_status（0 未开播 / 1 直播中 / 2 轮播）；一个都没查成时返回 <c>null</c>，调用方据此区分"全都没开播"和"网络没通".</returns>
+    public static async Task<Dictionary<long, int>?> GetLiveStatusByUidsAsync(
+        IEnumerable<string> uids,
+        string cookie,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = uids
+            .Select(static p => long.TryParse(p, out var value) ? value : 0)
+            .Where(static p => p > 0)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new Dictionary<long, int>();
+        var okBatches = 0;
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        foreach (var chunk in ids.Chunk(50))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var body = new StringBuilder("{\"uids\":[");
+            body.Append(string.Join(',', chunk));
+            body.Append("]}");
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, LiveStatusApi)
+                {
+                    Content = new StringContent(body.ToString(), Encoding.UTF8, "application/json"),
+                };
+                if (!string.IsNullOrEmpty(cookie))
+                {
+                    request.Headers.TryAddWithoutValidation("Cookie", cookie);
+                }
+
+                request.Headers.TryAddWithoutValidation("Referer", "https://live.bilibili.com/");
+                request.Headers.TryAddWithoutValidation("User-Agent", UserAgent[0]);
+
+                using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    continue;
+                }
+
+                var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                if (ParseLiveStatusMap(json, result))
+                {
+                    okBatches++;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // 单批失败不影响其它批.
+            }
+        }
+
+        // 一批都没成功：网络/接口不通，不能据此判定"都没开播".
+        return okBatches == 0 ? null : result;
+    }
+
+    /// <summary>
+    /// 解析批量状态接口，把 uid → live_status 塞进字典。
+    /// </summary>
+    /// <param name="json">接口返回.</param>
+    /// <param name="result">结果字典.</param>
+    /// <returns>接口是否正常返回（code == 0 且带 data）.</returns>
+    private static bool ParseLiveStatusMap(string json, Dictionary<long, int> result)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("code", out var codeElement) || codeElement.GetInt32() != 0)
+            {
+                return false;
+            }
+
+            if (!root.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            foreach (var entry in data.EnumerateObject())
+            {
+                var item = entry.Value;
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var uid = ReadLong(item, "uid");
+                if (uid <= 0 && long.TryParse(entry.Name, out var fromKey))
+                {
+                    uid = fromKey;
+                }
+
+                if (uid <= 0)
+                {
+                    continue;
+                }
+
+                result[uid] = (int)ReadLong(item, "live_status");
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 批量开播状态接口偶尔不给主播名/头像，这里对缺的房间补一次直播间详情。
     /// </summary>
     /// <param name="rooms">已拿到的房间.</param>
