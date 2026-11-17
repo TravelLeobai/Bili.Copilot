@@ -62,7 +62,8 @@ public sealed partial class AiInterestBanner : UserControl
         {
             TextLabel.Text = "正在分析最近的观看兴趣…";
             RootBorder.Visibility = Visibility.Visible;
-            var text = await PageInterestAnalyzer.AnalyzeAsync(pageKey, videos, logger);
+            var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+            var text = await PageInterestAnalyzer.AnalyzeAsync(pageKey, videos, logger, cookie);
             if (string.IsNullOrWhiteSpace(text))
             {
                 RootBorder.Visibility = Visibility.Collapsed;

@@ -471,7 +471,8 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
                 p.VideoTitle ?? string.Empty,
                 p.Author ?? string.Empty,
                 p.Description?.Text ?? string.Empty,
-                p.VideoCover?.ToString() ?? string.Empty))
+                p.VideoCover?.ToString() ?? string.Empty,
+                FindInnerVideoId(p)))
             .Where(p => !string.IsNullOrWhiteSpace(p.Title))
             .ToList();
 
@@ -501,7 +502,8 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
                 {
                     // 用户滚动很快时只在停下来的那一版上跑，省请求.
                     await Task.Delay(TimeSpan.FromSeconds(3), token).ConfigureAwait(false);
-                    var text = await AiInterestAnalyzer.AnalyzeAsync(samples, _logger).ConfigureAwait(false);
+                    var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
+                    var text = await AiInterestAnalyzer.AnalyzeAsync(samples, _logger, cookie).ConfigureAwait(false);
                     if (token.IsCancellationRequested)
                     {
                         return;
@@ -525,4 +527,28 @@ public sealed partial class VideoMomentSectionDetailViewModel : ViewModelBase, I
             },
             token);
     }
+
+    /// <summary>
+    /// 从动态卡片里捞出内嵌视频的 bvid（取不到返回 null，抓不了字幕就跳过）.
+    /// </summary>
+    /// <param name="item">动态卡片.</param>
+    /// <returns>bvid.</returns>
+    private static string? FindInnerVideoId(ViewModels.Items.MomentItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var video = item.FindInnerContent<Richasy.BiliKernel.Models.Media.VideoInformation>();
+            return video is null ? null : video.Identifier.Id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }
+

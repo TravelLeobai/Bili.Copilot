@@ -30,8 +30,13 @@ public static class PageInterestAnalyzer
     /// <param name="pageKey">页面标识.</param>
     /// <param name="videos">这一页的视频（会取前 20 个）.</param>
     /// <param name="logger">日志.</param>
+    /// <param name="cookie">登录态，用来抓字幕节选（AI 字幕需要它）.</param>
     /// <returns>分析文本，失败返回 null.</returns>
-    public static Task<string?> AnalyzeAsync(string pageKey, IEnumerable<VideoItemViewModel> videos, ILogger? logger)
+    public static Task<string?> AnalyzeAsync(
+        string pageKey,
+        IEnumerable<VideoItemViewModel> videos,
+        ILogger? logger,
+        string? cookie = null)
     {
         if (Running.TryGetValue(pageKey, out var running))
         {
@@ -45,7 +50,12 @@ public static class PageInterestAnalyzer
 
         var samples = videos
             .Take(20)
-            .Select(p => new InterestSample(p.Title ?? string.Empty, p.Author ?? string.Empty, string.Empty, p.Cover?.ToString() ?? string.Empty))
+            .Select(p => new InterestSample(
+                p.Title ?? string.Empty,
+                p.Author ?? string.Empty,
+                string.Empty,
+                p.Cover?.ToString() ?? string.Empty,
+                p.Data is null ? null : p.Data.Identifier.Id))
             .Where(p => !string.IsNullOrWhiteSpace(p.Title))
             .ToList();
 
@@ -54,7 +64,7 @@ public static class PageInterestAnalyzer
             return Task.FromResult<string?>(null);
         }
 
-        var task = AnalyzeCoreAsync(pageKey, samples, logger);
+        var task = AnalyzeCoreAsync(pageKey, samples, cookie, logger);
         Running[pageKey] = task;
         return task;
     }
@@ -69,11 +79,11 @@ public static class PageInterestAnalyzer
         Running.TryRemove(pageKey, out _);
     }
 
-    private static async Task<string?> AnalyzeCoreAsync(string pageKey, IReadOnlyList<InterestSample> samples, ILogger? logger)
+    private static async Task<string?> AnalyzeCoreAsync(string pageKey, IReadOnlyList<InterestSample> samples, string? cookie, ILogger? logger)
     {
         try
         {
-            var text = await AiInterestAnalyzer.AnalyzeAsync(samples, logger).ConfigureAwait(false);
+            var text = await AiInterestAnalyzer.AnalyzeAsync(samples, logger, cookie).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(text))
             {
                 Cache[pageKey] = text;
@@ -87,3 +97,4 @@ public static class PageInterestAnalyzer
         }
     }
 }
+

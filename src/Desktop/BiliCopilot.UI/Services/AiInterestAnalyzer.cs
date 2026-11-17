@@ -72,10 +72,12 @@ internal static class AiInterestAnalyzer
     /// </summary>
     /// <param name="samples">已看过的视频（标题 / 封面 / 简介）.最多取前若干个.</param>
     /// <param name="logger">日志.</param>
+    /// <param name="cookie">登录态；给了就去抓字幕节选（AI 字幕需要它）.</param>
     /// <returns>一段中文描述，失败返回 null.</returns>
     public static async Task<string?> AnalyzeAsync(
         IReadOnlyList<InterestSample> samples,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        string? cookie = null)
     {
         if (!IsEnabled || !IsConfigured || samples.Count == 0)
         {
@@ -91,15 +93,27 @@ internal static class AiInterestAnalyzer
         }
 
         var selected = samples.Take(12).ToList();
+
+        // 字幕采样：有 ID 的前几个视频各抓一段（上传字幕优先，其次 AI 字幕，都没有就跳过）.
+        // 标题和简介之外再多给模型一手材料，避免它只凭标题猜偏好.
+        var snippets = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(cookie))
+        {
+            snippets = await SubtitleSampler.CollectAsync(
+                selected.Select(static p => p.Id ?? string.Empty),
+                cookie,
+                logger).ConfigureAwait(false);
+        }
+
         var covers = _visionUnsupported ? [] : await CollectCoversAsync(selected, logger).ConfigureAwait(false);
         var limit = MaximumLength;
-        var result = await RequestAsync(endpoint, key, model, selected, covers, limit, logger).ConfigureAwait(false);
+        var result = await RequestAsync(endpoint, key, model, selected, covers, snippets, limit, logger).ConfigureAwait(false);
         if (result is null && covers.Count > 0)
         {
             // 模型不支持图片时退回纯文本再试一次.
             logger?.LogInformation("兴趣分析含图片失败，改用纯文本重试");
             _visionUnsupported = true;
-            result = await RequestAsync(endpoint, key, model, selected, [], limit, logger).ConfigureAwait(false);
+            result = await RequestAsync(endpoint, key, model, selected, [], snippets, limit, logger).ConfigureAwait(false);
         }
 
         return result;
@@ -111,12 +125,13 @@ internal static class AiInterestAnalyzer
         string model,
         IReadOnlyList<InterestSample> samples,
         IReadOnlyList<string> covers,
+        IReadOnlyDictionary<string, string> snippets,
         int limit,
         ILogger? logger)
     {
         try
         {
-            var body = BuildRequestBody(model, samples, covers, limit);
+            var body = BuildRequestBody(model, samples, covers, snippets, limit);
             using var request = new HttpRequestMessage(HttpMethod.Post, NormalizeUrl(endpoint))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -177,7 +192,12 @@ internal static class AiInterestAnalyzer
     /// <summary>
     /// 手工拼请求体：裁剪构建里 JsonSerializer 不可用.
     /// </summary>
-    private static string BuildRequestBody(string model, IReadOnlyList<InterestSample> samples, IReadOnlyList<string> covers, int limit)
+    private static string BuildRequestBody(
+        string model,
+        IReadOnlyList<InterestSample> samples,
+        IReadOnlyList<string> covers,
+        IReadOnlyDictionary<string, string> snippets,
+        int limit)
     {
         var builder = new StringBuilder();
         builder.Append("{\"model\":\"").Append(Escape(model)).Append("\",\"temperature\":0.4,\"messages\":[");
@@ -189,6 +209,7 @@ internal static class AiInterestAnalyzer
             .Append(Escape("从视频清单里读出这个人的兴趣结构，写两到三句中文。\n"
                 + "写动机（他为什么看这些）、依据（从哪些内容看出来的）、以及兴趣是否在迁移。\n"
                 + "不要罗列题材类型，「喜欢二次元、数码、历史」等于没说。不要空话，说具体内容。不确定就用「看起来」。\n"
+                + "带「字幕节选」的条目是视频里真实说的话，优先拿它当依据；只有标题和简介的条目就写得轻一点。\n"
                 + "禁用词：赋能、抓手、闭环、生态、链路、沉淀、对齐、颗粒度、底层逻辑、破圈、矩阵、赛道、心智。\n"
                 + "禁用句式：不是…而是…、不仅…更是…、综上所述、总而言之、值得一提的是、让我们。\n"
                 + "不要排比、感叹号、破折号、结尾升华。\n"
@@ -217,6 +238,13 @@ internal static class AiInterestAnalyzer
             {
                 var desc = sample.Description.Length > 80 ? sample.Description[..80] : sample.Description;
                 text.Append(" — ").Append(desc.Replace("\r", " ").Replace("\n", " "));
+            }
+
+            // 字幕节选：这是最硬的一手材料，有就一定要给模型.
+            if (sample.Id is not null && snippets.TryGetValue(sample.Id, out var snippet) && !string.IsNullOrWhiteSpace(snippet))
+            {
+                var clipped = snippet.Length > 200 ? snippet[..200] : snippet;
+                text.Append("\n   字幕节选：").Append(clipped.Replace("\r", " ").Replace("\n", " "));
             }
 
             text.Append('\n');
@@ -492,7 +520,8 @@ internal static class AiInterestAnalyzer
 /// <param name="Author">UP 主.</param>
 /// <param name="Description">简介片段.</param>
 /// <param name="CoverUrl">封面地址.</param>
-public sealed record InterestSample(string Title, string Author, string Description, string CoverUrl);
+/// <param name="Id">视频 bvid（用来抓字幕，可空）.</param>
+public sealed record InterestSample(string Title, string Author, string Description, string CoverUrl, string? Id = null);
 
 
 
