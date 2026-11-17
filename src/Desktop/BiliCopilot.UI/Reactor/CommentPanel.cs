@@ -136,7 +136,8 @@ public sealed class CommentPanel : Component
                 element =>
                 {
                     var box = (CommentTextBox)element;
-                    box.Margin = new Thickness(16, 0, 16, 0);
+                    // 左右 12 = 评论卡片的 Margin(12,4,12,4)，让输入框白底和卡片外缘对齐.
+                box.Margin = new Thickness(12, 0, 12, 0);
                     box.SendCommand = detail.SendReplyCommand;
                     box.ResetSelectedCommand = detail.ResetReplyTargetCommand;
                     box.ReplyTip = detail.ReplyTarget;
@@ -245,7 +246,8 @@ public sealed class CommentPanel : Component
             element =>
             {
                 var box = (CommentTextBox)element;
-                box.Margin = new Thickness(16, 0, 16, 0);
+                // 左右 12 = 评论卡片的 Margin(12,4,12,4)，让输入框白底和卡片外缘对齐.
+                box.Margin = new Thickness(12, 0, 12, 0);
                 box.SendCommand = viewModel.SendReplyCommand;
                 box.ResetSelectedCommand = viewModel.ResetReplyTargetCommand;
                 box.ReplyTip = viewModel.ReplyTarget;

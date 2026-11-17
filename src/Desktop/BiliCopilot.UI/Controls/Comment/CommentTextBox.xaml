@@ -54,30 +54,41 @@
                 <ic:SymbolIcon FontSize="10" Symbol="Dismiss" />
             </Button>
         </Grid>
-        <AutoSuggestBox
-            x:Name="ReplyBox"
+        <Grid
             Grid.Row="1"
             Grid.ColumnSpan="2"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch"
-            AllowFocusOnInteraction="True"
-            Background="Transparent"
-            BorderThickness="0"
-            PlaceholderText="{ext:Locale Name=ReplyPlaceholderText}"
-            QuerySubmitted="OnReplySubmittedAsync"
-            Text="{x:Bind Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-            <AutoSuggestBox.TextBoxStyle>
-                <Style BasedOn="{StaticResource AutoSuggestBoxTextBoxStyle}" TargetType="TextBox">
-                    <Setter Property="Padding" Value="40,8,12,8" />
-                    <Setter Property="TextWrapping" Value="Wrap" />
-                    <Setter Property="AcceptsReturn" Value="True" />
-                    <Setter Property="MaxHeight" Value="80" />
-                </Style>
-            </AutoSuggestBox.TextBoxStyle>
-            <AutoSuggestBox.QueryIcon>
+            Margin="0"
+            ColumnSpacing="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <!--  RichEditBox 才能把表情图塞进正文：占位符仍是 [名字]，显示的是图.  -->
+            <RichEditBox
+                x:Name="ReplyEditor"
+                Grid.Column="0"
+                Padding="40,8,8,8"
+                AcceptsReturn="True"
+                Background="Transparent"
+                BorderThickness="0"
+                FontSize="14"
+                MaxHeight="80"
+                PlaceholderText="{ext:Locale Name=ReplyPlaceholderText}"
+                TextWrapping="Wrap" />
+            <Button
+                Grid.Column="1"
+                Width="32"
+                Height="32"
+                Margin="0,2,8,2"
+                VerticalAlignment="Bottom"
+                AutomationProperties.Name="发送"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="OnSendClicked"
+                Style="{StaticResource SmallIconButtonStyle}">
                 <ic:SymbolIcon FontSize="14" Symbol="Send" />
-            </AutoSuggestBox.QueryIcon>
-        </AutoSuggestBox>
+            </Button>
+        </Grid>
         <Button
             Grid.Row="1"
             Margin="4,2,0,0"
