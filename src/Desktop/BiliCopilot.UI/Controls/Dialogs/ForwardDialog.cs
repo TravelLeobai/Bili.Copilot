@@ -1,7 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using System.Text;
-using BiliCopilot.UI.Controls.Components;
 using BiliCopilot.UI.Services;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
@@ -22,11 +21,10 @@ namespace BiliCopilot.UI.Controls.Dialogs;
 public sealed record ForwardPreview(string? Name, Uri? Avatar, Uri? Cover, string Text);
 
 /// <summary>
-/// 转发动态的输入框：标题 + 说点什么吧 + 缩略卡片 + 表情面板 + 字数 + 发表/取消.
+/// 转发动态的输入框：标题 + 说点什么吧 + 缩略卡片 + 字数 + 发表/取消.
 /// <para>
-/// 表情一律以 <c>[名字]</c> 占位文本插入。早先是把表情图内嵌进 RichEditBox（整篇重建 RTF），
-/// 那条路会把正文里的中文连同图片一起弄坏 —— 表现就是"发表情包之后，表情和写好的评论都没了"。
-/// B 站动态正文本来就用 <c>[名字]</c> 认表情，直接插文本既不会丢内容，发出去也能正常渲染。
+/// 表情面板已摘掉：原来那套"图片内嵌 + 整篇重建 RTF"的做法会把正文里的中文一起弄坏，
+/// 发表后表情连同评论一起消失。要发表情就走 B 站网页端，这里只保证文字能正常发出去.
 /// </para>
 /// </summary>
 public static class ForwardDialog
@@ -59,7 +57,6 @@ public static class ForwardDialog
             MaxLength = 1000,
         };
 
-        // 插进去的表情 token，按顺序记下来；发表时把文档里的图片占位符换回 token.
 
         var counter = new TextBlock
         {
@@ -74,20 +71,6 @@ public static class ForwardDialog
         var panel = new StackPanel { Spacing = 10, Width = 560 };
         panel.Children.Add(box);
 
-        var emojiButton = new Button
-        {
-            Padding = new Thickness(8, 4, 8, 4),
-            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            BorderThickness = new Thickness(0),
-            Content = new FluentIcons.WinUI.SymbolIcon
-            {
-                Symbol = FluentIcons.Common.Symbol.Emoji,
-                FontSize = 14,
-            },
-        };
-        ToolTipService.SetToolTip(emojiButton, "表情");
-        emojiButton.Flyout = BuildEmoteFlyout(box);
-
         var toolbar = new Grid
         {
             ColumnDefinitions =
@@ -96,7 +79,6 @@ public static class ForwardDialog
                 new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
             },
         };
-        toolbar.Children.Add(emojiButton);
 
         // 右半边：允许评论和转发 + 字数，整体靠右.
         // 勾选框和文字分开摆：CheckBox 自带 Content 时文字基线跟方框对不齐，
@@ -179,53 +161,6 @@ public static class ForwardDialog
     {
         box.Document.GetText(TextGetOptions.NoHidden, out var text);
         return string.IsNullOrEmpty(text) ? string.Empty : text.TrimEnd('\r');
-    }
-
-    private static Flyout BuildEmoteFlyout(RichEditBox box)
-    {
-        var host = new Grid { Width = 320, Height = 420 };
-        var flyout = new Flyout
-        {
-            Content = host,
-        };
-
-        flyout.Opened += (_, _) =>
-        {
-            if (host.Children.Count > 0)
-            {
-                return;
-            }
-
-            var emotePanel = new EmotePanel
-            {
-                Width = 320,
-                Height = 420,
-            };
-            emotePanel.ItemClick += (_, key) => InsertEmote(box, key);
-            host.Children.Add(emotePanel);
-        };
-
-        return flyout;
-    }
-
-    private static void InsertEmote(RichEditBox box, string key)
-    {
-        if (string.IsNullOrWhiteSpace(key))
-        {
-            return;
-        }
-
-        // 直接插 "[名字]"。B 站动态正文按这个占位认表情，发出去就是图.
-        InsertPlain(box, key);
-    }
-
-    private static void InsertPlain(RichEditBox box, string text)
-    {
-        box.Document.GetText(TextGetOptions.NoHidden, out var raw);
-        raw = raw.TrimEnd('\r');
-        var caret = Math.Clamp(box.Document.Selection.StartPosition, 0, raw.Length);
-        box.Document.SetText(TextSetOptions.None, raw.Insert(caret, text));
-        box.Document.Selection.SetRange(caret + text.Length, caret + text.Length);
     }
 
     private static FrameworkElement BuildPreviewCard(ForwardPreview preview)
