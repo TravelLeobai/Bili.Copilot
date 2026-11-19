@@ -18,7 +18,10 @@
             BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
             BorderThickness="1"
             CornerRadius="8">
-            <Grid Padding="12" RowSpacing="8">
+            <Grid
+                Padding="12"
+                RowSpacing="8"
+                ScrollViewer.BringIntoViewOnFocusChange="False">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
