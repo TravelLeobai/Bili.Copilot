@@ -3,22 +3,22 @@
     x:Class="BiliCopilot.UI.Controls.Comment.CommentVotePanel"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:BiliCopilot.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:ic="using:FluentIcons.WinUI"
     xmlns:items="using:BiliCopilot.UI.ViewModels.Items"
+    xmlns:local="using:BiliCopilot.UI.Controls.Comment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     IsTabStop="False"
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <!--  行高/内边距照搬互动弹幕投票卡片里的选项行，两处看起来是一套东西。  -->
+        <!--  一行图例：能投的时候整行是开关，投过之后是结果.  -->
         <Style
             x:Key="VoteChoiceStyle"
             BasedOn="{StaticResource DefaultToggleButtonStyle}"
             TargetType="ToggleButton">
-            <Setter Property="MinHeight" Value="36" />
-            <Setter Property="Padding" Value="11,5,11,6" />
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="6,3,8,4" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <!--  焦点框画在行内：贴边的列表会把它裁掉一半。  -->
@@ -34,7 +34,7 @@
 
     <!--
         评论附带的投票。宽度由宿主给（入口弹出里是 340）。
-        选项一多就让中间的列表自己滚，标题和下面的按钮始终留在视野里。
+        左边是饼图（点一片就是选这一项），右边是图例（文字 + 票数 + 占比，键盘与读屏走这里）。
     -->
     <Grid RowSpacing="12">
         <Grid.RowDefinitions>
@@ -139,129 +139,123 @@
             Visibility="{x:Bind ViewModel.IsUnavailable, Mode=OneWay}" />
 
         <!--
-            选项。能投的时候每一行是可勾选的（单选是圆点、多选是方框）；
-            投过之后、或者本来就不能投，同一行改成显示票数、占比和自己选的那一项。
+            饼图 + 图例。能投的时候点饼图的一片、或者点图例的整行，都是选这一项；
+            投过之后、或者本来就不能投，同一批数据改成显示票数与占比。
         -->
-        <ScrollViewer
-            x:Name="OptionsScroller"
+        <Grid
             Grid.Row="1"
-            MaxHeight="364"
-            AutomationProperties.Name="投票选项"
-            HorizontalScrollBarVisibility="Disabled"
-            HorizontalScrollMode="Disabled"
-            IsTabStop="False"
-            UseSystemFocusVisuals="True"
-            VerticalScrollBarVisibility="Auto"
+            ColumnSpacing="12"
             Visibility="{x:Bind ViewModel.IsReady, Mode=OneWay}">
-            <ItemsControl
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <local:CommentVotePie
+                x:Name="Pie"
+                VerticalAlignment="Top"
+                AutomationProperties.Name="投票图表，点击扇形选择"
+                ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+
+            <ScrollViewer
+                x:Name="OptionsScroller"
+                Grid.Column="1"
+                MaxHeight="248"
+                AutomationProperties.Name="投票选项"
+                HorizontalScrollBarVisibility="Disabled"
+                HorizontalScrollMode="Disabled"
                 IsTabStop="False"
-                ItemsSource="{x:Bind ViewModel.Options, Mode=OneWay}"
-                XYFocusKeyboardNavigation="Enabled">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="items:CommentVoteOptionViewModel">
-                        <Grid Margin="0,0,0,6">
-                            <ToggleButton
-                                AutomationProperties.Name="{x:Bind Text}"
-                                Click="OnOptionClick"
-                                IsChecked="{x:Bind IsChecked, Mode=OneWay}"
-                                IsEnabled="{x:Bind CanChoose, Mode=OneWay}"
-                                Style="{StaticResource VoteChoiceStyle}"
-                                Tag="{x:Bind}"
-                                Visibility="{x:Bind IsChoice, Mode=OneWay}">
-                                <Grid ColumnSpacing="8">
+                UseSystemFocusVisuals="True"
+                VerticalScrollBarVisibility="Auto">
+                <ItemsControl
+                    IsTabStop="False"
+                    ItemsSource="{x:Bind ViewModel.Options, Mode=OneWay}"
+                    XYFocusKeyboardNavigation="Enabled">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="items:CommentVoteOptionViewModel">
+                            <Grid Margin="0,0,0,4">
+                                <ToggleButton
+                                    AutomationProperties.Name="{x:Bind ResultName, Mode=OneWay}"
+                                    Click="OnOptionClick"
+                                    IsChecked="{x:Bind IsChecked, Mode=OneWay}"
+                                    IsEnabled="{x:Bind CanChoose, Mode=OneWay}"
+                                    Style="{StaticResource VoteChoiceStyle}"
+                                    Tag="{x:Bind}"
+                                    Visibility="{x:Bind IsChoice, Mode=OneWay}">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border
+                                            Width="10"
+                                            Height="10"
+                                            VerticalAlignment="Center"
+                                            Background="{x:Bind Swatch}"
+                                            CornerRadius="5" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            MaxLines="2"
+                                            Text="{x:Bind Text}"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="Wrap" />
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            AutomationProperties.AccessibilityView="Raw"
+                                            Style="{StaticResource VoteCaptionStyle}"
+                                            Text="{x:Bind Stats, Mode=OneWay}" />
+                                    </Grid>
+                                </ToggleButton>
+                                <Grid
+                                    MinHeight="34"
+                                    Padding="6,3,8,4"
+                                    ColumnSpacing="8"
+                                    Visibility="{x:Bind IsResult, Mode=OneWay}">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <ic:SymbolIcon
+                                    <Border
+                                        Width="10"
+                                        Height="10"
                                         VerticalAlignment="Center"
-                                        FontSize="16"
-                                        IconVariant="{x:Bind GlyphVariant, Mode=OneWay}"
-                                        Symbol="{x:Bind Glyph, Mode=OneWay}" />
-                                    <controls:BasicCoverImage
-                                        Grid.Column="1"
-                                        Width="44"
-                                        Height="44"
-                                        Margin="0,2"
-                                        VerticalAlignment="Center"
-                                        CornerRadius="{StaticResource ControlCornerRadius}"
-                                        DecodeWidth="88"
-                                        Source="{x:Bind Image}"
-                                        Visibility="{x:Bind HasImage}" />
+                                        Background="{x:Bind Swatch}"
+                                        CornerRadius="5" />
                                     <TextBlock
-                                        Grid.Column="2"
+                                        Grid.Column="1"
                                         VerticalAlignment="Center"
-                                        MaxLines="3"
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        MaxLines="2"
                                         Text="{x:Bind Text}"
                                         TextTrimming="CharacterEllipsis"
                                         TextWrapping="Wrap" />
+                                    <ic:SymbolIcon
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                        IconVariant="Filled"
+                                        Symbol="CheckmarkCircle"
+                                        ToolTipService.ToolTip="你选的"
+                                        Visibility="{x:Bind IsMine, Mode=OneWay}" />
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AccessibilityView="Raw"
+                                        Style="{StaticResource VoteCaptionStyle}"
+                                        Text="{x:Bind Stats, Mode=OneWay}" />
                                 </Grid>
-                            </ToggleButton>
-                            <Grid
-                                MinHeight="36"
-                                Padding="11,3,11,4"
-                                Background="{ThemeResource ControlFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                ColumnSpacing="6"
-                                CornerRadius="{StaticResource ControlCornerRadius}"
-                                RowSpacing="3"
-                                Visibility="{x:Bind IsResult, Mode=OneWay}">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <controls:BasicCoverImage
-                                    Width="44"
-                                    Height="44"
-                                    Margin="0,3,2,1"
-                                    VerticalAlignment="Center"
-                                    CornerRadius="{StaticResource ControlCornerRadius}"
-                                    DecodeWidth="88"
-                                    Source="{x:Bind Image}"
-                                    Visibility="{x:Bind HasImage}" />
-                                <TextBlock
-                                    Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.AccessibilityView="Raw"
-                                    MaxLines="3"
-                                    Text="{x:Bind Text}"
-                                    TextTrimming="CharacterEllipsis"
-                                    TextWrapping="Wrap" />
-                                <ic:SymbolIcon
-                                    Grid.Column="2"
-                                    VerticalAlignment="Center"
-                                    FontSize="14"
-                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                    IconVariant="Filled"
-                                    Symbol="CheckmarkCircle"
-                                    ToolTipService.ToolTip="你选的"
-                                    Visibility="{x:Bind IsMine, Mode=OneWay}" />
-                                <TextBlock
-                                    Grid.Column="3"
-                                    VerticalAlignment="Center"
-                                    AutomationProperties.AccessibilityView="Raw"
-                                    Style="{StaticResource VoteCaptionStyle}"
-                                    Text="{x:Bind Stats, Mode=OneWay}" />
-                                <ProgressBar
-                                    Grid.Row="1"
-                                    Grid.ColumnSpan="4"
-                                    AutomationProperties.Name="{x:Bind ResultName, Mode=OneWay}"
-                                    Maximum="100"
-                                    Value="{x:Bind Percent, Mode=OneWay}" />
                             </Grid>
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
 
         <StackPanel
             Grid.Row="2"

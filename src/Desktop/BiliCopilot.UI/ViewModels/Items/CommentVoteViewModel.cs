@@ -390,9 +390,9 @@ public sealed partial class CommentVoteViewModel : ObservableObject
         else
         {
             Options.Clear();
-            foreach (var option in detail.Options)
+            for (var i = 0; i < detail.Options.Count; i++)
             {
-                Options.Add(new CommentVoteOptionViewModel(option, isMulti) { IsChecked = previous.Contains(option.Index) });
+                Options.Add(new CommentVoteOptionViewModel(detail.Options[i], isMulti, i) { IsChecked = previous.Contains(detail.Options[i].Index) });
             }
         }
 
