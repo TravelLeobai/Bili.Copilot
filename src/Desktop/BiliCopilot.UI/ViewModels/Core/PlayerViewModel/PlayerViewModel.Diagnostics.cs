@@ -42,6 +42,9 @@ public sealed partial class PlayerViewModel
             CultureInfo.InvariantCulture,
             $"s{LifecycleId}-{sequence}-{DateTime.UtcNow:yyyyMMdd'T'HHmmss'Z'}");
 
+        // 弹幕重建日志要用同一个 id 才能和停滞对照.
+        Danmaku.DiagnosticsSessionId = _diagnosticsSessionId;
+
 #if DEBUG
         StopPlaybackStallWatch();
         StartPlaybackStallWatch();

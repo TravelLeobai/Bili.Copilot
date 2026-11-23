@@ -1,6 +1,7 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Services.Diagnostics;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,9 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
     private int _lastProgress;
     private DanmakuFrostMaster? _danmakuMaster;
     private DanmakuRenderer? _danmakuRenderer;
+
+    // 重建代号：只用于判断一份计时结果有没有过期，不参与渲染决策.
+    private readonly DanmakuRebuildGeneration _rebuildGeneration = new();
 
     public VideoDanmakuPanel() => InitializeComponent();
 
@@ -137,7 +141,7 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
                     RootGrid.Children.Clear();
                     ReloadRenderer();
                     ResetDanmakuStyle();
-                    ViewModel.Redraw();
+                    ViewModel.Redraw("renderer");
                 }
                 else if (ViewModel.Renderer == DanmakuRendererType.Win2D && _danmakuRenderer != null)
                 {
@@ -146,7 +150,7 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
                     RootGrid.Children.Clear();
                     ReloadRenderer();
                     ResetDanmakuStyle();
-                    ViewModel.Redraw();
+                    ViewModel.Redraw("renderer");
                 }
             });
         }
@@ -267,6 +271,12 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
             return;
         }
 
+        // 诊断：端到端从这里起算（含下面的 500ms 延迟与 UI 队列排队）.
+        var requestedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        var reason = ViewModel.LastRebuildReason;
+        var sessionId = ViewModel.DiagnosticsSessionId;
+        var generation = _rebuildGeneration.Begin();
+
         if (_danmakuRenderer == null || _danmakuMaster == null)
         {
             await Task.Delay(500);
@@ -280,21 +290,117 @@ public sealed partial class VideoDanmakuPanel : DanmakuControlBase
                 return;
             }
 
-            if (ViewModel.GetCachedDanmakus().Count > 0)
+            var timings = new DanmakuRebuildTimings();
+            var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+            var succeeded = false;
+
+            // 注意：这里不 catch —— 渲染层抛异常的行为必须和改动前一致（仍然往上抛）.
+            try
             {
-                _danmakuMaster?.SetDanmakuList(BilibiliDanmakuParser.GetDanmakuList(ViewModel.GetCachedDanmakus(), true));
-                _danmakuRenderer?.SetDanmakuList(BilibiliDanmakuParser.GetDanmakuList(ViewModel.GetCachedDanmakus(), true));
+                if (ViewModel.GetCachedDanmakus().Count > 0)
+                {
+                    // build：缓存条目 → 渲染器弹幕对象. 仍然按原来的「每个渲染器各转一次」，
+                    // 不合并成一份共享列表（渲染层可能改动自己那份，合并就是行为变更）.
+                    var buildStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                    var masterList = _danmakuMaster is null
+                        ? null
+                        : BilibiliDanmakuParser.GetDanmakuList(ViewModel.GetCachedDanmakus(), true);
+                    var rendererList = _danmakuRenderer is null
+                        ? null
+                        : BilibiliDanmakuParser.GetDanmakuList(ViewModel.GetCachedDanmakus(), true);
+                    timings.BuildMilliseconds = DanmakuRebuildTimings.Elapsed(buildStartedAt);
+                    timings.Events = masterList?.Count ?? rendererList?.Count ?? 0;
+
+                    // write：把列表交给渲染层（Win2D 侧会在这一步建池）.
+                    var writeStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                    if (_danmakuMaster is { } master && masterList is not null)
+                    {
+                        master.SetDanmakuList(masterList);
+                    }
+
+                    if (_danmakuRenderer is { } renderer && rendererList is not null)
+                    {
+                        renderer.SetDanmakuList(rendererList);
+                    }
+
+                    timings.WriteMilliseconds = DanmakuRebuildTimings.Elapsed(writeStartedAt);
+                }
+
+                // select：把渲染器时间对准当前进度.
+                var selectStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                UpdateDanmakuTime(_lastProgress);
+                timings.SelectMilliseconds = DanmakuRebuildTimings.Elapsed(selectStartedAt);
+
+                // style：套样式.
+                var styleStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                ResetDanmakuStyle();
+                timings.StyleMilliseconds = DanmakuRebuildTimings.Elapsed(styleStartedAt);
+
+                if (!ViewModel.IsPaused)
+                {
+                    var resumeStartedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                    _danmakuRenderer?.Resume();
+                    _danmakuMaster?.Resume();
+                    timings.ResumeMilliseconds = DanmakuRebuildTimings.Elapsed(resumeStartedAt);
+                }
+
+                succeeded = true;
             }
-
-            UpdateDanmakuTime(_lastProgress);
-            ResetDanmakuStyle();
-
-            if (!ViewModel.IsPaused)
+            finally
             {
-                _danmakuRenderer?.Resume();
-                _danmakuMaster?.Resume();
+                CompleteRebuildTiming(sessionId, reason, generation, requestedAt, startedAt, succeeded, timings);
             }
         });
+    }
+
+    /// <summary>
+    /// 收尾一次重建计时并写日志. 日志本身包了 try/catch：诊断不许把播放带崩.
+    /// </summary>
+    private void CompleteRebuildTiming(
+        string? sessionId,
+        string? reason,
+        long generation,
+        long requestedAt,
+        long startedAt,
+        bool succeeded,
+        DanmakuRebuildTimings timings)
+    {
+        try
+        {
+            timings.Failed = !succeeded;
+            timings.Stale = !_rebuildGeneration.IsCurrent(generation);
+            timings.QueueMilliseconds = (startedAt - requestedAt) * 1000d / System.Diagnostics.Stopwatch.Frequency;
+            timings.TotalMilliseconds = DanmakuRebuildTimings.Elapsed(requestedAt);
+
+            // 控成本：日志级别关着就一点格式化都不做.
+            if (!Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+            {
+                return;
+            }
+
+            Serilog.Log.Information(
+                "DANMAKU | rebuild session={Session} reason={Reason} events={Events} queue-ms={QueueMs} build-ms={BuildMs} write-ms={WriteMs} style-ms={StyleMs} select-ms={SelectMs} resume-ms={ResumeMs} work-ms={WorkMs} total-ms={TotalMs} stale={Stale} failed={Failed} tick={Tick} utc={Utc}",
+                sessionId ?? "-",
+                reason ?? "unknown",
+                timings.Events,
+                timings.QueueMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.BuildMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.WriteMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.StyleMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.SelectMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.ResumeMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.SegmentSumMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.TotalMilliseconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture),
+                timings.Stale,
+                timings.Failed,
+                startedAt,
+                DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex)
+        {
+            // 诊断失败（日志后端在关闭等）不许影响播放.
+            System.Diagnostics.Debug.WriteLine(ex.Message);
+        }
     }
 
     private void UpdateDanmakuTime(double pos)

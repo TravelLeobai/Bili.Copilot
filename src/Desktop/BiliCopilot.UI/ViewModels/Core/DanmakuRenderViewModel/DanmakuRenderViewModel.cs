@@ -1,4 +1,4 @@
-﻿using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
 using Richasy.BiliKernel.Models.Danmaku;
@@ -19,7 +19,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
     {
         _cachedDanmakus = danmakus;
         ResetData();
-        Redraw();
+        Redraw("items");
     }
 
     public IList<DanmakuInformation> GetCachedDanmakus()
@@ -64,9 +64,27 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
     /// 重新绘制.
     /// </summary>
     public void Redraw()
+        => Redraw("explicit");
+
+    /// <summary>
+    /// 带触发原因的重新绘制. 原因会写进重建耗时日志，必须来自真实调用路径.
+    /// </summary>
+    /// <param name="reason">触发原因：items / visibility / renderer / explicit.</param>
+    public void Redraw(string reason)
     {
+        LastRebuildReason = reason;
         RequestRedrawDanmaku?.Invoke(this, EventArgs.Empty);
     }
+
+    /// <summary>
+    /// Gets 最近一次重建的触发原因（由面板读走写进日志）.
+    /// </summary>
+    public string LastRebuildReason { get; private set; } = "unknown";
+
+    /// <summary>
+    /// Gets or sets 当前播放会话 id（由 PlayerViewModel 写入），用来把弹幕重建日志和播放停滞对上.
+    /// </summary>
+    public string? DiagnosticsSessionId { get; set; }
 
     /// <summary>
     /// 清除数据.
@@ -138,7 +156,7 @@ public sealed partial class DanmakuRenderViewModel : ViewModelBase
     {
         if (value)
         {
-            Redraw();
+            Redraw("visibility");
         }
 
         SettingsToolkit.WriteLocalSetting(Models.Constants.SettingNames.IsShowDanmaku, value);

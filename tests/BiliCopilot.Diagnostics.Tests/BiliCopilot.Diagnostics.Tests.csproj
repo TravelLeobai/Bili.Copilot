@@ -18,6 +18,7 @@
     <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallDumpBudget.cs" Link="Linked/PlaybackStallDumpBudget.cs" />
     <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallDump.cs" Link="Linked/PlaybackStallDump.cs" />
     <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallWatch.cs" Link="Linked/PlaybackStallWatch.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/DanmakuRebuildTiming.cs" Link="Linked/DanmakuRebuildTiming.cs" />
   </ItemGroup>
 
   <ItemGroup>
