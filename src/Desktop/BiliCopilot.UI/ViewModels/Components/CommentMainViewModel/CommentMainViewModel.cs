@@ -95,6 +95,14 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
                 _logger,
                 SortType == CommentSortType.Hot ? 2 : 0);
             _preventLoadMore = view.IsEnd;
+
+            // 视频自己的投票（不在任何一条评论里）：只在第一页查一次，之后再翻页不再请求.
+            if (!_videoVoteChecked)
+            {
+                _videoVoteChecked = true;
+                await LoadVideoVoteAsync(cookie);
+            }
+
             if (view.TopComment is not null)
             {
                 TopItem = new CommentDetailViewModel(new CommentItemViewModel(view.TopComment, _service, SetReplyTarget, cookie), ShowMore, _service);
@@ -128,6 +136,31 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
     {
         SortType = type;
         await RefreshAsync();
+    }
+
+    /// <summary>
+    /// 视频自己的投票：评论区顶部那张独立卡片。没有就保持 null，卡片不出现.
+    /// </summary>
+    /// <param name="cookie">登录态.</param>
+    /// <returns>任务.</returns>
+    private async Task LoadVideoVoteAsync(string cookie)
+    {
+        try
+        {
+            var card = await Services.CommentVoteService.Default.GetVideoVoteCardAsync(
+                Id,
+                (int)_targetType,
+                cookie,
+                CancellationToken.None);
+            VideoVote = card is null
+                ? null
+                : new CommentVoteViewModel(card, Services.CommentVoteService.Default, () => cookie);
+        }
+        catch (Exception ex)
+        {
+            // 卡片拿不到不影响评论本身.
+            _logger.LogDebug("视频投票卡片加载失败：{ErrorType}", ex.GetType().Name);
+        }
     }
 
     [RelayCommand]

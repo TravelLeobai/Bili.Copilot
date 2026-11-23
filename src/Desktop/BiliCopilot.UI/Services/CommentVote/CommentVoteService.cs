@@ -25,6 +25,9 @@ internal sealed class CommentVoteService
 {
     private const string VoteInfoApi = "https://api.bilibili.com/x/vote/vote_info";
     private const string DoVoteApi = "https://api.bilibili.com/x/vote/do_vote";
+
+    // 评论首屏：视频自己的投票（data.vote_card）只在这里出现.
+    private const string CommentMainApi = "https://api.bilibili.com/x/v2/reply/main";
     private const string UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
     // 服务端对「存在但不给看」的投票回的码.
@@ -44,11 +47,15 @@ internal sealed class CommentVoteService
     // 投票成功但响应没带票数时，官方页面也是这个间隔重查一次.
     private static readonly TimeSpan DefaultRequeryDelay = TimeSpan.FromMilliseconds(600);
 
+    private const int MaxCachedVideoVotes = 32;
+    private static readonly TimeSpan VideoVoteCacheLifetime = TimeSpan.FromMinutes(10);
+
     private readonly HttpClient _client;
     private readonly TimeSpan _requeryDelay;
     private readonly ILogger<CommentVoteService> _logger;
     private readonly SemaphoreSlim _detailGate = new(MaxConcurrentDetailRequests, MaxConcurrentDetailRequests);
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, VideoVoteCacheEntry> _videoVoteCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Task<CommentVoteDetail?>> _inFlight = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -266,6 +273,65 @@ internal sealed class CommentVoteService
             votes);
     }
 
+    /// <summary>
+    /// 查「视频自己的投票」——它不在评论区任何一条评论里，而是评论首屏接口 <c>data.vote_card</c> 带下来的。
+    /// 只有视频评论有，动态/番剧没有；没有投票时返回 null.
+    /// </summary>
+    /// <param name="oid">评论对象 id（视频是 aid）.</param>
+    /// <param name="targetType">评论类型（视频 1）.</param>
+    /// <param name="cookie">登录态（可选）.</param>
+    /// <param name="cancellationToken">取消.</param>
+    /// <returns>投票引用；没有视频投票时 null.</returns>
+    public async Task<CommentVoteRef?> GetVideoVoteCardAsync(string oid, int targetType, string cookie, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(oid) || targetType <= 0)
+        {
+            return null;
+        }
+
+        var key = $"{targetType}:{oid}";
+        if (_videoVoteCache.TryGetValue(key, out var cached) && DateTimeOffset.UtcNow - cached.FetchedAt <= VideoVoteCacheLifetime)
+        {
+            return cached.Vote;
+        }
+
+        CommentVoteRef? vote = null;
+        try
+        {
+            var url = $"{CommentMainApi}?type={targetType}&oid={Uri.EscapeDataString(oid)}&mode=3&next=0&ps=1";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            AddCommonHeaders(request, cookie);
+            using var response = await _client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                var json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                vote = CommentVoteParser.ParseVideoVoteCard(json);
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            // 拿不到就当没有：评论区不该因为一个可选卡片打不开而报错.
+            _logger.LogDebug("视频投票卡片读取失败：{ErrorType}", ex.GetType().Name);
+            return null;
+        }
+
+        if (_videoVoteCache.Count > MaxCachedVideoVotes)
+        {
+            foreach (var pair in _videoVoteCache.OrderBy(pair => pair.Value.FetchedAt).Take(_videoVoteCache.Count - MaxCachedVideoVotes))
+            {
+                _videoVoteCache.TryRemove(pair.Key, out _);
+            }
+        }
+
+        _videoVoteCache[key] = new VideoVoteCacheEntry(vote, DateTimeOffset.UtcNow);
+        if (vote is not null)
+        {
+            _logger.LogInformation("视频投票：vote={VoteId} 标题={Title}", vote.Id, vote.Title);
+        }
+
+        return vote;
+    }
+
     private static SocketsHttpHandler CreateHandler()
         => new()
         {
@@ -467,4 +533,6 @@ internal sealed class CommentVoteService
     }
 
     private readonly record struct CacheEntry(CommentVoteDetail Detail, DateTimeOffset FetchedAt);
+
+    private readonly record struct VideoVoteCacheEntry(CommentVoteRef? Vote, DateTimeOffset FetchedAt);
 }

@@ -18,6 +18,54 @@ internal static class CommentVoteParser
     private const long MaxUnixSeconds = 253402300799;
 
     /// <summary>
+    /// 从评论首屏响应的 <c>data.vote_card</c> 里读「视频自己的投票」。
+    /// 它的字段名跟 vote_info 不是一套：<c>vote_id / title / count / options[].idx、desc、count</c>.
+    /// </summary>
+    /// <param name="json">整个响应体.</param>
+    /// <returns>投票引用；没有视频投票时 null.</returns>
+    public static CommentVoteRef? ParseVideoVoteCard(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("data", out var data)
+                || data.ValueKind != JsonValueKind.Object
+                || !data.TryGetProperty("vote_card", out var card)
+                || card.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var id = GetInt64(card, "vote_id");
+            if (id <= 0)
+            {
+                return null;
+            }
+
+            // 选项空的卡片没有意义，按没有处理.
+            if (!card.TryGetProperty("options", out var options)
+                || options.ValueKind != JsonValueKind.Array
+                || options.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            var title = GetString(card, "title")?.Trim();
+            var count = GetInt64(card, "count");
+            return new CommentVoteRef(
+                id.ToString(CultureInfo.InvariantCulture),
+                string.IsNullOrWhiteSpace(title) ? null : title,
+                count > 0 ? count : null);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// 从响应的 <c>data</c> 里读一个投票.
     /// </summary>
     /// <param name="data">响应里的 data 节点.</param>

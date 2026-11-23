@@ -177,6 +177,45 @@ public class CommentVoteParserTests
         Assert.Empty(CommentVoteParser.ParseOptions(document.RootElement.GetProperty("data")));
     }
 
+    /// <summary>
+    /// 视频自己的投票：字段名和 vote_info 不是一套（vote_id/count/options[].idx、desc、count），
+    /// 这里用 2026-11-23 从 av116367407716583 真实响应里抓到的片段做样本.
+    /// </summary>
+    [Fact]
+    public void ParseVideoVoteCard_OnRealPayload_ReadsIdTitleAndCount()
+    {
+        var json = """
+            {"code":0,"data":{"vote_card":{"vote_id":19089581,"title":"新三国谁是关羽","count":1060,
+            "options":[{"idx":1,"desc":"没来那个","count":334},{"idx":2,"desc":"孙乾","count":279},
+            {"idx":3,"desc":"周仓","count":217},{"idx":4,"desc":"吕蒙","count":230}]}}}
+            """;
+
+        var vote = CommentVoteParser.ParseVideoVoteCard(json);
+
+        Assert.NotNull(vote);
+        Assert.Equal("19089581", vote!.Id);
+        Assert.Equal("新三国谁是关羽", vote.Title);
+        Assert.Equal(1060, vote.ParticipantCount);
+    }
+
+    [Fact]
+    public void ParseVideoVoteCard_WithoutVoteCard_IsNull()
+    {
+        Assert.Null(CommentVoteParser.ParseVideoVoteCard("""{"code":0,"data":{"vote":0}}"""));
+    }
+
+    [Fact]
+    public void ParseVideoVoteCard_WithNoOptions_IsNull()
+    {
+        Assert.Null(CommentVoteParser.ParseVideoVoteCard("""{"code":0,"data":{"vote_card":{"vote_id":7,"title":"x","options":[]}}}"""));
+    }
+
+    [Fact]
+    public void ParseVideoVoteCard_OnBrokenJson_IsNull()
+    {
+        Assert.Null(CommentVoteParser.ParseVideoVoteCard("{not json"));
+    }
+
     private static CommentVoteDetail? Parse(string json)
     {
         using var document = JsonDocument.Parse(json);

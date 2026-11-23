@@ -39,7 +39,12 @@
     <Grid RowSpacing="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <!--
+                中间这行不能写 *：这个面板有两种宿主——弹出里（有高度约束）和评论区顶部的
+                独立卡片（Auto 测量，可用高度是无穷）。星号行在无穷高度下会被算成 0，
+                卡片就只剩标题、选项全不见了。选项自己已有 MaxHeight，Auto 一样能滚.
+            -->
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 

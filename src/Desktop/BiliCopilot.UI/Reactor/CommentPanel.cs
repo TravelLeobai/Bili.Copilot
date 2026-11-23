@@ -272,13 +272,24 @@ public sealed class CommentPanel : Component
                 }
             });
 
+        // 视频自己的投票：一张独立卡片钉在评论区顶部，宽度与评论卡片相同。
+        // 它不属于任何评论，所以不进 VirtualList（否则滚走了就看不到），跟着列表外层一起固定.
+        Element videoVoteCard = viewModel.VideoVote is { } videoVote
+            ? new XamlHostElement(
+                () => new Controls.Comment.CommentVotePanel { MaxHeight = 420 },
+                element => ((Controls.Comment.CommentVotePanel)element).ViewModel = videoVote)
+                .Margin(12, 12, 12, 0)
+                .HAlign(HorizontalAlignment.Stretch)
+            : TextBlock(string.Empty).Height(0);
+
         return Grid(
             columns: new[] { GridSize.Star() },
-            rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
+            rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Star(), GridSize.Auto },
             header.WithKey("panel-head").Grid(row: 0, column: 0),
-            status.Grid(row: 1, column: 0),
-            list.WithKey("main-list").Grid(row: 2, column: 0),
-            input.WithKey("main-input").Grid(row: 3, column: 0))
+            videoVoteCard.Grid(row: 1, column: 0),
+            status.Grid(row: 2, column: 0),
+            list.WithKey("main-list").Grid(row: 3, column: 0),
+            input.WithKey("main-input").Grid(row: 4, column: 0))
             .Padding(0, 12, 0, 12)
             .WithKey("panel-main");
     }

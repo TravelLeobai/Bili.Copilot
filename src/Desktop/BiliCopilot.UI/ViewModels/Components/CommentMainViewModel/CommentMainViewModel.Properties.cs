@@ -26,6 +26,14 @@ public sealed partial class CommentMainViewModel
     private int _page;
     private CommentItemViewModel? _replyItem;
 
+    private bool _videoVoteChecked;
+
+    /// <summary>
+    /// Gets or sets 视频自己的投票（评论区顶部那张独立卡片）；没有时为 null.
+    /// </summary>
+    [ObservableProperty]
+    private CommentVoteViewModel? _videoVote;
+
     [ObservableProperty]
     private CommentDetailViewModel? _topItem;
 
