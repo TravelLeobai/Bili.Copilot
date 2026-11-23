@@ -17,6 +17,7 @@
   -->
   <ItemGroup>
     <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteText.cs" Link="Linked/CommentVoteText.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteGeometry.cs" Link="Linked/CommentVoteGeometry.cs" />
     <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteModels.cs" Link="Linked/CommentVoteModels.cs" />
     <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteParser.cs" Link="Linked/CommentVoteParser.cs" />
     <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteExceptions.cs" Link="Linked/CommentVoteExceptions.cs" />

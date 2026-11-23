@@ -1,7 +1,9 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.ComponentModel;
 using FluentIcons.Common;
+using Microsoft.UI.Xaml.Media;
 using Symbol = FluentIcons.Common.Symbol;
 
 namespace BiliCopilot.UI.ViewModels.Items;
@@ -13,10 +15,11 @@ public sealed partial class CommentVoteOptionViewModel : ObservableObject
 {
     private readonly bool _isMultiChoice;
 
-    internal CommentVoteOptionViewModel(Services.CommentVoteOption option, bool isMultiChoice)
+    internal CommentVoteOptionViewModel(Services.CommentVoteOption option, bool isMultiChoice, int order = 0)
     {
         _isMultiChoice = isMultiChoice;
         Index = option.Index;
+        Order = order;
         Text = option.Text;
         Image = option.Image;
         Count = option.Count;
@@ -28,6 +31,16 @@ public sealed partial class CommentVoteOptionViewModel : ObservableObject
     /// Gets 服务端认的选项序号.
     /// </summary>
     public int Index { get; }
+
+    /// <summary>
+    /// Gets 选项在列表里的位置（0 起），用来取饼图配色.
+    /// </summary>
+    public int Order { get; }
+
+    /// <summary>
+    /// Gets 饼图里这一片和图例小圆点的颜色.
+    /// </summary>
+    public Brush Swatch => CommentVotePalette.GetBrush(Order);
 
     /// <summary>
     /// Gets 选项正文.
