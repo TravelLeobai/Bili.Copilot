@@ -272,14 +272,19 @@ public sealed class CommentPanel : Component
                 }
             });
 
-        // 视频自己的投票：一张独立卡片钉在评论区顶部，宽度与评论卡片相同。
+        // 视频自己的投票：一张独立卡片钉在评论区顶部，外观与评论卡片同一套
+        // （CardBackgroundFillColorDefaultBrush + 圆角 4 + padding 12 + 左右 12 的外边距）。
         // 它不属于任何评论，所以不进 VirtualList（否则滚走了就看不到），跟着列表外层一起固定.
         Element videoVoteCard = viewModel.VideoVote is { } videoVote
-            ? new XamlHostElement(
-                () => new Controls.Comment.CommentVotePanel { MaxHeight = 420 },
-                element => ((Controls.Comment.CommentVotePanel)element).ViewModel = videoVote)
-                .Margin(12, 12, 12, 0)
-                .HAlign(HorizontalAlignment.Stretch)
+            ? Border(
+                new XamlHostElement(
+                    () => new Controls.Comment.CommentVotePanel { MaxHeight = 420 },
+                    element => ((Controls.Comment.CommentVotePanel)element).ViewModel = videoVote))
+                .Background(ThemeBrush("CardBackgroundFillColorDefaultBrush"))
+                .CornerRadius(4)
+                .Padding(12)
+                .Margin(12, 12, 12, 4)
+                .WithKey("video-vote-card")
             : TextBlock(string.Empty).Height(0);
 
         return Grid(

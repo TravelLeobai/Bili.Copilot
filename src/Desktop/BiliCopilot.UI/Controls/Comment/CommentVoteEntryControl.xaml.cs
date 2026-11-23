@@ -34,6 +34,13 @@ public sealed partial class CommentVoteEntryControl : UserControl
     }
 
     // 每次打开都重新拉一次：票数和「我投了什么」都可能是别处改过的.
+    // 第一次打开时面板还没挂载（Phase 是 Idle），加载由面板自己的 Loaded 负责，
+    // 这里不重复发一遍；之后再打开就是纯刷新.
     private void OnFlyoutOpening(object sender, object e)
-        => ViewModel?.LoadCommand.Execute(default);
+    {
+        if (ViewModel is { Phase: not CommentVotePhase.Idle } viewModel)
+        {
+            viewModel.LoadCommand.Execute(default);
+        }
+    }
 }

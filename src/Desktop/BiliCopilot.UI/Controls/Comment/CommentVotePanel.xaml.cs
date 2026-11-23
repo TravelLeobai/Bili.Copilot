@@ -58,6 +58,14 @@ public sealed partial class CommentVotePanel : UserControl
         _isLoaded = true;
         ViewModel?.Reattach();
         Observe(ViewModel);
+
+        // 面板有两种宿主：评论里的弹出（打开时由 Flyout.Opening 触发加载），
+        // 和评论区顶部那张独立卡片（没有 Flyout，全靠这里自己拉）。
+        // 只在还没拉过的时候动手，弹出那条路不会重复请求.
+        if (ViewModel is { Phase: CommentVotePhase.Idle } viewModel)
+        {
+            viewModel.LoadCommand.Execute(default);
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
