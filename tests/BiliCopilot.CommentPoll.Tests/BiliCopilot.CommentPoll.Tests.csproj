@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <LangVersion>preview</LangVersion>
+  </PropertyGroup>
+
+  <!--
+    投票服务不引用任何 WinUI 类型（只有 System.Text.Json / HttpClient / ILogger），
+    所以直接把源码编进测试工程：一份源码，两个宿主（桌面应用 + 测试），
+    不需要为可测性拆新项目，也不引入新包版本.
+    版本号与 src/Directory.Packages.props 里钉的完全一致.
+  -->
+  <ItemGroup>
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteText.cs" Link="Linked/CommentVoteText.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteModels.cs" Link="Linked/CommentVoteModels.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteParser.cs" Link="Linked/CommentVoteParser.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteExceptions.cs" Link="Linked/CommentVoteExceptions.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/CommentVote/CommentVoteService.cs" Link="Linked/CommentVoteService.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
