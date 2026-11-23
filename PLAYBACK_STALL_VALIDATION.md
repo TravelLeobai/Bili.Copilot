@@ -213,6 +213,26 @@ D:\dotnet\dotnet.exe test tests\BiliCopilot.Diagnostics.Tests\BiliCopilot.Diagno
 - `UiLag` p95 从 ~1ms 抬到 ~1.5–2.5ms，量级未变、仍远低于 16.7ms 帧预算。**我没有证据说明这是诊断代码引起的还是当天机器状态/视频码率差异**（当天播放的是 4K `qn=120`）。这一条记为「未定论」，需要严格 A/B 才能定论。
 - 唯一可以确定的是：诊断代码没有引入可见的卡顿（p95 仍在毫秒级，`STALL | skipped` 一条都没出现）。
 
+### 5.9 一次真实的 `progress-gap` 候选（被 GC 闸门正确拦下）
+
+这一条是收尾阶段才出现的，但它比前面所有「0 条」的记录更有信息量，所以单独记下来。
+
+应用启动后自动续播了一个视频（session `s1-1-20261123T093230Z`），启动期负载很重（`gc0=3815` 次 Gen0），日志出现：
+
+```
+17:33:49.981  STALL | skipped session=s1-1-20261123T093230Z type=progress-gap reason=gc-or-wake-gap
+              observed-ms=604.0 playing=true pos=39.5 gc0=3815 attempts=0 remaining=5 tick=317238828098
+```
+
+怎么读这条：
+
+- **判据确实在真实链路上工作了**：`type=progress-gap` 说明「播放中位置 604ms 没前进」这个条件真的被判出来了，不是只有单元测试里成立。
+- **抑制闸门也工作了**：`reason=gc-or-wake-gap` 说明它被拦下——启动期 GC 剧烈（`gc0=3815`）或监视线程自己被饿过，这段耗时不能算「mpv 卡住」。
+- **没有消耗名额**：`attempts=0 remaining=5` —— 被抑制的候选不占用 dump 配额，这是有意为之（只有真正要写盘才 `TryReserve`）。
+- 位置 `pos=39.5`、`playing=true`＋`publishes` 仍在增长（前一分钟 1560 次），说明当时画面在推进，604ms 的空档是启动期抖动而不是内核卡死 —— **闸门的判断是对的**。
+
+如果这一条被写成 `STALL | dump`，就是一次典型的假阳性；实测没有。
+
 ## 6. Dump 有效性
 
 本机没有 WinDbg/cdb，用 `dotnet-dump`（`%USERPROFILE%\.dotnet\tools\dotnet-dump.exe`，已装）。
