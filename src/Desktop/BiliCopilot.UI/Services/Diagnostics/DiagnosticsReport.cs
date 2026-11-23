@@ -2,7 +2,6 @@
 
 using System.IO.Compression;
 using System.Reflection;
-using Windows.System;
 
 namespace BiliCopilot.UI.Services.Diagnostics;
 
@@ -183,22 +182,36 @@ internal static class DiagnosticsReport
     /// <summary>在资源管理器里定位一个文件或目录.</summary>
     /// <param name="path">文件或目录的完整路径.</param>
     /// <returns>任务.</returns>
-    public static async Task RevealAsync(string path)
+    /// <remarks>
+    /// 用 explorer.exe，不用 StorageFolder/Launcher：那两个 WinRT API 拿到的对象带线程上下文，
+    /// 跨线程 await 之后在 finalizer 上释放会炸在 combase（0x80131509 stowed exception，2026-11-23 实测崩过一次）。
+    /// 这里要的只是"把资源管理器叫到某个路径"，交给系统进程最省事.
+    /// </remarks>
+    public static Task RevealAsync(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !(File.Exists(path) || Directory.Exists(path)))
+        if (string.IsNullOrWhiteSpace(path))
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        if (Directory.Exists(path))
+        try
         {
-            var folder = await Windows.Storage.StorageFolder.GetFolderFromPathAsync(path).AsTask().ConfigureAwait(false);
-            _ = await Launcher.LaunchFolderAsync(folder).AsTask().ConfigureAwait(false);
-            return;
+            if (Directory.Exists(path))
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+            }
+            else if (File.Exists(path))
+            {
+                // /select 让资源管理器打开父目录并选中该文件.
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning("打开资源管理器失败：{Type}", ex.GetType().Name);
         }
 
-        var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path).AsTask().ConfigureAwait(false);
-        _ = await Launcher.LaunchFileAsync(file).AsTask().ConfigureAwait(false);
+        return Task.CompletedTask;
     }
 
     private static string BuildManifest(IReadOnlyList<FileInfo> logs, IReadOnlyList<FileInfo> dumps, int skipped)
@@ -241,3 +254,4 @@ internal static class DiagnosticsReport
         return builder.ToString();
     }
 }
+
