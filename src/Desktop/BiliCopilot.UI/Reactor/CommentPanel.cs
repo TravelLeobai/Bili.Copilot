@@ -327,11 +327,14 @@ public sealed class CommentPanel : Component
                 .Margin(8, 0, 0, 0)
                 .Grid(row: 0, column: 1));
 
-        Element content = BuildCommentContent(comment.Content?.Text ?? string.Empty);
+        Element content = BuildCommentContent(comment.DisplayContent?.Text ?? string.Empty);
 
         // 评论附图：数据来自 x/v2/reply 的 content.pictures（见 CommentPictureStore），
         // 内核模型里没有这个字段，所以只能按评论 id 查缓存.
         var pictures = BuildCommentPictures(comment);
+
+        // 投票入口：正文已经剥掉了占位符，这里给一个可点开的面板。详情只在点开时拉.
+        var voteEntry = BuildVoteEntry(comment);
 
         var likeButton = new XamlHostElement(
             () => new CommentLikeButton { VerticalAlignment = VerticalAlignment.Center },
@@ -393,11 +396,12 @@ public sealed class CommentPanel : Component
 
         var body = Grid(
             columns: new[] { GridSize.Star() },
-            rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto },
+            rows: new[] { GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto, GridSize.Auto },
             nameRow.Grid(row: 0, column: 0),
             content.Grid(row: 1, column: 0).Margin(0, 6, 0, 0),
             pictures.Grid(row: 2, column: 0).Margin(0, 6, 0, 0),
-            actionRow.Grid(row: 3, column: 0));
+            voteEntry.Grid(row: 3, column: 0).Margin(0, 6, 0, 0),
+            actionRow.Grid(row: 4, column: 0));
 
         return Border(
             Grid(
@@ -518,6 +522,23 @@ public sealed class CommentPanel : Component
                 ex,
                 "评论表情加载失败");
         }
+    }
+
+    /// <summary>
+    /// 评论附带的投票入口：一个自建 XAML 控件（按钮 + 弹出面板），用 XamlHostElement 托管，
+    /// 卡片本身的布局、行高、缩进都不动。没有投票时返回零高度占位，不多占一行.
+    /// </summary>
+    private static Element BuildVoteEntry(CommentItemViewModel comment)
+    {
+        if (comment.Vote is not { } vote)
+        {
+            return TextBlock(string.Empty).Height(0);
+        }
+
+        return new XamlHostElement(
+            () => new CommentVoteEntryControl(),
+            element => ((CommentVoteEntryControl)element).ViewModel = vote)
+            .HAlign(HorizontalAlignment.Left);
     }
 
     /// <summary>

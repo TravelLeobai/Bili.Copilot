@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
@@ -76,4 +76,24 @@ public sealed partial class CommentItemViewModel
     /// 内容.
     /// </summary>
     public EmoteText Content { get; init; }
+
+    /// <summary>
+    /// 渲染用的正文：带投票占位符时是把 <c>{vote:ID}</c> 剥掉之后的那份，否则就是 <see cref="Content"/> 本身.
+    /// </summary>
+    public EmoteText? DisplayContent { get; init; }
+
+    /// <summary>
+    /// 评论附带的投票，没有时为 null.
+    /// </summary>
+    public CommentVoteViewModel? Vote { get; init; }
+
+    /// <summary>
+    /// 评论是否附带投票.
+    /// </summary>
+    public bool HasVote => Vote is not null;
+
+    /// <summary>
+    /// 拉评论时用到的登录态；投票沿用它，不另外再取一次.
+    /// </summary>
+    public string Cookie { get; set; } = string.Empty;
 }

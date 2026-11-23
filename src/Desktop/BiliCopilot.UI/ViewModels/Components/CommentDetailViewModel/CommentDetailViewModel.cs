@@ -56,6 +56,9 @@ public sealed partial class CommentDetailViewModel : ViewModelBase<CommentItemVi
             var view = await _service.GetDetailCommentsAsync(targetId, targetType, Richasy.BiliKernel.Models.CommentSortType.Time, Data.Data.Id, _offset);
             _offset = view.NextOffset;
             _preventLoadMore = view.NextOffset == 0 || view.Comments is null;
+
+            // 楼中楼里的评论也可能带投票，登录态跟主列表一样沿用它.
+            var cookie = this.Get<Richasy.BiliKernel.Bili.Authorization.IBiliCookiesResolver>()?.GetCookieString() ?? string.Empty;
             foreach (var item in view.Comments)
             {
                 if (Comments.Any(p => p.Data.Equals(item)))
@@ -63,7 +66,7 @@ public sealed partial class CommentDetailViewModel : ViewModelBase<CommentItemVi
                     continue;
                 }
 
-                Comments.Add(new CommentItemViewModel(item, _service, SetReplyTarget));
+                Comments.Add(new CommentItemViewModel(item, _service, SetReplyTarget, cookie));
             }
 
             ListUpdated?.Invoke(this, EventArgs.Empty);

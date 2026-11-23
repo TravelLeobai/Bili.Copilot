@@ -97,14 +97,14 @@ public sealed partial class CommentMainViewModel : ViewModelBase, IPlayerSection
             _preventLoadMore = view.IsEnd;
             if (view.TopComment is not null)
             {
-                TopItem = new CommentDetailViewModel(new CommentItemViewModel(view.TopComment, _service, SetReplyTarget), ShowMore, _service);
+                TopItem = new CommentDetailViewModel(new CommentItemViewModel(view.TopComment, _service, SetReplyTarget, cookie), ShowMore, _service);
             }
 
             foreach (var item in view.Comments)
             {
                 if (!Comments.Any(p => p.Data.Data.Equals(item)))
                 {
-                    Comments.Add(new CommentDetailViewModel(new CommentItemViewModel(item, _service, SetReplyTarget), ShowMore, _service));
+                    Comments.Add(new CommentDetailViewModel(new CommentItemViewModel(item, _service, SetReplyTarget, cookie), ShowMore, _service));
                 }
             }
 

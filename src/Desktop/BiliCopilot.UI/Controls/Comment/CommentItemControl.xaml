@@ -101,12 +101,21 @@
                     Text="{x:Bind ViewModel.RelativeTime, Mode=OneWay}"
                     ToolTipService.ToolTip="{x:Bind ViewModel.ActualTime, Mode=OneWay}" />
             </Grid>
-            <Grid Grid.Row="1">
+            <StackPanel Grid.Row="1" Spacing="6">
                 <comp:EmoteTextBlock
                     x:Name="ReplyContentBlock"
                     HorizontalAlignment="Left"
-                    Text="{x:Bind ViewModel.Content, Mode=OneWay}" />
-            </Grid>
+                    Text="{x:Bind ViewModel.DisplayContent, Mode=OneWay}" />
+                <!--
+                    评论附带的投票：正文里已经不再留 {vote:ID}，改成正文下面这一行入口。
+                    点开才拉详情，列表滚动不请求。
+                -->
+                <local:CommentVoteEntryControl
+                    x:Name="VoteEntry"
+                    HorizontalAlignment="Left"
+                    ViewModel="{x:Bind ViewModel.Vote, Mode=OneWay}"
+                    Visibility="{x:Bind ViewModel.HasVote, Mode=OneWay}" />
+            </StackPanel>
             <Grid Grid.Row="2" ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
