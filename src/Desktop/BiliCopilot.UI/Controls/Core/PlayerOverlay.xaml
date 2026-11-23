@@ -864,6 +864,8 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Grid
                         x:Name="StatisticsHeader"
@@ -932,6 +934,42 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <!--
+                        诊断区：dump 与日志本来就该在「属性」里看，不再另开面板。
+                        导出只写桌面，不上传。
+                    -->
+                    <Border
+                        Grid.Row="3"
+                        Height="1"
+                        Margin="14,8,14,6"
+                        Background="#26FFFFFF" />
+                    <StackPanel
+                        Grid.Row="4"
+                        Margin="14,0,14,0"
+                        Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                Padding="10,4"
+                                Command="{x:Bind ViewModel.OpenDumpFolderCommand, Mode=OneWay}"
+                                Content="打开 dump 目录"
+                                FontSize="12" />
+                            <Button
+                                Padding="10,4"
+                                Command="{x:Bind ViewModel.OpenLoggerFolderCommand, Mode=OneWay}"
+                                Content="打开日志目录"
+                                FontSize="12" />
+                            <Button
+                                Padding="10,4"
+                                Command="{x:Bind ViewModel.ExportDiagnosticsCommand, Mode=OneWay}"
+                                Content="导出诊断包"
+                                FontSize="12" />
+                        </StackPanel>
+                        <TextBlock
+                            FontSize="11"
+                            Opacity="0.7"
+                            Text="{x:Bind ViewModel.DiagnosticsNote, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

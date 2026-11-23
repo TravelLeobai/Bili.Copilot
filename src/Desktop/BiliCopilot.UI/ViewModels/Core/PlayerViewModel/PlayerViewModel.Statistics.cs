@@ -17,6 +17,7 @@ public sealed partial class PlayerViewModel
 {
     private DispatcherQueueTimer? _statisticsTimer;
     private bool _statsProbeReady;
+    private bool _isExportingDiagnostics;
 
     /// <summary>
     /// 统计浮层是否显示.
@@ -28,6 +29,77 @@ public sealed partial class PlayerViewModel
     /// 统计浮层里的行.
     /// </summary>
     public ObservableCollection<PlayerStatisticItem> StatisticsLines { get; } = new();
+
+    /// <summary>
+    /// 诊断区下面那行提示：导出结果或目录情况.
+    /// </summary>
+    [ObservableProperty]
+    private string _diagnosticsNote = string.Empty;
+
+    /// <summary>
+    /// 打开播放停滞 dump 目录.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenDumpFolderAsync()
+    {
+        var folder = Services.Diagnostics.DiagnosticsReport.DumpFolder;
+        if (!Directory.Exists(folder))
+        {
+            DiagnosticsNote = "还没有 dump 目录：Debug 下判据命中后才会创建。";
+            return;
+        }
+
+        await Services.Diagnostics.DiagnosticsReport.RevealAsync(folder);
+        DiagnosticsNote = $"已打开 {folder}";
+    }
+
+    /// <summary>
+    /// 打开日志目录.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenLoggerFolderAsync()
+    {
+        var folder = Services.Diagnostics.DiagnosticsReport.LoggerFolder;
+        if (!Directory.Exists(folder))
+        {
+            DiagnosticsNote = "还没有日志目录。";
+            return;
+        }
+
+        await Services.Diagnostics.DiagnosticsReport.RevealAsync(folder);
+        DiagnosticsNote = $"已打开 {folder}";
+    }
+
+    /// <summary>
+    /// 把近几天的日志与停滞 dump 打成一个 zip 放到桌面，并在资源管理器里定位它.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportDiagnosticsAsync()
+    {
+        if (_isExportingDiagnostics)
+        {
+            return;
+        }
+
+        _isExportingDiagnostics = true;
+        DiagnosticsNote = "正在打包…";
+        try
+        {
+            var result = await Services.Diagnostics.DiagnosticsReport.ExportAsync(CancellationToken.None);
+            var skipped = result.SkippedCount > 0 ? $"，跳过 {result.SkippedCount} 个占用中的文件" : string.Empty;
+            DiagnosticsNote = $"已导出到桌面：{Path.GetFileName(result.Path)}（日志 {result.LogCount} 个、dump {result.DumpCount} 个，{FormatBytes(result.Bytes)}{skipped}）";
+            await Services.Diagnostics.DiagnosticsReport.RevealAsync(result.Path);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning("导出诊断包失败：{Type} {Message}", ex.GetType().Name, ex.Message);
+            DiagnosticsNote = $"导出失败（{ex.GetType().Name}）。可以先用「打开日志目录」手动取。";
+        }
+        finally
+        {
+            _isExportingDiagnostics = false;
+        }
+    }
 
     /// <summary>
     /// 打开 / 收起统计浮层.
@@ -106,6 +178,7 @@ public sealed partial class PlayerViewModel
             lines.Add(new("网络活动", cacheSpeed < 1 ? "—" : $"{cacheSpeed / 1024d:F0} KB/s"));
 
             AppendSponsorStatistics(lines);
+            AppendDiagnosticsStatistics(lines);
         }
         catch (Exception ex)
         {
@@ -194,6 +267,42 @@ public sealed partial class PlayerViewModel
         };
         return rolledBack ? $"{label}（本次已回退）" : label;
     }
+
+    /// <summary>
+    /// 停滞 dump 与日志的概况。这两项只读文件、不发请求，放进来是为了让「属性」能直接看到诊断材料在哪。
+    /// </summary>
+    private static void AppendDiagnosticsStatistics(List<PlayerStatisticItem> lines)
+    {
+        var dumps = Services.Diagnostics.DiagnosticsReport.GetDumps();
+        if (dumps.Count == 0)
+        {
+            lines.Add(new("播放停滞 dump", "无（Release 不采集；Debug 下命中判据才写）"));
+        }
+        else
+        {
+            var bytes = dumps.Sum(file => file.Length);
+            var newest = dumps[0].LastWriteTime.ToString("MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            lines.Add(new("播放停滞 dump", $"{dumps.Count} 个 · {FormatBytes(bytes)} · 最近 {newest}"));
+        }
+
+        lines.Add(new("dump 目录", Services.Diagnostics.DiagnosticsReport.DumpFolder));
+
+        var logs = Services.Diagnostics.DiagnosticsReport.GetRecentLogs();
+        var logBytes = logs.Sum(file => file.Length);
+        lines.Add(new(
+            "日志",
+            logs.Count == 0
+                ? $"近 {Services.Diagnostics.DiagnosticsReport.LogWindow.TotalDays:0} 天没有日志"
+                : $"近 {Services.Diagnostics.DiagnosticsReport.LogWindow.TotalDays:0} 天 {logs.Count} 个 · {FormatBytes(logBytes)}"));
+    }
+
+    /// <summary>
+    /// 把字节数变成人看的大小.
+    /// </summary>
+    /// <param name="bytes">字节数.</param>
+    /// <returns>带单位的字符串.</returns>
+    private static string FormatBytes(long bytes)
+        => bytes >= 1024L * 1024L ? $"{bytes / 1024d / 1024d:0.0} MB" : $"{bytes / 1024d:0.0} KB";
 
     /// <summary>
     /// 把广告片段的三个字段接到统计面板后面：有没有、时间戳、识别方式.
