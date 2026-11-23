@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    诊断逻辑不引用任何 WinUI / 日志包，所以直接把源码编进测试工程：
+    一份源码，两个宿主（桌面应用 + 测试），不需要为可测性拆新项目、也不引入新包版本.
+  -->
+  <ItemGroup>
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallProbe.cs" Link="Linked/PlaybackStallProbe.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallPolicy.cs" Link="Linked/PlaybackStallPolicy.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallDumpBudget.cs" Link="Linked/PlaybackStallDumpBudget.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallDump.cs" Link="Linked/PlaybackStallDump.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Diagnostics/PlaybackStallWatch.cs" Link="Linked/PlaybackStallWatch.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

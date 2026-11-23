@@ -62,6 +62,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         var disposeWatch = Services.PlayerLifecycle.Begin($"PlayerVM#{LifecycleId}", "dispose");
         Services.PlayerLifecycle.Log("dispose", $"PlayerVM#{LifecycleId}", "begin", withStack: true);
 
+        // 先关诊断会话：之后不再新开 dump（已经在写的那一个会写完，MiniDumpWriteDump 无法中断）.
+#if DEBUG
+        EndPlaybackDiagnosticsSession();
+#endif
+
         Danmaku.ClearAll();
         _nativeMp?.Dispose();
         _nativeMp = null;
@@ -258,6 +263,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     {
         IsLive = snapshot.Type == BiliMediaType.Live;
         _snapshot = snapshot;
+
+        // 诊断会话跟着播放会话走：新 id、旧监视器停掉（Debug 下才有监视器）.
+        BeginPlaybackDiagnosticsSession();
         HookCdnStatus();
         ResetEndScreen();
         _sponsorSegments = Array.Empty<SponsorSegment>();

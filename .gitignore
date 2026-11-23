@@ -374,3 +374,7 @@ src/Desktop/BiliCopilot.UI/Assets/WheelScrollService.runtimeconfig.json
 dist/
 
 tools/wm3-shots/
+
+# 播放停滞 dump（运行时产物，含 Cookie/Token/URL 明文，绝不入库）
+StallDumps/
+stall-*.dmp

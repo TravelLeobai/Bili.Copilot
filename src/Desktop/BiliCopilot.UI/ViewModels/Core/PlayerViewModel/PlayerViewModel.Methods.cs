@@ -472,7 +472,13 @@ public sealed partial class PlayerViewModel
     }
 
     private void OnClientCacheStateChanged(object? sender, MpvCacheStateEventArgs e)
-        => CacheStateChanged?.Invoke(this, e);
+    {
+#if DEBUG
+        // 缓冲欠载 / 恢复也算稳定期：这段时间的「停滞」不是要抓的那一种.
+        NotifyPlaybackStallSettling();
+#endif
+        CacheStateChanged?.Invoke(this, e);
+    }
 
     private async void OnClientErrorOccurred(object? sender, MpvError e)
     {
@@ -712,6 +718,11 @@ public sealed partial class PlayerViewModel
 
     private async void OnPlayerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // 诊断（Debug）：只消费既有通知，不做任何新的 mpv 查询.
+#if DEBUG
+        ObservePlaybackForStall(e.PropertyName);
+#endif
+
         if (e.PropertyName is nameof(Player.Position) or nameof(Player.PlaybackState))
         {
             TrackWatchedVideo();
@@ -752,7 +763,12 @@ public sealed partial class PlayerViewModel
             ProgressChanged?.Invoke(this, Player.Position);
             CheckSponsorBlock();
             CheckDanmakuJump();
+#if DEBUG
+            // Debug：这一段顺便量「一次状态读取 + 消费」的耗时，供停滞监视器判定.
+            UpdateDanmakuPositionForStall(Player.Position);
+#else
             Danmaku.UpdatePosition(Convert.ToInt32(Player.Position));
+#endif
             foreach (var chapter in Chapters)
             {
                 chapter.IsPlayed = chapter.Position <= Player.Position;
