@@ -306,3 +306,20 @@ OS Thread Id: 0xac90
 4. **`watch-started` / `watch-stopped` 的配对在「进程被强杀」时会缺一半。** 这是设计使然（强杀时没有任何清理机会），排查时以 `started` 出现、后面没有对应 `stopped` 且有新 `started` 来识别。
 5. **心跳每 60 秒一行**，一场 30 分钟播放会写 30 行；若觉得吵，调 `PlaybackStallWatch.HeartbeatIntervalMilliseconds`。
 6. 上游那两个提交后续没有任何修补提交（已用 `git log -S` / `git log -- <path>` 确认），所以本仓不存在「跟着上游修 bug」这一层落差；本文档第 2 节记的两个上游缺口（无总大小上限、`.threads.txt` 侧车从没写过）是本仓自己补的。
+
+## 10. 独立复核（Team Lead，17:32–17:35）
+
+子 agent 交付后，Lead 另做了一轮**外部故障注入**，手段是挂起整个进程（`ntdll!NtSuspendProcess` / `NtResumeProcess`，不碰任何应用代码、不碰 UI/mpv 线程）：
+
+| 次数 | 手段 | 时长 | 结果 |
+|---|---|---|---|
+| 1 | 整进程挂起 | 1500 ms | 无 STALL 行（当时无播放会话） |
+| 2 | 整进程挂起 | 2200 ms | 无 STALL 行 |
+| 3 | 整进程挂起 ×3 连打 | 900 ms ×3 | 无 dump；同一会话内产生 1 条 `skipped type=progress-gap observed-ms=604.0 playing=true gc0=3815` |
+
+**由此得到一个结论，补上了第 7 节的空缺说明**：整进程挂起**不能**用来验证「读停触发 dump」。原因是冻结期间监听线程本身也被冻住，它恢复后看到的是「位置长时间没前进」（progress-gap），而 resume 前后 GC 计数在动，于是被 `gc-or-wake-gap` 闸门正确拦下。也就是说：
+
+- 这类注入只能证明**判据与抑制在真实链路上工作**（本机累计观察到 2 条真实 progress-gap 候选，分别是 608.1ms / 604.0ms，全部被拦）；
+- 想真正触发一次 `read-stall` dump，需要一个「进程活着、但某次状态回调被拖住」的场景（例如 CPU 被外部占满、或 GPU 忙），而不是整进程冻结。
+
+**因此「应用内端到端 dump」这一项仍然未完成**，第 7 / 8 节的记录保持不变，不因本节而升级为「已验证」。
