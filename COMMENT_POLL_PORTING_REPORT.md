@@ -81,7 +81,10 @@ Richasy.BiliKernel.Models.Appearance.EmoteText
 | 文件 | 职责 |
 |---|---|
 | `Controls/Comment/CommentVoteEntryControl.xaml(.cs)` | 正文下面那一行按钮：图标 + 标题 + 「N 人参与」，`Button.Flyout`（宽 340、`ShouldConstrainToRootBounds=False`），`Flyout.Opening` 时才拉详情 |
-| `Controls/Comment/CommentVotePanel.xaml(.cs)` | 面板：加载中 / 失败带重试 / 不可用 / 选项（可勾选或结果行）/ 状态行 / 匿名 + 投票按钮；读屏播报与焦点转移 |
+| `Controls/Comment/CommentVotePanel.xaml(.cs)` | 面板：加载中 / 失败带重试 / 不可用 / 饼图 + 图例 / 状态行 / 匿名 + 投票按钮；读屏播报与焦点转移 |
+| `Controls/Comment/CommentVotePie.xaml(.cs)` | 投票饼图（甜甜圈）：按票数分片、0 票留一条能点的缝、点一片就是选这一项；中间显示总票数 |
+| `Services/CommentVote/CommentVoteGeometry.cs` | 饼图角度与点击命中的纯算术（有单测） |
+| `Toolkits/CommentVotePalette.cs` | 饼图/图例的固定配色（深浅主题都能看清） |
 
 改动到的既有文件：
 
@@ -134,8 +137,20 @@ Richasy.BiliKernel.Models.Appearance.EmoteText
 
 ---
 
-## 7. 后续可做
+## 7. 饼图这一版（后续改动）
 
-1. 内核（`Richasy.BiliKernel`）如果以后把 `Content.vote` 带出来，入口就能在列表阶段显示真实标题/人数，省掉「点开才知道标题」这一步；本仓的 `CommentVoteRef` 已经把 `Title`/`ParticipantCount` 留成可选字段，接上就行。
+面板的第一版是「每行一个选项/一条进度条」，之后按需求改成**点击就能投票的饼图**：
+
+- 左边是甜甜圈：还没人投时平均分片，有票之后按票数分；0 票的选项保留 6 度的缝，仍然点得到（`CommentVoteGeometry.MinimumSweep`）。中间写总票数。
+- 点一片 = 选这一项（单选替换、多选累计到上限为止），和图例整行是同一个入口（都走 `CommentVoteViewModel.ToggleOption`）。
+- **发请求仍然只发生在按「投票」按钮时**：扇形只做选择，不做提交。这样误触不会替真实账号投票。
+- 右边图例保留文字、票数、占比、自己选的那项（✓），键盘与读屏走这里；饼图本身只接指针，避免两套焦点打架。
+
+---
+
+## 8. 后续可做
+
+1. 内核（`Richasy.BiliKernel`）如果以后把 `Content.vote` 带出来，入口就能在列表阶段显示真实标题/人数，省掉「点开才知道标题」这一步；本仓的 `CommentVoteRef` 已经把 `Title` / `ParticipantCount` 留成可选字段，接上就行。
 2. 文案接回 resw（`StringNames` 生成器加键即可）。
 3. 图片投票（`img_url`）的界面已经支持（`BasicCoverImage` + `HasImage`），但没有拿到真实图片投票数据验证过。
+4. 饼图的扇区目前不接受键盘焦点（键盘走图例）；如果希望「Tab 进饼图逐片选」，要另外给每个扇区加 AutomationPeer，代价不小。
