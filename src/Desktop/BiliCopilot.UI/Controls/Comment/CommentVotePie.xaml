@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="BiliCopilot.UI.Controls.Comment.CommentVotePie"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    IsTabStop="False"
+    mc:Ignorable="d">
+
+    <!--
+        投票饼图：一票都没有时平均分片，投过之后按票数分。
+        点一片就是选这一项（单选替换、多选累计，选满不再变），真正发请求还是按下面的「投票」。
+        中间的洞显示总票数，洞和圆外都不响应点击。
+    -->
+    <Grid Width="124" Height="124">
+        <Canvas
+            x:Name="SliceCanvas"
+            Width="124"
+            Height="124"
+            Background="Transparent"
+            Tapped="OnCanvasTapped" />
+        <StackPanel
+            VerticalAlignment="Center"
+            HorizontalAlignment="Center"
+            IsHitTestVisible="False"
+            Spacing="0">
+            <TextBlock
+                x:Name="CenterCount"
+                HorizontalAlignment="Center"
+                FontSize="18"
+                FontWeight="SemiBold"
+                Text="0" />
+            <TextBlock
+                x:Name="CenterLabel"
+                HorizontalAlignment="Center"
+                FontSize="10"
+                Opacity="0.7"
+                Text="票" />
+        </StackPanel>
+    </Grid>
+</UserControl>

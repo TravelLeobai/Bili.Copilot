@@ -1,11 +1,13 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Pages.Overlay;
+using BiliCopilot.UI.Services;
 using BiliCopilot.UI.ViewModels.Core;
 using CommunityToolkit.Mvvm.Input;
 using Humanizer;
 using Microsoft.Extensions.Logging;
 using Richasy.BiliKernel.Bili.Comment;
+using Richasy.BiliKernel.Models.Appearance;
 using Richasy.BiliKernel.Models.Comment;
 using Richasy.WinUIKernel.Share.ViewModels;
 using WinRT;
@@ -21,7 +23,11 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
     /// <summary>
     /// Initializes a new instance of the <see cref="CommentItemViewModel"/> class.
     /// </summary>
-    public CommentItemViewModel(CommentInformation data, ICommentService service, Action<CommentItemViewModel> markReplyTargetAction)
+    /// <param name="data">评论数据.</param>
+    /// <param name="service">评论服务.</param>
+    /// <param name="markReplyTargetAction">标记回复目标.</param>
+    /// <param name="cookie">拉列表时用的登录态；投票沿用它.</param>
+    public CommentItemViewModel(CommentInformation data, ICommentService service, Action<CommentItemViewModel> markReplyTargetAction, string cookie = "")
         : base(data)
     {
         _service = service;
@@ -38,7 +44,29 @@ public sealed partial class CommentItemViewModel : ViewModelBase<CommentInformat
         IsVip = data.User.IsVip ?? false;
         Content = data.Content;
         Pictures = data.Content?.Pictures?.ToList() ?? [];
+        Cookie = cookie ?? string.Empty;
+
+        // 带投票的评论，正文里留着 {vote:ID}。内核是 NuGet 包、没有 Content.vote，
+        // 所以只能从正文抠 id；显示时把占位符剥掉，投票另给一个入口.
+        DisplayContent = BuildDisplayContent(data.Content);
+        Vote = CommentVoteText.TryExtractVoteId(data.Content?.Text, out var voteId)
+            ? new CommentVoteViewModel(new CommentVoteRef(voteId), CommentVoteService.Default, () => Cookie)
+            : null;
         _markReplyTargetAction = markReplyTargetAction;
+    }
+
+    /// <summary>
+    /// 剥掉正文里的投票占位符；没占位符时原样返回同一个实例.
+    /// </summary>
+    private static EmoteText? BuildDisplayContent(EmoteText? content)
+    {
+        if (content is null || !CommentVoteText.HasVotePlaceholder(content.Text))
+        {
+            return content;
+        }
+
+        var text = CommentVoteText.StripVotePlaceholders(content.Text);
+        return new EmoteText(text, content.Emotes, content.Pictures);
     }
 
     [RelayCommand]
