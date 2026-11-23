@@ -365,9 +365,26 @@ public sealed partial class CommentVoteViewModel : ObservableObject
     {
         if (_isDetached)
         {
+            // 面板已经关掉：不往已经没了的 UI 上写，但结果要留住，
+            // 不然重新打开会退回「没投过」的样子.
+            _detail = detail;
             return;
         }
 
+        try
+        {
+            ApplyCore(detail, keepSelection);
+        }
+        catch (Exception ex)
+        {
+            // 投票卡片自己出错不能把整条评论列表带崩：记下来、降级成失败态.
+            _logger.LogWarning("评论投票渲染失败：{ErrorType}", ex.GetType().Name);
+            Phase = CommentVotePhase.Failed;
+        }
+    }
+
+    private void ApplyCore(CommentVoteDetail detail, bool keepSelection)
+    {
         var isMulti = detail.MaxChoiceCount > 1;
         var previous = keepSelection && _detail is not null
             ? Options.Where(item => item.IsChecked).Select(item => item.Index).ToHashSet()
