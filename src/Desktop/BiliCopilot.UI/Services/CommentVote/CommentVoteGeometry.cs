@@ -29,12 +29,12 @@ internal static class CommentVoteGeometry
     {
         if (counts is null || counts.Count == 0)
         {
-            return [];
+            return Array.Empty<double>();
         }
 
         if (counts.Count == 1)
         {
-            return [360d];
+            return new[] { 360d };
         }
 
         var total = 0L;

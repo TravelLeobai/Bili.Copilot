@@ -7,8 +7,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
-using Windows.Foundation;
+using Path = Microsoft.UI.Xaml.Shapes.Path;
+using Point = Windows.Foundation.Point;
+using Size = Windows.Foundation.Size;
 
 namespace BiliCopilot.UI.Controls.Comment;
 
@@ -38,7 +39,7 @@ public sealed partial class CommentVotePie : UserControl
     private const double DeadZoneRadius = 18d;
 
     private CommentVoteViewModel? _observed;
-    private IReadOnlyList<double> _sweeps = [];
+    private IReadOnlyList<double> _sweeps = Array.Empty<double>();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CommentVotePie"/> class.
@@ -192,7 +193,7 @@ public sealed partial class CommentVotePie : UserControl
         var viewModel = _observed;
         if (viewModel is null || viewModel.Options.Count == 0 || !viewModel.IsReady)
         {
-            _sweeps = [];
+            _sweeps = Array.Empty<double>();
             CenterCount.Text = string.Empty;
             CenterLabel.Visibility = Visibility.Collapsed;
             SliceCanvas.IsHitTestVisible = false;
