@@ -1497,7 +1497,22 @@
   <!-- Publish Properties -->
   <PropertyGroup>
     <PublishReadyToRun>False</PublishReadyToRun>
-    <PublishAot>True</PublishAot>
+    <!--
+      PublishAot 刻意不再常开（.NET 11 审计结论，详见 docs/NET11_P0_FIXES.md）：
+
+      1) 它不只作用于 publish。普通 build 就会推出 PublishTrimmed / SelfContained，并往
+         runtimeconfig.json 写 28 个裁剪导向的特性开关（IsDynamicCodeSupported=false、
+         JsonSerializer.IsReflectionEnabledByDefault=false、EventSource.IsSupported=false、
+         Reactor.DevtoolsSupport=false……）。程序集并没有真被裁剪，等于给用户装了一套
+         "无动态代码"的运行时语义。
+      2) 它从未被执行：CI 只走 msbuild + GenerateAppxPackageOnBuild（build + MSIX 打包），
+         仓库里没有任何 pubxml / dotnet publish / -t:Publish 引用。
+      3) UI 工程的 publish 通道本身就是坏的（C# 编译阶段就 CS0246 StringNames，把 PublishAot
+         设成 false 同样失败），与 AOT 无关。
+
+      真要给 UI 进程上 AOT，先修好 publish 通道，再在那条命令上显式传 -p:PublishAot=true。
+      Visor 是独立进程，Native AOT 保留在它自己的工程里。
+    -->
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
   </PropertyGroup>
 </Project>
