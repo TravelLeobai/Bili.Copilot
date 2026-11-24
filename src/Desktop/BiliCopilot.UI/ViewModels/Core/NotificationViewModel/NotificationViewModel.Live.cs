@@ -1,5 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using BiliCopilot.UI.Services.Live;
 using BiliCopilot.UI.Toolkits;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -20,8 +21,6 @@ namespace BiliCopilot.UI.ViewModels.Core;
 /// </summary>
 public sealed partial class NotificationViewModel
 {
-    private const string LiveStatusApi = "https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids";
-
     // 一次轮询最多看多少个关注用户，防止关注几百人时把接口打爆.
     private const int MaxWatchedUsers = 200;
 
@@ -173,7 +172,9 @@ public sealed partial class NotificationViewModel
             return null;
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        // 每 3 分钟轮询一次，原来每次都新建 HttpClient：最多 4 个批次就是 4 次重新握手.
+        // 和关注直播列表共用同一个连接池.
+        var client = LiveHttpClient.Instance;
         var rooms = new List<LiveRoomBrief>();
         var seen = new HashSet<long>();
 
@@ -185,13 +186,9 @@ public sealed partial class NotificationViewModel
                 continue;
             }
 
-            var body = new StringBuilder("{\"uids\":[");
-            body.Append(string.Join(',', uids));
-            body.Append("]}");
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, LiveStatusApi)
+            using var request = new HttpRequestMessage(HttpMethod.Post, LiveHttpClient.StatusApi)
             {
-                Content = new StringContent(body.ToString(), Encoding.UTF8, "application/json"),
+                Content = new StringContent(LiveHttpClient.BuildUidsBody(uids), Encoding.UTF8, "application/json"),
             };
             request.Headers.TryAddWithoutValidation("Cookie", cookie);
             request.Headers.TryAddWithoutValidation("Referer", "https://live.bilibili.com/");

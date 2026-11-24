@@ -13,8 +13,6 @@ namespace BiliCopilot.UI.Services.Live;
 /// </summary>
 public sealed class LiveFollowService
 {
-    private const string LiveStatusApi = "https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids";
-
     // 一次最多查多少个关注用户.
     private const int MaxWatchedUsers = 200;
 
@@ -48,7 +46,7 @@ public sealed class LiveFollowService
             return rooms;
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        var client = LiveHttpClient.Instance;
         var seen = new HashSet<long>();
         foreach (var chunk in userIds.Chunk(50))
         {
@@ -59,13 +57,9 @@ public sealed class LiveFollowService
                 continue;
             }
 
-            var body = new StringBuilder("{\"uids\":[");
-            body.Append(string.Join(',', uids));
-            body.Append("]}");
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, LiveStatusApi)
+            using var request = new HttpRequestMessage(HttpMethod.Post, LiveHttpClient.StatusApi)
             {
-                Content = new StringContent(body.ToString(), Encoding.UTF8, "application/json"),
+                Content = new StringContent(LiveHttpClient.BuildUidsBody(uids), Encoding.UTF8, "application/json"),
             };
             request.Headers.TryAddWithoutValidation("Cookie", cookie);
             request.Headers.TryAddWithoutValidation("Referer", "https://live.bilibili.com/");
@@ -109,20 +103,16 @@ public sealed class LiveFollowService
 
         var result = new Dictionary<long, int>();
         var okBatches = 0;
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        var client = LiveHttpClient.Instance;
         foreach (var chunk in ids.Chunk(50))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var body = new StringBuilder("{\"uids\":[");
-            body.Append(string.Join(',', chunk));
-            body.Append("]}");
-
             try
             {
-                using var request = new HttpRequestMessage(HttpMethod.Post, LiveStatusApi)
+                using var request = new HttpRequestMessage(HttpMethod.Post, LiveHttpClient.StatusApi)
                 {
-                    Content = new StringContent(body.ToString(), Encoding.UTF8, "application/json"),
+                    Content = new StringContent(LiveHttpClient.BuildUidsBody(chunk), Encoding.UTF8, "application/json"),
                 };
                 if (!string.IsNullOrEmpty(cookie))
                 {
@@ -235,7 +225,7 @@ public sealed class LiveFollowService
             return;
         }
 
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(12) };
+        var client = LiveHttpClient.Instance;
         foreach (var (room, index) in targets)
         {
             cancellationToken.ThrowIfCancellationRequested();
