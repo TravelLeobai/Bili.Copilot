@@ -11,9 +11,14 @@
     默认走自包含单文件（不需要 C++ 链接器，任何装了 .NET 11 SDK 的机器都能跑）：
       x64   ≈ 14 MB
       arm64 ≈ 15 MB
-    加 -Aot 则走 Native AOT（≈ 3 MB，体积只有前者的四分之一），
+    加 -Aot 则走 Native AOT（≈ 3.3 MB，体积只有前者的四分之一），
     但需要先装 Visual Studio Build Tools 的 C++ 桌面工作负载 + Windows SDK，
-    否则会报 "Platform linker not found"。
+    否则会报 "Platform linker not found"；arm64 还需要 C++ ARM64 交叉工具
+    （组件 Microsoft.VisualStudio.Component.VC.Tools.ARM64，缺失时 ilc 会直接报
+    "vswhere.exe failed to locate Visual Studio with ...VC.Tools.ARM64"）。
+
+    本机（2026-11-24）已装：E:\VSBuildTools（VC.Tools.x86.x64 + VC.Tools.ARM64 +
+    Windows11SDK.22621），Windows SDK 本身仍在 C:\Program Files (x86)\Windows Kits\10。
 
 .PARAMETER Aot
     Native AOT 发布（需要 MSVC 链接器）。
