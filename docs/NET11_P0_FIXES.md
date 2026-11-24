@@ -43,11 +43,12 @@ D:/dotnet/dotnet.exe msbuild Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj -p:Pla
 `RuntimeFeature.IsDynamicCodeSupported=false`、`JsonSerializer.IsReflectionEnabledByDefault=false`、
 `EventSource.IsSupported=false`、`Serilog.Capturing.IsStructureValueSupported=false`、`Http3Support=false`……
 
-> **与 t8 复核 F1 的差异（留档，未定谳）**：t8 的 A/B 记的是「Release 6 / Debug 5，只差
-> `Serilog.Capturing.IsStructureValueSupported` 一条」，并据此说上面那两条 `IsDynamicCodeSupported` /
-> `JsonSerializer.IsReflectionEnabledByDefault` 在 AOT=True 的 build 产物里不存在。本轮 `-getItem`
-> 复算在两种状态下都能看到它们（28/27 的完整清单里逐条有）。差异来源没定位——最可能是 t8 那次
-> AOT=True 构建是增量的、`runtimeconfig.json` 根本没被重写。两套数字都留在文档里，请 t10 定谳。
+> **t8 复核 F1 的「6 / 5」已由 t10 撤回**：那次 A/B 在把 `<PublishAot>` 加回 csproj 之后没有再 restore，
+> ILLink / ILCompiler 的 props 没进 `obj\*.nuget.g.props` 的导入图，所以 build 只写进 6 条开关，
+> 由此得出「Release 6 / Debug 5、只差 Serilog 一条」是错的。定谳口径就是上表：
+> **拆掉前 Release 28 / Debug 27，拆掉后 Release 5 / Debug 4，差异 23 条全部是裁剪导向开关**
+> （`IsDynamicCodeSupported` / `JsonSerializer.IsReflectionEnabledByDefault` / `EventSource` / `Http3Support` …）。
+> 复现要点：`<PublishAot>` 必须在 **restore 之前**就在位；先加属性再 `--no-restore` 构建，会重现那个错误的小差值。
 
 **改后实测**（`runtimeconfig.json` 里的实际条目）：
 
@@ -66,8 +67,10 @@ Release 多的那条**与 AOT 无关**：SDK `Microsoft.NET.Sdk.targets:164` 对
 **取舍**：拆掉它退出的是 **AOT 意图与 `PublishTrimmed` 求值**——`<PublishAot>True</PublishAot>` 在 build
 阶段就把 `PublishTrimmed` 求值成 `true`，于是那 23 条裁剪导向开关进了普通 build 的 `runtimeconfig.json`，
 而程序集并没有真被裁剪；这层语义错配才是要退出的东西。CI 只走 `msbuild + GenerateAppxPackageOnBuild`，
-没有 `publish` 步骤，AOT 也从未被执行过。真要给 UI 进程上 AOT：在那条能用的 publish 命令上显式传
-`-p:PublishAot=true` 并自行验证。
+没有 `publish` 步骤，AOT 也从未被执行过。真要给 UI 进程上 AOT：把 `<PublishAot>true</PublishAot>` **写进 UI
+工程的 csproj**（不要用命令行 `-p:PublishAot=true`——那是全局属性，会传染给 netstandard2.0 的
+`BiliCopilot.UI.Models` / `ResourceGenerator`，那两个工程直接报 `NETSDK1207` 把整解打断），再自行验证
+publish 与运行时行为。
 
 > **publish 通道（更正 F3）**：原文写「publish 通道本身就坏（CS0246 StringNames）」——那是 t2 时的
 > **历史现象，本轮未复现**：带 restore 的 `dotnet publish … -c Release -p:Platform=x64 -p:SolutionDir=… -o <产出目录>`

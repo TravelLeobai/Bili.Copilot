@@ -149,17 +149,18 @@ Release（`-c Release`）复测：`BiliCopilot.UI.dll` 仍 **86**（TypeDef 2466
 
 同一份代码，只改 `-p:PublishAot`：
 
-| runtimeconfig.json 键 | `PublishAot=True`（仓库默认） | `PublishAot=false` |
+| runtimeconfig.json 键 | `PublishAot=True`（仓库原状） | 拆掉 `PublishAot`（当前 HEAD） |
 |---|---|---|
 | 顶层 `includedFrameworks` | Microsoft.NETCore.App 11.0.0 | 同（自包含与 AOT 无关） |
-| `configProperties` 条目数 | **28**（Debug 27） | **4** |
+| `configProperties` 条目数 | **Release 28 / Debug 27** | **Release 5 / Debug 4** |
 
-> **本轮复算（t8 复核 F1 要求）**：不去读产物，直接枚举喂给 `runtimeconfig.json` 的 MSBuild 项——
-> `dotnet msbuild Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj -p:Platform=x64 -p:Configuration=<cfg> -p:SolutionDir=<repo>\src\ -getItem:RuntimeHostConfigurationOption`。
-> `<PublishAot>True</PublishAot>` 在 csproj 里时：Release **28** / Debug **27**；拆掉后：Release **5** / Debug **4**。
-> 与上表一致（上表的 `PublishAot=false` 一列写 4，是 Debug 口径；Release 口径是 5，多出的那条是
-> SDK 对非 Debug 配置默认的 `MetadataUpdaterSupport=false`）。复算明细与"与 t8 数字不一致"的留档见
-> `docs/NET11_P0_FIXES.md` 批 2。
+> **口径（t10 定谳）**：拆掉前 Release 28 / Debug 27，拆掉后 Release 5 / Debug 4，差异 23 条全部是
+> 裁剪导向开关（`IsDynamicCodeSupported` / `JsonSerializer.IsReflectionEnabledByDefault` / `EventSource` /
+> `Http3Support` …）。上表的 4 是 Debug 口径；Release 是 5，多出的一条是 SDK 对非 Debug 配置默认的
+> `MetadataUpdaterSupport=false`。※ 复现前置：`<PublishAot>` 必须在 **restore 之前**就在位，否则
+> ILLink / ILCompiler 的 props 不进 `obj\*.nuget.g.props` 的导入图，build 只会写 6 条开关，比出来的
+> 差值会偏小（t8 的「6 / 5」就是这么一个数，已撤回）。取数用
+> `dotnet msbuild … -getItem:RuntimeHostConfigurationOption`，不必依赖构建是否重写了 runtimeconfig。
 
 默认构建多出来的开关（节选，完整见附录 B-4）：
 
