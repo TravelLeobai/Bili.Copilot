@@ -141,6 +141,18 @@ using var resp = await SharedClient.GetAsync(url, cts.Token);
 
 代码侧：`Services/CommentVote/**`、`ViewModels/Components/Comment*/**`、`Reactor/CommentPanel.cs` 本批一处未动；评论区头像走 `SmallImageCache`，不走本批改的 `UriToBitmapConverter`；`MyImage` 只用于 markdown 正文（AI 回复 / 文章阅读），也不在评论区路径上。所以缺的是「整页冒烟的最后一步」，不是「本批改动的回归」——详情页的图片渲染已经覆盖了本批改动的那条解码链。
 
+#### 这次会话里唯一一条与图片沾边的日志（不是本批引入）
+
+```
+21:34:01 [INF] 兴趣分析含图片失败，改用纯文本重试
+21:34:01 [WRN] 兴趣分析返回内容为空：{"role":"assistant","content":"",…}
+```
+
+走的是「观看兴趣分析」把封面图一起发给模型的那条路（`AiInterestAnalyzer`），失败后自己降级成纯文本重试，属于模型侧返回空内容，与本批的 `UriToBitmapConverter` / `MyImage` 无关（二者都不在这条链上）。会话 21:33–21:55 共 1929 行日志里，`UriToBitmap` / `BitmapImage` / `DecodePixel` 相关告警 **0 条**。
+
+另外顺带看到 `[WRN] 处理播放器属性变更时出错：Position`（21:33:27，成串出现）——属播放器属性回调那条线（P0-1 / `69785b5`），不在本任务范围，仅记一笔给 t6/t9 汇总时核对。
+
+
 
 ## 明确没做的事
 
