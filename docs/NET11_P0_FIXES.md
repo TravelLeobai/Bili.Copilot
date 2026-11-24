@@ -65,7 +65,7 @@ Release 多的那条**与 AOT 无关**：SDK `Microsoft.NET.Sdk.targets:164` 对
 | `dotnet build BiliCopilot.Visor.csproj -c Debug` | EXIT=0，`Visor.dll` 状态机 0 |
 | 两套 `dotnet test` | 84/84、23/23 |
 
-备注：本机默认 Debug 输出目录当时被一个 18:38 起就在跑的 `BiliCopilot.UI.exe`（PID 13604）锁着，`-t:Rebuild` 的 clean/copy 会报 MSB3021/MSB3027；Debug 侧改用隔离输出目录（`-p:BuildOutDir=<temp>\…`）取得 0 错 0 警的证据，Release 默认目录未被占用、直接通过。这不是代码问题：关掉那个实例再跑同一条命令即可。
+备注：本机默认 Debug 输出目录一度被两个无窗口的旧实例锁着（`BiliCopilot.UI` PID 13604 起于 18:38、`BiliCopilot.Visor` PID 42424 起于 18:21），`-t:Rebuild` 的 copy 阶段报 MSB3021/MSB3027（`BiliCopilot.UI.Models.dll` 被占用）。关掉这两个实例后同一条命令 0 错 0 警通过；此前另用隔离输出目录（`-p:BuildOutDir=<temp>\…`）做过一次对照构建，两处结论一致（86 状态机、4 条开关）。
 
 ## 本轮没做的事
 
