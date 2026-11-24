@@ -1,6 +1,6 @@
 # .NET 11 现代化改造报告（Bili.Copilot / bili-copilot-v2）
 
-> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告本身提交于 `7a81ab6`），**未 push**。本轮提交范围 `2f10c66..77ed06a` 共 25 个提交：8 个改代码或工程配置，17 个文档。
+> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告在 `7a81ab6` 新增，`64dd96f` / `03b8df4` 两次补记），**未 push**。本轮提交范围 `2f10c66..77ed06a` 共 25 个提交：8 个改代码或工程配置，17 个文档。
 > 本文只回答一个问题：**改了什么、改到什么程度**。现状见 `NET11_OPTIMIZATION_AUDIT.md`，数据见 `NET11_PERFORMANCE_VALIDATION.md`，逐文件清单见 `docs/NET11_SOURCE_SCAN_MANIFEST.md`。
 > 验证分三档，正文逐项标注：**已验证（行为）**＝除构建外还有运行期证据；**仅构建通过**＝只有编译/求值证据，没有运行期证据；**未验证**＝缺条件，不填推断。
 
@@ -148,5 +148,5 @@
 
 - 全部改动在本地分支 `exp/net11-optimization`，**没有 push**，没有开 PR。
 - `a0d12a6` 是 auditor 的扫描文档提交（含两份扫描文档的已提交版本），原样保留；其中的最新改动经 soft reset 拆回工作区后由 `dc7a8a3` 单独提交，内容未丢（`dc7a8a3` 提交说明、任务 t4 记录）。
-- 工作区在 `77ed06a` 之后（含四份报告的 `7a81ab6`）还有 **3 处未提交改动，不属于本交付**：`docs/NET11_HOTSPOTS.md`（P0-2 叙述同步）、`PlayerViewModel.Methods.cs`、`PlayerViewModel.cs`（播放器初始化超时后摘订阅的后续工作，对应附·A7.4 那批 NRE）。这四份报告的数字全部按 `77ed06a` 的已提交状态写。
+- 工作区在 `77ed06a` 之后（含四份报告的 `7a81ab6` 及其两次补记 `64dd96f` / `03b8df4`）还有 **3 处未提交改动，不属于本交付**：`docs/NET11_HOTSPOTS.md`（P0-2 叙述同步）、`PlayerViewModel.Methods.cs`、`PlayerViewModel.cs`（播放器初始化超时后摘订阅的后续工作，对应附·A7.4 那批 NRE）。这四份报告的数字全部按 `77ed06a` 的已提交状态写。
 - 构建验证均在隔离输出目录（`-p:BuildOutDir=E:\build-temp-dsh\...`）或"关掉占用实例后重跑"两种方式下完成；本机多次出现后台遗留应用实例锁 `bin`，`-t:Rebuild` 会报 MSB3021/MSB3027。有据可查的一次是 `BiliCopilot.UI` PID 13604、`BiliCopilot.Visor` PID 42424，关掉后同一条命令 0 错 0 警通过（NET11_P0_FIXES.md 验证汇总备注、`5eeddeb` 提交说明）。
