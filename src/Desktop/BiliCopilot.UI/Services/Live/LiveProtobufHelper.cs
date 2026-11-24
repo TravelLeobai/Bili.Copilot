@@ -1,5 +1,6 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace BiliCopilot.UI.Services.Live;
@@ -26,13 +27,16 @@ internal static class LiveProtobufHelper
             return Array.Empty<string>();
         }
 
-        var result = new List<string>();
+        // 一条进场消息里可读字段通常就 2~3 个，预开 4 个位置少一次扩容.
+        var result = new List<string>(4);
         ReadStrings(bytes, result);
         return result;
     }
 
-    private static void ReadStrings(byte[] data, List<string> sink)
+    private static void ReadStrings(ReadOnlySpan<byte> data, List<string> sink)
     {
+        // 原来每个 length-delimited 字段都 new byte[length] + BlockCopy 一份再往下走，
+        // 一条 pb 里嵌套几层就复制几份；这里全程用切片视图，一个字节数组都不分配.
         var index = 0;
         while (index < data.Length)
         {
@@ -60,12 +64,11 @@ internal static class LiveProtobufHelper
                         return;
                     }
 
-                    var slice = new byte[length];
-                    Buffer.BlockCopy(data, index, slice, 0, (int)length);
+                    var slice = data.Slice(index, (int)length);
                     index += (int)length;
-                    if (IsReadableText(slice))
+                    if (TryDecodeText(slice, out var text))
                     {
-                        sink.Add(Encoding.UTF8.GetString(slice));
+                        sink.Add(text);
                     }
                     else
                     {
@@ -87,7 +90,7 @@ internal static class LiveProtobufHelper
         }
     }
 
-    private static bool TryReadVarint(byte[] data, ref int index, out long value)
+    private static bool TryReadVarint(ReadOnlySpan<byte> data, ref int index, out long value)
     {
         value = 0;
         var shift = 0;
@@ -106,9 +109,14 @@ internal static class LiveProtobufHelper
         return false;
     }
 
-    private static bool IsReadableText(byte[] data)
+    /// <summary>
+    /// 判断这一片是不是可读文本；是则一并给出解码结果.
+    /// 原来判读和取值各解码一次（两次 string 分配），现在只解码一次.
+    /// </summary>
+    private static bool TryDecodeText(ReadOnlySpan<byte> data, [NotNullWhen(true)] out string? text)
     {
-        if (data.Length is 0 or > 512)
+        text = null;
+        if (data.IsEmpty || data.Length > 512)
         {
             return false;
         }
@@ -127,6 +135,18 @@ internal static class LiveProtobufHelper
             }
         }
 
-        return hasPrintable && Encoding.UTF8.GetString(data).IsNormalized();
+        if (!hasPrintable)
+        {
+            return false;
+        }
+
+        var decoded = Encoding.UTF8.GetString(data);
+        if (!decoded.IsNormalized())
+        {
+            return false;
+        }
+
+        text = decoded;
+        return true;
     }
 }
