@@ -85,8 +85,10 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
         await SendAsync(socket, OperationAuth, Encoding.UTF8.GetBytes(authPayload)).ConfigureAwait(false);
 
         _cts = new CancellationTokenSource();
-        _receiveTask = Task.Run(() => ReceiveLoopAsync(socket, _cts.Token, logger));
-        _heartbeatTask = Task.Run(() => HeartbeatLoopAsync(socket, _cts.Token, logger));
+
+        // 直接起 async 方法即可：两个循环上来就 await，不需要再包一层 Task.Run 跳线程池.
+        _receiveTask = ReceiveLoopAsync(socket, _cts.Token, logger);
+        _heartbeatTask = HeartbeatLoopAsync(socket, _cts.Token, logger);
         StateChanged?.Invoke(this, "弹幕已连接");
     }
 
@@ -236,7 +238,10 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
     private async Task ReceiveLoopAsync(ClientWebSocket socket, CancellationToken token, ILogger? logger)
     {
         var buffer = new byte[64 * 1024];
-        using var stream = new MemoryStream();
+
+        // 消息缓冲跨包复用：原来每条消息 ToArray() 一整块，等于每收一条弹幕就多一次分配+拷贝.
+        var message = new byte[256 * 1024];
+        var filled = 0;
         try
         {
             while (!token.IsCancellationRequested && socket.State == WebSocketState.Open)
@@ -247,15 +252,21 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
                     break;
                 }
 
-                await stream.WriteAsync(buffer.AsMemory(0, result.Count), token).ConfigureAwait(false);
+                if (filled + result.Count > message.Length)
+                {
+                    Array.Resize(ref message, Math.Max(message.Length * 2, filled + result.Count));
+                }
+
+                buffer.AsSpan(0, result.Count).CopyTo(message.AsSpan(filled));
+                filled += result.Count;
                 if (!result.EndOfMessage)
                 {
                     continue;
                 }
 
-                var data = stream.ToArray();
-                stream.SetLength(0);
-                await ParsePacketsAsync(data, logger).ConfigureAwait(false);
+                // 切片视图交给解析，解析完（await 返回）才会再次写入 message，不会踩数据.
+                await ParsePacketsAsync(message.AsMemory(0, filled), logger).ConfigureAwait(false);
+                filled = 0;
             }
         }
         catch (OperationCanceledException)
@@ -268,7 +279,7 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
         }
     }
 
-    private async Task ParsePacketsAsync(byte[] data, ILogger? logger)
+    private async Task ParsePacketsAsync(ReadOnlyMemory<byte> data, ILogger? logger)
     {
         var offset = 0;
         while (offset + HeaderLength <= data.Length)
@@ -283,8 +294,13 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
             }
 
             var bodyLength = packetLength - headerLength;
-            var body = new byte[bodyLength];
-            Buffer.BlockCopy(data, offset + headerLength, body, 0, bodyLength);
+            if (bodyLength < 0)
+            {
+                break;
+            }
+
+            // 包体用切片视图，不再每包 new byte[] + BlockCopy.
+            var body = data.Slice(offset + headerLength, bodyLength);
             offset += packetLength;
 
             if (_loggedPackets++ < 5)
@@ -311,7 +327,10 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
                     var decompressed = await DecompressAsync(body, protoVersion == 3).ConfigureAwait(false);
                     if (decompressed is not null)
                     {
-                        await ParsePacketsAsync(decompressed, logger).ConfigureAwait(false);
+                        var (payload, length) = decompressed.Value;
+
+                        // 解压缓冲是新分配的，解析完就可以丢，不受 message 复用影响.
+                        await ParsePacketsAsync(payload.AsMemory(0, length), logger).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
@@ -324,8 +343,8 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
 
             try
             {
-                var json = Encoding.UTF8.GetString(body);
-                using var document = JsonDocument.Parse(json);
+                // 直接对 UTF-8 字节解析，省掉「解码成 string 再 Parse」的中间字符串.
+                using var document = JsonDocument.Parse(body);
                 var root = document.RootElement;
                 if (!root.TryGetProperty("cmd", out var cmdNode))
                 {
@@ -347,16 +366,23 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
         }
     }
 
-    private static async Task<byte[]?> DecompressAsync(byte[] body, bool isBrotli)
+    private static async Task<(byte[] Buffer, int Length)?> DecompressAsync(ReadOnlyMemory<byte> body, bool isBrotli)
     {
-        using var input = new MemoryStream(body);
+        // 只读视图直接喂给解压流，省掉包体的一次 ToArray 拷贝.
+        using var input = new ReadOnlyMemoryStream(body);
         using var output = new MemoryStream();
         using (Stream decompressor = isBrotli ? new BrotliStream(input, CompressionMode.Decompress) : new ZLibStream(input, CompressionMode.Decompress))
         {
             await decompressor.CopyToAsync(output).ConfigureAwait(false);
         }
 
-        return output.Length == 0 ? null : output.ToArray();
+        if (output.Length == 0)
+        {
+            return null;
+        }
+
+        // GetBuffer() 拿内部缓冲区，省掉 ToArray 的第二次拷贝；调用方需要一起带上有效长度.
+        return (output.GetBuffer(), (int)output.Length);
     }
 
     private static async Task SendAsync(ClientWebSocket socket, int operation, byte[] body)
@@ -371,11 +397,17 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
         await socket.SendAsync(new ArraySegment<byte>(packet), WebSocketMessageType.Binary, true, CancellationToken.None).ConfigureAwait(false);
     }
 
-    private static int ReadInt32(byte[] data, int offset)
-        => data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 | data[offset + 3];
+    private static int ReadInt32(ReadOnlyMemory<byte> data, int offset)
+    {
+        var span = data.Span;
+        return span[offset] << 24 | span[offset + 1] << 16 | span[offset + 2] << 8 | span[offset + 3];
+    }
 
-    private static int ReadUInt16(byte[] data, int offset)
-        => data[offset] << 8 | data[offset + 1];
+    private static int ReadUInt16(ReadOnlyMemory<byte> data, int offset)
+    {
+        var span = data.Span;
+        return span[offset] << 8 | span[offset + 1];
+    }
 
     private static void WriteInt32(byte[] data, int offset, int value)
     {
@@ -389,5 +421,69 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
     {
         data[offset] = (byte)(value >> 8);
         data[offset + 1] = (byte)value;
+    }
+
+    /// <summary>
+    /// 只读、不可寻址的 <see cref="Stream"/> 视图，把包头里的包体直接喂给 Brotli/ZLib 解压流，
+    /// 省掉每包一次 ToArray 拷贝.
+    /// </summary>
+    private sealed class ReadOnlyMemoryStream : Stream
+    {
+        private readonly ReadOnlyMemory<byte> _buffer;
+        private int _position;
+
+        public ReadOnlyMemoryStream(ReadOnlyMemory<byte> buffer) => _buffer = buffer;
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _buffer.Length;
+
+        public override long Position
+        {
+            get => _position;
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var remaining = _buffer.Length - _position;
+            if (remaining <= 0)
+            {
+                return 0;
+            }
+
+            var toCopy = Math.Min(count, remaining);
+            _buffer.Slice(_position, toCopy).Span.CopyTo(buffer.AsSpan(offset, toCopy));
+            _position += toCopy;
+            return toCopy;
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var remaining = _buffer.Length - _position;
+            if (remaining <= 0)
+            {
+                return ValueTask.FromResult(0);
+            }
+
+            var toCopy = Math.Min(buffer.Length, remaining);
+            _buffer.Slice(_position, toCopy).CopyTo(buffer);
+            _position += toCopy;
+            return ValueTask.FromResult(toCopy);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }
