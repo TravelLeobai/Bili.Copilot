@@ -155,12 +155,20 @@ public sealed partial class OverlayTransportControls : PlayerControlBase
     private void OnProgressValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
     {
         var v = e.NewValue;
-        if (ProgressSlider.Maximum != ViewModel.Player.Duration || !ViewModel.Player.IsPlaybackInitialized)
+
+        // 这个事件会在控件刚造出来、ViewModel/Player 还没挂上的时候先来一次
+        // （2026-11-24 04:06 真崩过：NullReferenceException 就是这一行的 ViewModel.Player）.
+        if (ViewModel?.Player is not { } player)
         {
             return;
         }
 
-        if (Math.Abs(v - ViewModel.Player.Position) < 1.5)
+        if (ProgressSlider.Maximum != player.Duration || !player.IsPlaybackInitialized)
+        {
+            return;
+        }
+
+        if (Math.Abs(v - player.Position) < 1.5)
         {
             return;
         }
