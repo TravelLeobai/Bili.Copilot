@@ -89,7 +89,93 @@ UI 绑定也要在 UI 线程上失效。风险评估：低。四个方法的调�
 第二次 `MSB3021/MSB3027`（另一个进程正在运行 `BiliCopilot.UI`，锁住了 `_build/x64/Debug/.../bin`）。
 工作区已恢复到 HEAD，没有留下回退版本。
 
-## 5. 刻意没做的
+## 5. 运行时复测（2026-11-24 21:1x–21:3x，t13）
+
+这一节是把 t11 标「未验证」的几项补齐后的原始记录。两条前置事实先说清楚，否则数字没法读：
+
+**(a) 部署目录里的 bin 曾是一份 AOT 产物**：`src/_build/x64/Debug/…/bin` 里 20:41 那次构建的
+`runtimeconfig.json` 带着 **27 条**裁剪开关，其中 `System.Diagnostics.Tracing.EventSource.IsSupported=false`
+——**EventSource 被关掉，EventCounter / EventPipe 就采不到任何东西**。这正是 t11 §7「dotnet-counters
+对应用进程采 30 s / 10 s / 6 s 都是 0 样本、只有 CSV 表头」的根因，不是工具坏了（对 MSBuild 能采到）。
+用当前 HEAD 重建（`dotnet build … -c Debug -p:Platform=x64`，默认输出到上面那个 bin，MSIX 松散注册直接指向它）
+后 runtimeconfig 只剩 **4 条**、`EventSource.IsSupported` 不再出现，counters 随即正常（见 5.3）。
+
+> 重建时会遇到 `PRI210: 0x800704c8 - File move failed … to …\bin`：这是 bin 里旧的 `resources.pri`
+> 卡住了（新 PRI 移不进去）。把旧文件改名成 `resources.pri.bak` 再构建即可，实测改名后 **EXIT=0**，
+> 新的 `resources.pri` 正常写出。这条路是构建环境问题，与源码无关。
+
+**(b) 登录态**：20:36 那次重注册把 `Settings` 轮换成 `Settings-broken-203705` 等快照，应用丢了 token
+（日志里「没有本地缓存的令牌信息，请重新登录」），这是 t11 播放项跑不了的直接原因。本轮用应用自己的快照恢复
+（`Settings-broken-203705\settings.dat` → `Settings\settings.dat`，重启后动态页与播放恢复）；只改了本机应用数据，
+没有进仓库。
+
+### 5.1 冷启动（到主窗口出现）
+
+| 第几次 | 耗时 | Responding | 窗口标题 |
+|---|---|---|---|
+| 1 | 3200 ms | True | 哔哩助理 |
+| 2 | 3155 ms | True | 哔哩助理 |
+| 3 | 3422 ms | True | 哔哩助理 |
+| **中位数** | **3200 ms** | | |
+
+（另有一轮 30 轮开关循环里的 30 次启动样本，中位 3137.5 ms，范围 2361–4223 ms。）
+
+### 5.2 播放 ≥60 秒
+
+`VideoReconfig` 21:31:43 起播，跑到 21:33:30（107 秒）。每 10 秒采一次 `Responding`：**6/6 全 True**
+（进程 CPU 53.2→64.3 s，工作集 565–580 MB）。播放期 UiLag 窗口：
+
+```
+21:31:50 p50=0.09ms p95=0.20ms  21:32:20 p50=0.09ms p95=0.26ms  21:32:50 p50=0.08ms p95=0.18ms
+21:32:00 p50=0.09ms p95=0.20ms  21:32:30 p50=0.08ms p95=0.22ms  21:33:00 p50=0.08ms p95=0.19ms
+21:32:10 p50=0.09ms p95=0.23ms  21:32:40 p50=0.08ms p95=0.21ms  21:33:10 p50=0.09ms p95=0.19ms
+```
+
+播放期 **p50 0.08–0.09 ms、p95 0.18–0.26 ms**，全部远低于 2 ms 门槛。
+（21:31:20 那个 p95=211 ms 的窗口是**进播放页那一下**，在 `VideoReconfig` 之前。）
+
+### 5.3 dotnet-counters（播放中 30 秒）
+
+```powershell
+dotnet-counters collect -p <BiliCopilot.UI pid> `
+  --counters "System.Runtime[gc-heap-size,alloc-rate,gen-0-gc-count,gen-1-gc-count,gen-2-gc-count,time-in-gc,working-set]" `
+  -o E:\build-temp-dsh\verifier\results\counters-play-fresh.csv --duration 00:00:30
+```
+
+结果：**210 行数据（30 个采样点 × 7 个计数器）**，原始片段：
+
+```
+11/24/2026 21:31:38,System.Runtime,Working Set (MB),Metric,421.257216
+11/24/2026 21:31:38,System.Runtime,GC Heap Size (MB),Metric,16.587184
+11/24/2026 21:31:38,System.Runtime,Gen 0 GC Count (Count / 1 sec),Rate,0
+11/24/2026 21:31:46,System.Runtime,Gen 1 GC Count (Count / 1 sec),Rate,1
+```
+
+| 计数器 | 范围 | 末值 |
+|---|---|---|
+| Working Set | 421 – 586 MB | 578 MB |
+| GC Heap Size | 16.6 – 23.7 MB | 19.1 MB |
+| Allocation Rate | 40 KB/s – 2.48 MB/s | 2.04 MB/s |
+| Gen 0 / Gen 1 GC | 0–1 / 0–1 次每秒 | 0 |
+| Gen 2 GC | **全程 0** | 0 |
+| % Time in GC | 0 % | 0 % |
+
+### 5.4 播放器开关循环
+
+**仓库外的验证脚本 `toggle-player.ps1` 只能跑一轮**：它只在开头导航一次到搜索页，关闭播放器后应用停在
+播放页（没有导航栏与搜索框），第 2 轮起必然 `search-unavailable`。实测 `-Rounds 2` 是 1/2 打开、exit 0。
+所以 30 轮改用「每轮重启 → 动态页 → 点开视频 → 关进程」的循环（脚本在
+`E:\build-temp-dsh\login-recovery\toggle30b.ps1`，结果 JSON 在
+`E:\build-temp-dsh\verifier\results\toggle30-restart.json`）：
+
+| 指标 | 结果 |
+|---|---|
+| 轮数 | 30 |
+| 成功打开播放 | **30 / 30**，每次 `Responding=True`，打开中位 7.77 s |
+| 成功关闭 | **30 / 30**，失败 **0** |
+| 进程泄漏 | 跑前 UI=1 / Visor=1；跑后 UI=0 / Visor=0（无残留） |
+
+## 6. 刻意没做的
 
 - 79 个 `async void` 一个没动（天然不能转 runtime-async，见 t2 §4.1）。
 - 章节 UI 的绑定与 `PlayerViewModel.Commands.cs` 里读 `IsPlayed/IsPlaying` 的「上一章/下一章」逻辑没动：
