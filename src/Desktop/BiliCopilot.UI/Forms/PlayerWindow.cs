@@ -218,11 +218,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             _enteringCompactOverlay = false;
             _isPresenterChanging = true;
             _rootWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-            _ = Task.Run(() =>
-            {
-                Task.Delay(500).Wait();
-                _isPresenterChanging = false;
-            });
+            _ = ResetPresenterChangingFlagAsync();
         }
     }
 
@@ -234,11 +230,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             _enteringFullScreen = false;
             _isPresenterChanging = true;
             _rootWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-            _ = Task.Run(() =>
-            {
-                Task.Delay(500).Wait();
-                _isPresenterChanging = false;
-            });
+            _ = ResetPresenterChangingFlagAsync();
         }
     }
 
@@ -257,11 +249,7 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             _enteringFullScreen = false;
             _isPresenterChanging = true;
             _rootWindow.SetPresenter(AppWindowPresenterKind.CompactOverlay);
-            _ = Task.Run(() =>
-            {
-                Task.Delay(500).Wait();
-                _isPresenterChanging = false;
-            });
+            _ = ResetPresenterChangingFlagAsync();
         }
     }
 
@@ -273,11 +261,36 @@ public sealed partial class PlayerWindow : IAsyncDisposable
             _enteringCompactOverlay = false;
             _isPresenterChanging = true;
             _rootWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-            _ = Task.Run(() =>
-            {
-                Task.Delay(500).Wait();
-                _isPresenterChanging = false;
-            });
+            _ = ResetPresenterChangingFlagAsync();
+        }
+    }
+
+
+    /// <summary>
+    /// presenter 切换后 500 毫秒把 <c>_isPresenterChanging</c> 放回来.
+    /// </summary>
+    /// <returns><see cref="Task"/>.</returns>
+    /// <remarks>
+    /// 原来这四个切换方法里写的是
+    /// <c>_ = Task.Run(() => { Task.Delay(500).Wait(); _isPresenterChanging = false; })</c>。
+    /// 注意那个 <c>Wait()</c> 是在池线程上跑的，所以它**不是** UI 线程上的 sync-over-async
+    /// （t3 的 P0-9 定性有误），但它有两个真问题：
+    /// ① 每次切窗口模式都白占一个线程池线程 500 ms；
+    /// ② <c>_isPresenterChanging</c> 从池线程写、UI 线程读（见 <see cref="IsPresenterChanging"/>），
+    ///    非 volatile 字段的跨线程可见性没有保证，而这条线还挂着 XAML 绑定。
+    /// 这里改成 await 之后回 UI 线程写：时序不变（仍是 500 ms、仍然不等它），只是不再占线程。
+    /// </remarks>
+    private async Task ResetPresenterChangingFlagAsync()
+    {
+        await Task.Delay(500);
+        var dispatcher = this.Get<DispatcherQueue>();
+        if (dispatcher.HasThreadAccess)
+        {
+            _isPresenterChanging = false;
+        }
+        else
+        {
+            dispatcher.TryEnqueue(() => _isPresenterChanging = false);
         }
     }
 
