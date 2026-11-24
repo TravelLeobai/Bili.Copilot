@@ -1,6 +1,6 @@
 # .NET 11 现代化改造报告（Bili.Copilot / bili-copilot-v2）
 
-> 分支 `exp/net11-optimization`，HEAD `dfdf0bf`，**未 push**。本轮提交范围 `2f10c66..dfdf0bf` 共 24 个提交：8 个改代码或工程配置，16 个文档。
+> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告本身提交于 `7a81ab6`），**未 push**。本轮提交范围 `2f10c66..77ed06a` 共 25 个提交：8 个改代码或工程配置，17 个文档。
 > 本文只回答一个问题：**改了什么、改到什么程度**。现状见 `NET11_OPTIMIZATION_AUDIT.md`，数据见 `NET11_PERFORMANCE_VALIDATION.md`，逐文件清单见 `docs/NET11_SOURCE_SCAN_MANIFEST.md`。
 > 验证分三档，正文逐项标注：**已验证（行为）**＝除构建外还有运行期证据；**仅构建通过**＝只有编译/求值证据，没有运行期证据；**未验证**＝缺条件，不填推断。
 
@@ -12,6 +12,7 @@
 4. `5fe32e5` 的验证是测试执行本身：CommentPoll 84/84、Diagnostics 23/23；`-c Release` 只剩 5/23 的既有问题没解。
 5. **本轮没有做**：79 个 `async void` 一个没动、`UI.Models` 没抬 TFM、CI 与 `global.json` 没动、`rd.xml`/死符号/未用钉版没清、AOT publish 与 MSIX 打包没跑。
 6. 构建通过不等于功能正常：`08c0c0a`（窗口切换）只有代码路径分析 + 0 错 0 警，没有"切 30 次窗口"的专项数据；`d781292` 退出的是配置语义，AOT 那条路本来就没人走过。
+7. **t14 第二轮在 HEAD 重建产物上重跑了构建与单测**（Debug/Release `-t:Rebuild` 均 0/0，167.5 s / 170.0 s；CommentPoll 84/84、Diagnostics 23/23），但**播放没有成立**：5 次尝试全部卡在 mpv 初始化 20 s 超时，同一窗口还有 360 条播放器属性回调的 `NullReferenceException`（NET11_VERIFY_RAW.md 附·A1、A3、A5.2、A7.4）。所以本轮"播放期"相关的改动能引用的运行期证据仍来自 20:0x/21:3x 两次会话，不能声称在 HEAD 上回归通过。
 
 ## 1. 提交清单
 
@@ -26,7 +27,7 @@
 | `1372af1` | 性能 | `MyImage.cs`（+44）、`UriToBitmapConverter.cs`（+125） | 每图一个 HttpClient、全尺寸解码 | 部分已验证（详情页图片） |
 | `b41a978` | 性能 | `Services/Live/LiveDanmakuClient.cs`（+116/−20） | 每包多次分配、整串拷贝 | 已验证（弹幕链） |
 
-文档提交（16 个）：`2f10c66` `c588061` `ee5357c` `a8dbea4` `a0d12a6` `5eeddeb` `dc7a8a3` `ce02cd2` `fbb239e` `555fabf` `25dbbb4` `2bb69b8` `dafb451` `df333da` `05dd026` `dfdf0bf`，内容对应 `docs/NET11_RESEARCH.md`、`NET11_BUILD_AUDIT.md`、`NET11_HOTSPOTS.md`、`NET11_SOURCE_SCAN_MANIFEST.md`、`NET11_P0_FIXES.md`、`NET11_P0_TICKPATH.md`、`NET11_P1_NETWORK_IMAGE.md`、`NET11_VERIFY_RAW.md`。
+文档提交（17 个）：`2f10c66` `c588061` `ee5357c` `a8dbea4` `a0d12a6` `5eeddeb` `dc7a8a3` `ce02cd2` `fbb239e` `555fabf` `25dbbb4` `2bb69b8` `dafb451` `df333da` `05dd026` `dfdf0bf` `77ed06a`，内容对应 `docs/NET11_RESEARCH.md`、`NET11_BUILD_AUDIT.md`、`NET11_HOTSPOTS.md`、`NET11_SOURCE_SCAN_MANIFEST.md`、`NET11_P0_FIXES.md`、`NET11_P0_TICKPATH.md`、`NET11_P1_NETWORK_IMAGE.md`、`NET11_VERIFY_RAW.md`（`77ed06a` 只往最后一份追加了"附：第二轮实测"）。
 
 ## 2. 逐项改动
 
@@ -106,7 +107,11 @@
 | `1372af1` 图片 | 0/0（两处输出目录） | 详情页图片正常、0 条解码告警 | 部分已验证 |
 | `b41a978` 弹幕 | 0/0 | 三类包 + 五类消息 + 互动列表 41→113 | 已验证（礼物/SC 未覆盖） |
 
-复用的整体验证（提交后同一代码树）：`555fabf` 上 Debug `-t:Rebuild` EXIT=0 / 0 警告 0 错误 / 152.4 s、Release `-t:Rebuild` EXIT=0 / 0 警告 0 错误 / 148.3 s（NET11_VERIFY_RAW.md §1.2）；HEAD 前最后一次是 `dfdf0bf` 提交说明记录的那一组——Release EXIT=0（0 警告 0 错误）、Debug `-t:Rebuild` 0 警告 0 错误、CommentPoll 84/84、Diagnostics 23/23。`dfdf0bf` 与 `555fabf` 之间只有注释与文档改动（`2bb69b8` 只改 `BiliCopilot.UI.csproj:1500` 起那段 `<!-- -->` 注释、其余全为 md），代码状态相同。
+复用的整体验证（同一代码树，两轮独立复跑）：
+
+- `555fabf`（t11）：Debug `-t:Rebuild` EXIT=0 / 0 警告 0 错误 / 152.4 s，Release 同 / 148.3 s；状态机 async 108、迭代器 7、`d__` 86（NET11_VERIFY_RAW.md §1.2、§2.2）。
+- `dafb451` 工作区干净时重建（t14）：Debug EXIT=0 / 0 警告 0 错误 / 167.5 s，Release 同 / 170.0 s；状态机计数三处一致（108 / 7 / 86）；CommentPoll 84/84、Diagnostics 23/23（NET11_VERIFY_RAW.md 附·A1、A2、A3）。
+- `555fabf` 之后到 `77ed06a` 只有注释与文档改动（`2bb69b8` 只改 `BiliCopilot.UI.csproj:1500` 起那段 `<!-- -->` 注释、其余全为 md），所以两轮的代码状态相同。
 
 ## 4. 已知限制与行为变化
 
@@ -121,6 +126,8 @@
 | `Diagnostics` Release | `-c Release` 只剩 5/23，必须固定 Debug | NET11_P0_FIXES.md 批 4 |
 | 测试工程位置 | 仍在 sln 外、不继承 `src/Directory.Build.props`，`-p:BuildOutDir` 对它们不生效 | NET11_VERIFY_RAW.md §3.2 |
 | `UI.Models` 抬 TFM | 评估后不抬：立报 `PinItem.cs(51,26)` CS8765，要改源码，超出该任务范围 | NET11_P0_FIXES.md 批 3 |
+| 播放初始化 | HEAD 重建产物上 5 次尝试全部 mpv 初始化 20 s 超时（`Load.MpvInit p50=20012.34ms`）；21:40 那次成功（`create-player:end … elapsed=11555ms`），两次不一致的原因未查明 | NET11_VERIFY_RAW.md 附·A5.2、A8 |
+| 播放器属性回调 | 同一采集窗口 360 条 `NullReferenceException`（Position 332），栈顶是 `PlayerViewModel.Methods.cs:704` 的 `Player` 未判空；属当前代码状态，由单独任务处理，不是本轮 8 个提交引入 | 附·A7.4 |
 
 ## 5. 未验证项
 
@@ -134,10 +141,12 @@
 | 窗口切换专项 | 反复切换全屏/紧凑覆盖的失败率与卡顿 | 只做了代码路径分析 | 一段 UIA 或手动 30 次切换 + UiLag 采样 |
 | 改前/改后受控 A/B | 安静机器上单向变量的两轮对照 | 环境被并发构建与 bin 锁打断两次（`WMC0601`、`MSB3021/MSB3027`），工作区已恢复 HEAD（NET11_P0_TICKPATH.md §4） | 安静机器 + 固定同一个视频 + 各自 3 轮取中位 |
 | `dotnet-counters` 播放场景的"改前"基线 | 改动前产物上的 counters 数据 | 首次采集时部署目录里的 bin 是 AOT 产物、EventSource 被关，采不到（NET11_P0_TICKPATH.md §5a） | 在旧 bin 未重建前采集一次；现已被重建覆盖，需回退产物重取 |
+| 播放能否在 HEAD 上稳定成立 | 一次成功的 ≥60 s 播放 | t14 5 次尝试全部 mpv 初始化 20 s 超时（NET11_VERIFY_RAW.md 附·A5、A8 未验证 1） | 定位 `create-player:timeout`（日志写明 `no fallback, no dispose`）的成因后重测 |
+| 成功播放场景的 counters / UiLag（HEAD 产物） | 播放成立时的 30 s 采样与 UiLag 聚合 | t14 的 counters 窗口里 mpv 已超时，"播放窗口开、播放未成立"（附·A7.1 注）；成功场景数据来自 t13 的旧会话 | 播放成立后按同一条 counters 命令与 UiLag 10 s 聚合各采 30 s |
 
 ## 6. 交付边界与工作区状态
 
 - 全部改动在本地分支 `exp/net11-optimization`，**没有 push**，没有开 PR。
 - `a0d12a6` 是 auditor 的扫描文档提交（含两份扫描文档的已提交版本），原样保留；其中的最新改动经 soft reset 拆回工作区后由 `dc7a8a3` 单独提交，内容未丢（`dc7a8a3` 提交说明、任务 t4 记录）。
-- 工作区在 HEAD `dfdf0bf` 之后还有 **3 处未提交改动，不属于本交付**：`docs/NET11_HOTSPOTS.md`（P0-2 叙述同步）、`PlayerViewModel.Methods.cs`、`PlayerViewModel.cs`（播放器初始化超时后摘订阅的后续工作）。这四份报告的数字全部按 HEAD `dfdf0bf` 的已提交状态写。
+- 工作区在 `77ed06a` 之后（含四份报告的 `7a81ab6`）还有 **3 处未提交改动，不属于本交付**：`docs/NET11_HOTSPOTS.md`（P0-2 叙述同步）、`PlayerViewModel.Methods.cs`、`PlayerViewModel.cs`（播放器初始化超时后摘订阅的后续工作，对应附·A7.4 那批 NRE）。这四份报告的数字全部按 `77ed06a` 的已提交状态写。
 - 构建验证均在隔离输出目录（`-p:BuildOutDir=E:\build-temp-dsh\...`）或"关掉占用实例后重跑"两种方式下完成；本机多次出现后台遗留应用实例锁 `bin`，`-t:Rebuild` 会报 MSB3021/MSB3027。有据可查的一次是 `BiliCopilot.UI` PID 13604、`BiliCopilot.Visor` PID 42424，关掉后同一条命令 0 错 0 警通过（NET11_P0_FIXES.md 验证汇总备注、`5eeddeb` 提交说明）。

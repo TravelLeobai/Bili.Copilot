@@ -1,6 +1,6 @@
 # .NET 11 优化审计结论（Bili.Copilot / bili-copilot-v2）
 
-> 分支 `exp/net11-optimization`，HEAD `dfdf0bf`，未 push。审计对象 2026-11-24 的 `bili-copilot-v2`；本机 SDK `11.0.100`（另有 9.0.320 / 10.0.403），csc `5.1200.26.53018`（NET11_BUILD_AUDIT.md 文首、§3）。
+> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告本身提交于 `7a81ab6`），未 push。审计对象 2026-11-24 的 `bili-copilot-v2`；本机 SDK `11.0.100`（另有 9.0.320 / 10.0.403），csc `5.1200.26.53018`（NET11_BUILD_AUDIT.md 文首、§3）。
 > 本文只回答一个问题：**现状是什么**。改动记录见 `NET11_MODERNIZATION_REPORT.md`，实测数据见 `NET11_PERFORMANCE_VALIDATION.md`，逐文件清单见 `docs/NET11_SOURCE_SCAN_MANIFEST.md`。
 > 每个数字旁边带出处（文档 §、提交 hash 或文件行号），转述的判定与原文一致；原文自相矛盾处已在 §1 注出。
 
@@ -15,13 +15,14 @@
 7. **25 条构建配置问题里 3 条有结论**：`4e3566b` 修 Release 红灯、`d781292` 拆 PublishAot、publish 通道降级为"t2 时的历史现象、本轮未复现"；其余 22 条未动（NET11_BUILD_AUDIT.md §12）。
 8. **依赖跨代漂移是净风险**：`Microsoft.UI.Reactor 0.1.0-preview.17` 只有 `net10.0-windows10.0.22621` 单一 TFM、nuspec 依赖 WindowsAppSDK 2.2.x，而工程钉 2.6.5；`H.NotifyIcon.WinUI 2.3.2`、`CommunityToolkit.WinUI.* 8.2.250402` 按 1.6.x 编；`Microsoft.Windows.CsWinRT` 钉 2.2.0、实际解析 **2.3.0-prerelease.251015.2**（NET11_BUILD_AUDIT.md §14）。
 9. **不建议做的四项**（UI 进程 NativeAOT、激进裁剪、Server GC、R2R）在 §5 逐条给依据，判定都是"维持现状"。
+10. **在 HEAD 重建的产物上播放没有成立**：t14 第二轮 5 次尝试全部卡在 mpv 初始化 20 s 超时（`Load.MpvInit p50=20012.34ms`、`Load.MpvInit.Timeout=1`），同一采集窗口里 `[WRN]` 363 条、其中 360 条是播放器属性回调的 `NullReferenceException`（Position 占 332）（NET11_VERIFY_RAW.md 附·A5.2、A7.4）。这是当前代码状态的事实，与 .NET 11 配置无关；播放期数据只能引用更早的成功会话，见 `NET11_PERFORMANCE_VALIDATION.md` §4。
 
 ## 1. 审计坐标与口径
 
 | 项 | 值 | 出处 |
 |---|---|---|
 | 仓库 / 分支 | `bili-copilot-v2` / `exp/net11-optimization` | NET11_BUILD_AUDIT.md 文首 |
-| 本轮提交范围 | `2f10c66..dfdf0bf` 共 24 个提交（8 个改代码或工程、16 个文档） | `git log --oneline` |
+| 本轮提交范围 | `2f10c66..77ed06a` 共 25 个提交（8 个改代码或工程、17 个文档） | `git log --oneline` |
 | 编译单元 | 5 个 src 工程 + 3 个测试工程 = 8 个 | NET11_SOURCE_SCAN_MANIFEST.md §1 |
 | SDK / OS / CPU | `11.0.100` / Windows NT 10.0.29712.0 / Ryzen 7 5800H 16 核 31.4 GB | NET11_VERIFY_RAW.md §0 |
 | 语义扫描快照 | 2026-11-24 19:40–19:50，期间 4 个只改构建属性与 1 行注释的提交 | NET11_SOURCE_SCAN_MANIFEST.md §1 |
@@ -205,3 +206,5 @@
 | `Microsoft.UI.Reactor` 在 WindowsAppSDK 2.6.5 上的行为 | 专项验证 | 只确认了版本依赖的跨代关系（§14） | 一份 Reactor 用到 devtools/源映射的功能清单 + 逐项冒烟 |
 | `UI.Models` 抬 TFM 的回归面 | 抬到 `net11.0` 后的全量回归 | 立报 `PinItem.cs:51` CS8765，要改源码（NET11_P0_FIXES.md 批 3） | 独立任务：改 `Equals(object?)` 签名 + 回归 |
 | 用户侧 x86-64-v2 满足率 | 真实用户 CPU 分布 | 本机 Zen3 远超基线，测不出来（NET11_BUILD_AUDIT.md §11-D） | 遥测或发布说明口径（§11-D 已给可原样使用的对外说明） |
+| 播放能否在 HEAD 上稳定成立 | 一次成功的 ≥60 s 播放 | t14 5 次尝试全部 mpv 初始化 20 s 超时；21:40 那次成功（`create-player:end … elapsed=11555ms`）与 21:56 之后连续失败的原因未查明（NET11_VERIFY_RAW.md 附·A5、A8 未验证 1） | 定位 `create-player:timeout`（日志写明 `no fallback, no dispose`）的成因；同窗口 360 条属性回调 NRE 已由单独任务处理（附·A7.4） |
+| 成功播放场景下的 counters / UiLag | HEAD 产物的播放期采样 | t14 的 counters 窗口里 mpv 已超时（"播放窗口开、播放未成立"，附·A7.1 注）；成功场景的数据来自 t13 的旧会话 | 播放成立后按同一条 counters 命令与 UiLag 10 s 聚合各采 30 s |

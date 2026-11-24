@@ -1,6 +1,6 @@
 # .NET 11 源码扫描清单（统计口径与扫描方法）
 
-> 分支 `exp/net11-optimization`，HEAD `dfdf0bf`，未 push。扫描日期 2026-11-24，语义数据取于 19:40–19:50（NET11_SOURCE_SCAN_MANIFEST.md §1）。
+> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告本身提交于 `7a81ab6`），未 push。扫描日期 2026-11-24，语义数据取于 19:40–19:50（NET11_SOURCE_SCAN_MANIFEST.md §1）；此后新增的提交只动文档，不参与编译。
 > **逐文件清单不在这里，见 `docs/NET11_SOURCE_SCAN_MANIFEST.md`**（539 行，含 1268 条逐文件记录、246 个 XAML 清点、8 条已知局限）。
 > 本文只回答一个问题：**清单在哪、按什么口径统计**。两份文件重名，正文只保留口径与方法，清单正文以 `docs/` 版为准；若两处数字冲突，按 `docs/` 版。
 > 热点分级与调用链见 `docs/NET11_HOTSPOTS.md`；构建配置见 `NET11_OPTIMIZATION_AUDIT.md`。
