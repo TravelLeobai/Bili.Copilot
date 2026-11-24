@@ -14,10 +14,12 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
     public OverlayFrame()
     {
         InitializeComponent();
-        RootGrid.LayoutUpdated += OnRootGridLayoutUpdated;
     }
 
-    private void OnRootGridLayoutUpdated(object? sender, object e)
+    // 浮层底色的唯一依据是「RootGrid 里有没有子元素」，而子元素只在这个类里增删
+    // （NavigateTo / GoBack / ClearBackStack）。原先挂 RootGrid.LayoutUpdated 去轮询，
+    // 每次布局扫描都会调一次，而实际上只有这三处会改变结果.
+    private void SyncOverlayBackground()
     {
         var hasOverlay = RootGrid.Children.Count > 0;
         if (hasOverlay == _hasOverlay)
@@ -54,6 +56,7 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
     public void ClearBackStack()
     {
         RootGrid.Children.Clear();
+        SyncOverlayBackground();
     }
 
     public void GoBack()
@@ -62,6 +65,8 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
         {
             RootGrid.Children.RemoveAt(RootGrid.Children.Count - 1);
         }
+
+        SyncOverlayBackground();
 
         // �������Ԫ�أ������һ��Ԫ������Ϊ�ɼ�
         if (RootGrid.Children.Count > 0)
@@ -140,6 +145,7 @@ public sealed partial class OverlayFrame : LayoutUserControlBase
                 Implicit.SetHideAnimations(element, hideSet);
 
                 RootGrid.Children.Add(element);
+                SyncOverlayBackground();
             }
             else
             {

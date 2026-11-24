@@ -133,7 +133,7 @@ public sealed class FavoritesShell : Component
     private readonly FavoritesPageMainBody _mainBody = new();
     private readonly Controls.Common.AiInterestBanner _banner = new();
     private VideoFavoriteSectionDetailViewModel? _bannerSection;
-    private bool _bannerHooked;
+    private VideoFavoriteSectionDetailViewModel? _bannerHookedSection;
     private readonly Richasy.WinUIKernel.Share.Base.ColumnSplitter _splitter;
 
     /// <summary>
@@ -184,11 +184,7 @@ public sealed class FavoritesShell : Component
         var videoSection = vm.CurrentSection as VideoFavoriteSectionDetailViewModel;
         var showBanner = videoSection?.IsDefault == true;
 
-        if (showBanner && !_bannerHooked && videoSection is not null)
-        {
-            _bannerHooked = true;
-            videoSection.ListUpdated += OnBannerSectionUpdated;
-        }
+        SyncBannerHook(showBanner ? videoSection : null);
 
         return Grid(
             [GridSize.Star()],
@@ -207,6 +203,33 @@ public sealed class FavoritesShell : Component
                 RefreshBanner(control, videoSection);
             }, vm).Grid(row: 2),
             ViewLaterShell.Host(_mainBody, control => control.ViewModel = vm, vm).Grid(row: 3).Margin(-6, 0, 0, 0));
+    }
+
+    // 收藏夹刷新是「Sections.Clear() + 重建」：CurrentSection 会换成新实例。
+    // 老写法用 bool 记住"已经挂过"，换实例后既不解绑老分区（把它挂在事件上），
+    // 也不再挂新分区（AI 兴趣条从此不刷新）。这里按实例比对，换一个换一次订阅.
+    private void SyncBannerHook(VideoFavoriteSectionDetailViewModel? section)
+    {
+        if (ReferenceEquals(_bannerHookedSection, section))
+        {
+            return;
+        }
+
+        if (_bannerHookedSection is not null)
+        {
+            _bannerHookedSection.ListUpdated -= OnBannerSectionUpdated;
+        }
+
+        _bannerHookedSection = section;
+
+        if (section is null)
+        {
+            // 换成别的收藏夹/分区后 banner 折起来了，回来时按新的 Items 再刷一次.
+            _bannerSection = null;
+            return;
+        }
+
+        section.ListUpdated += OnBannerSectionUpdated;
     }
 
     private void RefreshBanner(Controls.Common.AiInterestBanner banner, VideoFavoriteSectionDetailViewModel section)
