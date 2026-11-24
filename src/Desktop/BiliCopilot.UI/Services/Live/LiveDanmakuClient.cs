@@ -30,6 +30,11 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
 
     /// <summary>
     /// 收到消息（cmd 与解析后的 JSON）.
+    /// <para>
+    /// <c>Data</c> 只在回调期间有效：回调返回后底层的 <see cref="JsonDocument"/> 就会被释放，
+    /// 需要留存请自己在回调里 <c>Clone()</c>。这样每条消息不用再复制一整份 JSON 字节
+    /// （密集直播间每收一条弹幕就是一次全量拷贝 + 一个数组分配）.
+    /// </para>
     /// </summary>
     public event EventHandler<(string Command, JsonElement Data)>? MessageReceived;
 
@@ -357,7 +362,10 @@ internal sealed class LiveDanmakuClient : IAsyncDisposable
                     logger?.LogInformation("弹幕消息：{Cmd}", command);
                 }
 
-                MessageReceived?.Invoke(this, (command, root.Clone()));
+                // 直接把切片上的 root 交出去：Clone() 会把整份 JSON 再复制一遍字节，
+                // 而唯一的订阅方（PlayerViewModel）在回调里同步读完就丢。
+                // 事件约定已写明「只在回调期间有效」.
+                MessageReceived?.Invoke(this, (command, root));
             }
             catch (Exception ex)
             {
