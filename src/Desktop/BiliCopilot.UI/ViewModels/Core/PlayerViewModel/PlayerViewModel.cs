@@ -1715,6 +1715,19 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// </summary>
     private readonly HashSet<double> _jumpConsumed = [];
 
+    /// <summary>
+    /// 「弹幕跳伞」开关的进视频快照：位置回调里不再每 tick 读一次本地设置.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SettingsToolkit.ReadLocalSetting{T}"/> 是「服务定位器 + WinRT 本地设置容器」
+    /// （Toolkits/SettingsToolkit.cs:22 → GlobalDependencies.Kernel.GetRequiredService），中间没有缓存层。
+    /// 位置回调每秒 20~60 次（NET11_HOTSPOTS.md P0-1 的实测口径），旧实现在这里就是每 tick 跨一次容器边界，
+    /// 和已经修掉的 PlayNextWithoutTip / AutoPlayNext 是同一类问题（修法见 Methods.cs 的 RefreshTickPathCache）。
+    /// 这个开关只有 <see cref="CheckDanmakuJump"/> 用，提示窗口本身也只有 6 秒，所以每个视频读一次就够；
+    /// 改了设置从下一部视频（或重载弹幕）生效.
+    /// </remarks>
+    private bool _isDanmakuJumpEnabled = true;
+
     private bool _isJumpPrompt;
 
     /// <summary>
@@ -1766,6 +1779,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     {
         _jumpCandidates.Clear();
         _jumpConsumed.Clear();
+        // 开关快照：每个视频（以及每次重载弹幕）读一次，位置回调里就不再碰本地设置.
+        _isDanmakuJumpEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.DanmakuJumpEnabled, true);
         if (danmakus is null)
         {
             return;
@@ -1854,7 +1869,10 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        if (!SettingsToolkit.ReadLocalSetting(SettingNames.DanmakuJumpEnabled, true) || _jumpCandidates.Count == 0)
+        // 两个条件都是纯字段读取：开关来自进视频时的快照，候选数来自 BuildJumpCandidates.
+        // 原来这里先调 SettingsToolkit.ReadLocalSetting（服务定位器 + WinRT），所以「没有跳伞弹幕的视频」
+        // 也要每个 tick 付一次跨容器边界的代价.
+        if (!_isDanmakuJumpEnabled || _jumpCandidates.Count == 0)
         {
             if (_isJumpPrompt)
             {
