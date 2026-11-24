@@ -19,6 +19,10 @@
     <!--
       Runtime Async（.NET 11 预览特性）：async 方法不再由编译器生成状态机，改由运行时挂起/恢复。
       走 CoreCLR，不涉及 Mono；PublishAot 那条路本轮不测。
+
+      注意：MSBuild 不把 Features 当重编译输入，改了这个属性之后普通 build 是空操作，
+      必须 -t:Rebuild，否则编出来的还是老状态机的程序集（看起来像"没生效"）。
+      想临时关掉：build 时加 -p:Features= 覆盖。
     -->
     <Features>$(Features);runtime-async=on</Features>
   </PropertyGroup>
