@@ -431,13 +431,24 @@ public sealed partial class PlayerViewModel
 
     private void OnLiveMessageReceived(object? sender, (string Command, JsonElement Data) e)
     {
-        var cmd = e.Command.Split(':')[0];
+        // 命令 = 冒号前那段。原来 `Split(':')[0]` 会把整条命令按冒号切完再只留第一个：
+        // 一条 `DANMU_MSG:4:0:2:2:2:0` 要白扔 7 个子串 + 1 个 string[]（每条消息都发生），
+        // 这里只定位冒号再切一刀，每条消息只剩 1 个子串.
+        var command = e.Command;
+        var separator = command.IndexOf(':', StringComparison.Ordinal);
+        var cmd = separator < 0 ? command : command[..separator];
 
         // 表情弹幕单独留样本：普通弹幕的样本只记一次，看不出表情字段长什么样.
-        if (cmd == "DANMU_MSG" && e.Data.GetRawText().Contains("\"emoticon_unique\":\"", StringComparison.Ordinal) && !e.Data.GetRawText().Contains("\"emoticon_unique\":\"\"", StringComparison.Ordinal))
+        // 原来这里把整段 JSON 物化 2~3 次（两次 Contains + 一次日志各 `GetRawText()` 一遍），
+        // 每条 DANMU_MSG 都要付一份整串字符串；物化一次复用即可，判定条件与日志内容不变.
+        if (cmd == "DANMU_MSG")
         {
-            var emoteRaw = e.Data.GetRawText();
-            logger.LogInformation("表情弹幕样本：{Raw}", emoteRaw.Length > 1200 ? emoteRaw[..1200] : emoteRaw);
+            var danmakuRaw = e.Data.GetRawText();
+            if (danmakuRaw.Contains("\"emoticon_unique\":\"", StringComparison.Ordinal)
+                && !danmakuRaw.Contains("\"emoticon_unique\":\"\"", StringComparison.Ordinal))
+            {
+                logger.LogInformation("表情弹幕样本：{Raw}", danmakuRaw.Length > 1200 ? danmakuRaw[..1200] : danmakuRaw);
+            }
         }
 
         if (_loggedRaw.Add(cmd))
@@ -516,7 +527,12 @@ public sealed partial class PlayerViewModel
         }
 
         // 播放器里的临时开关，或设置页的全局「屏蔽低等级用户」任一开启都生效.
-        if ((IsLiveDanmakuLevelFilterEnabled || Services.UserLevelFilter.IsEnabled) && item.UserLevel > 0 && item.UserLevel < 3)
+        // 等级判据放前面：`UserLevelFilter.IsEnabled` 每次都是一次服务定位器 + WinRT 本地设置读取
+        // （Services/UserLevelFilter.cs:21 → Toolkits/SettingsToolkit.cs:22，无缓存层），
+        // 而这条消息路径是「每条弹幕一次」。三个操作数都没有副作用，换顺序不影响结果，
+        // 但等级 3 及以上（以及接口没给等级的 0）就不用再去碰设置了.
+        if (item.UserLevel > 0 && item.UserLevel < 3
+            && (IsLiveDanmakuLevelFilterEnabled || Services.UserLevelFilter.IsEnabled))
         {
             return true;
         }
