@@ -87,20 +87,52 @@ public sealed class LiveInteractionItem
 public static class LiveMessageParser
 {
     /// <summary>
+    /// 表情对象在 info[0] 里的候选下标（实测 12，个别版本 13/11/14）.
+    /// 提取成静态字段，避免每条弹幕都分配一个新数组.
+    /// </summary>
+    private static readonly int[] EmoteIndexProbe = [12, 13, 11, 14];
+
+    /// <summary>
     /// 解析一条消息；不认识的命令返回 null.
     /// </summary>
     public static LiveInteractionItem? Parse(string command, JsonElement root)
     {
-        var cmd = command.Split(':')[0];
-        return cmd switch
+        // 直播命令常带后缀（DANMU_MSG:4:0:2:2:2:0），只比较冒号前那段。
+        // 原来用 Split(':')[0]，每条消息要分配一个 string[] 加一个子串；
+        // 改成分发前先切一个只读视图，两个分配都省掉。
+        var head = command.AsSpan();
+        var colon = head.IndexOf(':');
+        if (colon >= 0)
         {
-            "DANMU_MSG" => ParseDanmaku(root),
-            "SEND_GIFT" => ParseGift(root),
-            "SUPER_CHAT_MESSAGE" or "SUPER_CHAT_MESSAGE_JPN" => ParseSuperChat(root),
-            "GUARD_BUY" => ParseGuard(root),
-            "INTERACT_WORD" or "INTERACT_WORD_V2" => ParseInteract(root),
-            _ => null,
-        };
+            head = head[..colon];
+        }
+
+        if (head.SequenceEqual("DANMU_MSG"))
+        {
+            return ParseDanmaku(root);
+        }
+
+        if (head.SequenceEqual("SEND_GIFT"))
+        {
+            return ParseGift(root);
+        }
+
+        if (head.SequenceEqual("SUPER_CHAT_MESSAGE") || head.SequenceEqual("SUPER_CHAT_MESSAGE_JPN"))
+        {
+            return ParseSuperChat(root);
+        }
+
+        if (head.SequenceEqual("GUARD_BUY"))
+        {
+            return ParseGuard(root);
+        }
+
+        if (head.SequenceEqual("INTERACT_WORD") || head.SequenceEqual("INTERACT_WORD_V2"))
+        {
+            return ParseInteract(root);
+        }
+
+        return null;
     }
 
     private static LiveInteractionItem? ParseDanmaku(JsonElement root)
@@ -122,11 +154,15 @@ public static class LiveMessageParser
             item.UserName = info[2][1].GetString() ?? string.Empty;
         }
 
+        // info[0] 是用户信息数组，头像和表情都要从它上面读；提成局部变量，
+        // 少几次「从数组头重走一遍元数据」的定位（每条弹幕都走这条路）.
+        var userInfo = info[0];
+
         // info[0][15] 是用户信息对象，弹幕列表的头像就靠它（uinfo.base.face，老协议在 uinfo.face）.
-        if (info[0].ValueKind == JsonValueKind.Array
-            && info[0].GetArrayLength() > 15
-            && info[0][15].ValueKind == JsonValueKind.Object
-            && info[0][15].TryGetProperty("user", out var danmakuUser))
+        if (userInfo.ValueKind == JsonValueKind.Array
+            && userInfo.GetArrayLength() > 15
+            && userInfo[15].ValueKind == JsonValueKind.Object
+            && userInfo[15].TryGetProperty("user", out var danmakuUser))
         {
             if (danmakuUser.TryGetProperty("base", out var danmakuBase))
             {
@@ -148,16 +184,16 @@ public static class LiveMessageParser
 
         // 表情弹幕：实测表情对象挂在 info[0][12]（个别版本在 13），
         // 里面有 emoticon_unique 和 url，列表按这个 url 画图.
-        if (info[0].ValueKind == JsonValueKind.Array)
+        if (userInfo.ValueKind == JsonValueKind.Array)
         {
-            foreach (var index in new[] { 12, 13, 11, 14 })
+            foreach (var index in EmoteIndexProbe)
             {
-                if (info[0].GetArrayLength() <= index || info[0][index].ValueKind != JsonValueKind.Object)
+                if (userInfo.GetArrayLength() <= index || userInfo[index].ValueKind != JsonValueKind.Object)
                 {
                     continue;
                 }
 
-                var emoteNode = info[0][index];
+                var emoteNode = userInfo[index];
                 var unique = ReadString(emoteNode, "emoticon_unique");
                 if (string.IsNullOrEmpty(unique))
                 {
@@ -231,7 +267,6 @@ public static class LiveMessageParser
             Text = ReadString(data, "message"),
             GiftPrice = ReadInt(data, "price"),
             BackgroundColor = ReadString(data, "background_color"),
-            Time = DateTimeOffset.Now,
         };
 
         if (data.TryGetProperty("user_info", out var user))
