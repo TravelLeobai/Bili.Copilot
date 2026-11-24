@@ -105,15 +105,42 @@ using var resp = await SharedClient.GetAsync(url, cts.Token);
 
 侧栏实拍（互动面板：用户名 + 粉丝牌 + 进场提示 + 弹幕正文）见会话内 `_eng2-comment.png` / `_eng2-live.png`；礼物与 SC 在这 25 秒里没出现（该房间当时无礼物/SC 事件），**这两类未拿到真实样本**——但它们的入口同为 `op=5` 包 → `Parse` → `LiveMessageParser`，本批没有改动 `LiveMessageParser`，字段名一处未动。
 
-### 视频评论区
+### 视频评论区（登录恢复后补测，2026-11-24 21:33–21:55）
 
-**未完成（阻塞在登录态）**。21:00 之后重新执行时，应用停在扫码登录页（`请使用移动客户端扫描下方的二维码登录`），没有导航栏也进不了播放器，所以打不开视频评论区。
+登录态已恢复（engineer 用 `Settings-broken-203705\settings.dat` 快照覆盖回去，**不是**重注册包）。日志：
 
-时间线：20:22 那次直播间验证是**已登录**状态下做的（`访问令牌：已就绪`）；20:33~20:37 之间实例被强制结束、期间又用 `Add-AppxPackage -Register -ForceUpdateFromAnyVersion` 从隔离输出目录重注册过包，之后启动就变成未登录（`访问令牌：当前没有 access_key`）。**这次登录态丢失是本任务自动化操作造成的副作用**，需要人工在应用里重新扫一次码（登录页有「刷新」可以换码）。
+```
+21:33:31 [INF] 访问令牌：已就绪 access_token=c59d**** uid=177800289 剩余有效期≈4290.6h
+21:33:39 [INF] 访问令牌：已就绪 …
+21:33:46 [INF] 访问令牌：已就绪 …
+21:37:30 [INF] 访问令牌：已就绪 …          ← 本轮冒烟启动时的登录态
+```
 
-代码侧：`Services/CommentVote/**`、`ViewModels/Components/Comment*/**`、`Reactor/CommentPanel.cs` 本批一处未动；评论区头像走的是 `SmallImageCache`，不走本批改的 `UriToBitmapConverter`；`MyImage` 只用于 markdown 正文（AI 回复 / 文章阅读），也不在评论区路径上。所以缺失的这一条是「整体冒烟」，不是「本批改动的回归」。
+启动方式：**当前已注册包**（`shell:AppsFolder\Richasy.BiliCopilot.Dev_g7ew4fxhv1f46!App`，版本 1.0.4.0），未重注册、未换版本、未碰 `src\_build`。
 
-作为退而求其次的证据：20:22 那次会话里，收藏页 / 搜索页的视频封面（走图片解码链）全部正常渲染，没有解码异常日志。
+#### 实测（拿到实证）
+
+| 项 | 结果 | 证据 |
+|---|---|---|
+| 登录态 + 进主窗口 | ✅ | 21:33–21:37 四行 `访问令牌：已就绪 uid=177800289` |
+| 我的收藏页加载 | ✅ | 21:41 打开，卡片网格正常（会话截图 `_t12-fav.png`），22 张卡片标题可读 |
+| 打开视频并播放 | ✅ | 21:42 点击收藏卡片 → 播放器窗口标题 `以防你不知道GTA6路人是如何暴富的??`，视频在播、弹幕浮层正常（`_t12-player-windowed.png`） |
+| 视频详情面板 | ✅ | 21:44 点播放器右下角按钮唤出详情页：UP 头像 + 昵称 + `关注`、重播/点赞/投币/收藏/分享计数、`接着看` 推荐列表（`_t12-probe-br.png`） |
+| **图片路径（带图内容）** | ✅ | 上条详情页里 UP 头像与 5 张推荐封面全部正常渲染，**没有占位块/裂图**；日志中无 `UriToBitmap` / `BitmapImage` / 解码相关告警 |
+| 评论列表渲染 | ❌ **未拿到** | 见下 |
+
+#### 未验证（说清卡在哪）
+
+评论列表**没有取到证**。`视频评论区` 挂在 `Controls/Player/VideoPlayerPanel.xaml`（360 宽的 `VideoPlayerSideBody` → `PlayerCommentSection`），由 `PlayerOverlay.xaml:263` 的 `OverlayPanel IsShow="{x:Bind ViewModel.IsExtraPanelVisible}"` 控制显隐。问题在自动化可达性：
+
+- 播放器窗口的 UIA 树只有 **9 个节点**（标题栏 3 个按钮 + mpv 的 `Pane` + 非客户区），Reactor 渲染的控件一个都不暴露，所以拿不到「评论」Tab 的 `AutomationId`/名字，`InvokePattern`/`SelectionItemPattern` 都用不上；
+- 用坐标点击右下角按钮只把播放器切到了「视频详情」页（上表第 4 行那张图），**不是**那个 360 宽侧栏；再点一次会切回去；
+- 在详情页里滚轮下滚 8 格画面无变化（该页不吃滚轮），到不了评论列表。
+
+要补这一条，最省事的是**人工在应用里点一下**：播放器 → 右下角「详情」按钮 → 侧栏顶部的 `评论` Tab，然后我照一张图 + 收日志即可（约 1 分钟）。之所以没这么做：21:45 之后 `verifier` 要独占 UI 跑 t14 的播放项（冷启动 ×3 / 播 75 秒 / 播放器开关 30 轮），我已把窗口让出。
+
+代码侧：`Services/CommentVote/**`、`ViewModels/Components/Comment*/**`、`Reactor/CommentPanel.cs` 本批一处未动；评论区头像走 `SmallImageCache`，不走本批改的 `UriToBitmapConverter`；`MyImage` 只用于 markdown 正文（AI 回复 / 文章阅读），也不在评论区路径上。所以缺的是「整页冒烟的最后一步」，不是「本批改动的回归」——详情页的图片渲染已经覆盖了本批改动的那条解码链。
+
 
 ## 明确没做的事
 
