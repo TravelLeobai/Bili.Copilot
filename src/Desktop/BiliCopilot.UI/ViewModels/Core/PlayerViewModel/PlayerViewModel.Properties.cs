@@ -61,6 +61,17 @@ public sealed partial class PlayerViewModel
     private double _sponsorMuteBackupVolume = 100;
     private bool _isSponsorLoading;
 
+    // 应用数据目录只解析一次：LocalFolder 是 WinRT 调用，包在注册/服务被占时会卡死 UI 线程.
+    private static readonly Lazy<string?> _localFolderPath = new(ResolveLocalFolderPath, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    // 三个自检开关的快照，每个视频开始时刷一次（见 RefreshAdSkipTestFlags）.
+    private bool _wholeVideoAdTest;
+    private bool _manualAdSkipTest;
+    private bool _forceAutoSkipTest;
+
+    // 跳过提示检查的节流：位置没动够就不重复算.
+    private double _lastSponsorCheckPosition = -1;
+
     public event EventHandler<string> WarningOccurred;
     public event EventHandler ChapterInitialized;
     public event EventHandler<double> ProgressChanged;

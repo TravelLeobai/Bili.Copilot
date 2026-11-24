@@ -270,6 +270,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         ResetEndScreen();
         _sponsorSegments = Array.Empty<SponsorSegment>();
         _lastSponsorSkipPosition = -1;
+        _lastSponsorCheckPosition = -1;
+
+        // 这里是每个视频的开始：自检开关在这里刷一次，播放位置回调里只读字段.
+        // （本地文件开关的读取全走缓存路径，不再每次回调碰 WinRT，见 CheckSponsorBlock）
+        RefreshAdSkipTestFlags();
 
         // 注意：空降检查不能在这里启动——那时 _sourceResolver 还是 null，
         // 音频识别会直接以"没有播放源"跳过（AI 声音跳过永远跑不起来）。
@@ -1071,6 +1076,8 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 PushAdSkipLog("来源 AI 识别：未启用，跳过", TimeSpan.FromSeconds(10));
             }
 
+            // 自检开关按视频刷新一次，播放位置回调里只读字段（见 CheckSponsorBlock 的说明）.
+            RefreshAdSkipTestFlags();
             var testRanges = ReadSegmentRangeTest();
             _sponsorSegments = testRanges.Count > 0 ? testRanges : MergeSegments(segments);
             logger.LogInformation("跳过片段检查完成：{Count} 段", _sponsorSegments.Count);
@@ -1408,13 +1415,37 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// 自检开关：LocalState 下放一个 adskip-test.txt，就把整段视频当成广告片段，用来验证跳过链路.
     /// </summary>
     private static bool IsWholeVideoAdTestEnabled()
+        => TestFlagFileExists("adskip-test.txt");
+
+    /// <summary>
+    /// 自检开关：LocalState 下放 adskip-manual.txt，就强制走手动模式（只弹提示不自动跳），
+    /// 用来验证药丸提示与点击跳转.
+    /// </summary>
+    private static bool IsManualAdSkipTestEnabled()
+        => TestFlagFileExists("adskip-manual.txt");
+
+    /// <summary>
+    /// 投放测试开关用的文件是否存在于应用数据目录。
+    /// <para>
+    /// 路径只解析一次并缓存：<c>ApplicationData.LocalFolder</c> 是 WinRT 调用，
+    /// 包处于「正在注册/服务被占」的状态时会卡住（2026-11-24 18:12 实测整窗未响应，
+    /// UI 线程停在 <c>ApplicationData.get_LocalFolder()</c> 里，mpv 还在正常播）。
+    /// 这个函数原来在每次播放位置变化时都被调用，等于一秒几十次 WinRT 往返。
+    /// </para>
+    /// </summary>
+    /// <param name="fileName">数据目录下的文件名.</param>
+    /// <returns>文件存在则为 true；路径解析失败一律 false.</returns>
+    private static bool TestFlagFileExists(string fileName)
     {
+        var root = _localFolderPath.Value;
+        if (string.IsNullOrEmpty(root))
+        {
+            return false;
+        }
+
         try
         {
-            var path = System.IO.Path.Combine(
-                Windows.Storage.ApplicationData.Current.LocalFolder.Path,
-                "adskip-test.txt");
-            return System.IO.File.Exists(path);
+            return System.IO.File.Exists(System.IO.Path.Combine(root, fileName));
         }
         catch
         {
@@ -1422,23 +1453,33 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
     }
 
-    /// <summary>
-    /// 自检开关：LocalState 下放 adskip-manual.txt，就强制走手动模式（只弹提示不自动跳），
-    /// 用来验证药丸提示与点击跳转.
-    /// </summary>
-    private static bool IsManualAdSkipTestEnabled()
+    private static string? ResolveLocalFolderPath()
     {
         try
         {
-            var path = System.IO.Path.Combine(
-                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path,
-                "adskip-manual.txt");
-            return System.IO.File.Exists(path);
+            return Windows.Storage.ApplicationData.Current.LocalFolder.Path;
         }
         catch
         {
-            return false;
+            try
+            {
+                return Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path;
+            }
+            catch
+            {
+                return null;
+            }
         }
+    }
+
+    /// <summary>
+    /// 重新读一遍三个自检开关（整段广告 / 手动 / 强制自动）。每换一个视频调一次，不放在播放位置回调里.
+    /// </summary>
+    private void RefreshAdSkipTestFlags()
+    {
+        _wholeVideoAdTest = TestFlagFileExists("adskip-test.txt");
+        _manualAdSkipTest = TestFlagFileExists("adskip-manual.txt");
+        _forceAutoSkipTest = TestFlagFileExists("adskip-auto.txt");
     }
 
     /// <summary>
@@ -1474,6 +1515,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
+        // 位置回调一秒来几十次，位置没动够就不重复算：这一段原来每次都要读
+        // 三个自检文件 + 一条本地设置（全是 WinRT），是这次整窗卡死的源头.
+        var checkPosition = Player.Position;
+        if (Math.Abs(checkPosition - _lastSponsorCheckPosition) < 0.25)
+        {
+            return;
+        }
+
+        _lastSponsorCheckPosition = checkPosition;
+
         // 直播没有「广告片段」这回事，跳过提示只对点播生效.
         if (IsLive)
         {
@@ -1482,7 +1533,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         }
 
         // 整段当广告的自检模式：只看播放位置，不看片段表.
-        if (IsWholeVideoAdTestEnabled())
+        if (_wholeVideoAdTest)
         {
             if (Player.Position < Player.Duration - 3)
             {
@@ -1510,7 +1561,6 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             return;
         }
 
-        var manual = (SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false) || IsManualAdSkipTestEnabled()) && !IsForceAutoSkipTestEnabled();
         var position = Player.Position;
         var current = _sponsorSegments.FirstOrDefault(p => position >= p.Start && position < p.End - 0.3);
         if (current is null)
@@ -1519,6 +1569,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             HideSkipPrompt();
             return;
         }
+
+        // 手动/自动模式只在真的进到片段里时才读一次设置：这条也是 WinRT 调用，不值得每秒读.
+        var manual = (SettingsToolkit.ReadLocalSetting(SettingNames.SponsorBlockManualMode, false) || _manualAdSkipTest) && !_forceAutoSkipTest;
 
         if (!manual)
         {
@@ -1893,19 +1946,7 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// 自检：LocalState/adskip-auto.txt 存在时强制走自动跳过（覆盖设置里的手动模式）.
     /// </summary>
     private static bool IsForceAutoSkipTestEnabled()
-    {
-        try
-        {
-            var path = System.IO.Path.Combine(
-                Microsoft.Windows.Storage.ApplicationData.GetDefault().LocalFolder.Path,
-                "adskip-auto.txt");
-            return System.IO.File.Exists(path);
-        }
-        catch
-        {
-            return false;
-        }
-    }
+        => TestFlagFileExists("adskip-auto.txt");
 }
 
 

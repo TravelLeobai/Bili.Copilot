@@ -718,6 +718,20 @@ public sealed partial class PlayerViewModel
 
     private async void OnPlayerPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        // async void 里漏出去的异常没有任何人接，直接杀掉进程——而 mpv 是独立线程/HWND，
+        // 它还会继续播，看起来就像"UI 崩了但视频正常". 这里兜一层，至少留下日志.
+        try
+        {
+            await HandlePlayerPropertyChangedAsync(e);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "处理播放器属性变更时出错：{Property}", e.PropertyName);
+        }
+    }
+
+    private async Task HandlePlayerPropertyChangedAsync(PropertyChangedEventArgs e)
+    {
         // 诊断（Debug）：只消费既有通知，不做任何新的 mpv 查询.
 #if DEBUG
         ObservePlaybackForStall(e.PropertyName);
