@@ -1,6 +1,6 @@
 # .NET 11 性能验证报告（Bili.Copilot / bili-copilot-v2）
 
-> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告在 `7a81ab6` 新增，`64dd96f` / `03b8df4` 两次补记），未 push。
+> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告在 `7a81ab6` 新增，其后几次补记只改这四份文件），未 push。
 > 数据来自三轮独立测量：**t11**（2026-11-24 20:51–21:10，HEAD `555fabf`，NET11_VERIFY_RAW.md §1–§8）、**t13**（21:1x–21:3x，NET11_P0_TICKPATH.md §5）、**t14**（21:37–22:10，HEAD `dafb451` 工作区干净，NET11_VERIFY_RAW.md 附·A1–A8）。改动前数据来自同一日志文件里的更早会话（18:5x）。
 > 本文只回答一个问题：**数据如何**。现状见 `NET11_OPTIMIZATION_AUDIT.md`，改动见 `NET11_MODERNIZATION_REPORT.md`。
 > 每个数字都带对照等级与出处。**对照等级只有三种**：

@@ -1,6 +1,6 @@
 # .NET 11 优化审计结论（Bili.Copilot / bili-copilot-v2）
 
-> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告在 `7a81ab6` 新增，`64dd96f` / `03b8df4` 两次补记），未 push。审计对象 2026-11-24 的 `bili-copilot-v2`；本机 SDK `11.0.100`（另有 9.0.320 / 10.0.403），csc `5.1200.26.53018`（NET11_BUILD_AUDIT.md 文首、§3）。
+> 分支 `exp/net11-optimization`，报告基线 HEAD `77ed06a`（四份报告在 `7a81ab6` 新增，其后几次补记只改这四份文件），未 push。审计对象 2026-11-24 的 `bili-copilot-v2`；本机 SDK `11.0.100`（另有 9.0.320 / 10.0.403），csc `5.1200.26.53018`（NET11_BUILD_AUDIT.md 文首、§3）。
 > 本文只回答一个问题：**现状是什么**。改动记录见 `NET11_MODERNIZATION_REPORT.md`，实测数据见 `NET11_PERFORMANCE_VALIDATION.md`，逐文件清单见 `docs/NET11_SOURCE_SCAN_MANIFEST.md`。
 > 每个数字旁边带出处（文档 §、提交 hash 或文件行号），转述的判定与原文一致；原文自相矛盾处已在 §1 注出。
 
