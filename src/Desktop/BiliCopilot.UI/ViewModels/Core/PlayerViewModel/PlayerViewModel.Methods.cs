@@ -696,13 +696,18 @@ public sealed partial class PlayerViewModel
 
     private void TrackWatchedVideo()
     {
-        if (_watchRecorded || IsConnecting || _snapshot is null || _snapshot.IsPrivate)
+        // Player 可能是 null：初始化 20 秒超时那条路会把 Player 置空却**故意不 Dispose** 卡住的
+        // surface（见 InitializeCoreAsync 的 TimeoutException 分支），而那个 surface 还连着 mpv，
+        // 会继续以 ~60Hz 抛 Position/PlaybackState。2026-11-24 21:31:31 那次实测：超时后旧 surface
+        // 继续推事件，116 秒里这里空引用了 6,438 次，把日志整个冲掉。
+        var player = Player;
+        if (player is null || _watchRecorded || IsConnecting || _snapshot is null || _snapshot.IsPrivate)
         {
             return;
         }
 
-        if (!_watchTracker.Observe(Player.Position, System.Diagnostics.Stopwatch.GetElapsedTime(0),
-            Player.PlaybackState == MpvPlayerState.Playing, Player.PlaybackRate))
+        if (!_watchTracker.Observe(player.Position, System.Diagnostics.Stopwatch.GetElapsedTime(0),
+            player.PlaybackState == MpvPlayerState.Playing, player.PlaybackRate))
         {
             return;
         }
@@ -710,7 +715,10 @@ public sealed partial class PlayerViewModel
         var key = _snapshot.Type switch
         {
             BiliMediaType.Video => $"video_{_snapshot.Video!.Identifier.Id}",
-            BiliMediaType.Pgc when Connector is PgcConnectorViewModel pgc => $"episode_{pgc._episode.Identifier.Id}",
+            // _episode 是 EpisodeInformation?（PgcConnectorViewModel.Properties.cs:22），
+            // 构造期虽然一定会赋值，但 FindInitialEpisode 可能返回 null，所以这里按可空处理.
+            BiliMediaType.Pgc when Connector is PgcConnectorViewModel pgc && pgc._episode is not null
+                => $"episode_{pgc._episode.Identifier.Id}",
             _ => null,
         };
         if (key is not null)
@@ -736,6 +744,17 @@ public sealed partial class PlayerViewModel
 
     private async Task HandlePlayerPropertyChangedAsync(PropertyChangedEventArgs e)
     {
+        // 这个方法里的每条分支都作用于 Player，而 Player 确实会是 null：
+        //   ① 重建窗口期——InitializeCoreAsync 先 Dispose 旧 surface 再把 Player 置空，之后才建新的；
+        //   ② 初始化 20 秒超时——catch 里 `Player = null` 但**故意不 Dispose** 那个卡住的 surface
+        //      （同时 Dispose 会撞原生层），而它仍然连着 mpv，会继续以 ~60Hz 抛 Position/PlaybackState。
+        // ② 的旧事件会一直发下去（surface 没人 Dispose），所以必须在入口丢掉：
+        // 没有 Player 就没有任何可更新的状态，继续往下走只会是另一个空引用.
+        if (Player is null)
+        {
+            return;
+        }
+
         // 诊断（Debug）：只消费既有通知，不做任何新的 mpv 查询.
 #if DEBUG
         ObservePlaybackForStall(e.PropertyName);

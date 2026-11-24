@@ -35,6 +35,11 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     /// </summary>
     private bool _disposed;
 
+    // 20 秒初始化超时是「一次性」故障：超时后被放弃的 surface 仍连着共用的 mpv client，
+    // 本进程之后再也建不出播放器（每次都会等满 20 秒再超时）。置上这个标记后，后续初始化
+    // 直接快速失败，不再让用户干等。只能重启应用恢复，所以不在任何成功路径里清零.
+    private bool _mpvInitPoisoned;
+
     // 关闭窗口 / 换视频时先把在飞的初始化取消掉：否则它会在对象已经 teardown 之后
     // 继续做 await 后面的活（改属性、碰 mpv），这正是「关窗即崩」的来源.
     private CancellationTokenSource _lifetimeCts = new();
@@ -261,6 +266,18 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private async Task InitializeCoreAsync(MediaSnapshot snapshot, bool reusePlayer, CancellationToken cancellationToken = default, int loadToken = 0)
     {
+        // 一次 20 秒的 mpv 初始化超时之后，被放弃的那个 surface 仍然占着共用的 mpv client，
+        // 于是本进程再也建不出播放器：之后每次 create-player 都会等满 20 秒再超时（实测连试 5 次全失败）。
+        // 这里直接快速失败，不再让用户/脚本每次都干等 20 秒；要恢复只能重启应用.
+        if (_mpvInitPoisoned)
+        {
+            logger.LogWarning("mpv 初始化已在本进程内超时过，跳过本次创建：共用的 mpv client 仍被放弃的 surface 占着，只能重启应用");
+            IsConnecting = false;
+            ErrorMessage = "mpv 播放器已在本进程中初始化超时，之后的播放器都建不出来，请重启应用";
+            Services.PlayerLifecycle.Log("create-player:poisoned", $"PlayerVM#{LifecycleId}", "fast-fail (no 20s wait)");
+            return;
+        }
+
         IsLive = snapshot.Type == BiliMediaType.Live;
         _snapshot = snapshot;
 
@@ -522,9 +539,21 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 // 一边在销毁 mpv 的 vo、一边在建 WebView2，实测直接崩在原生层（coreclr c0000005）。
                 // 现在只报告状态、不碰那个实例，让用户重开窗口，进程退出时一并回收.
                 Services.PerfProbe.Count(Services.PerfProbe.LoadMpvInitTimeoutCounterName);
-                logger.LogWarning("mpv 播放器初始化超过 20 秒没返回，放弃这轮播放");
-                Services.PlayerLifecycle.Log("create-player:timeout", $"PlayerVM#{LifecycleId}", "abandoned, no fallback, no dispose");
+                // 文案里把代价写清楚：放弃之后本进程再也建不出 mpv（client 被占），不是「再点一次就好」。
+                logger.LogWarning("mpv 播放器初始化超过 20 秒没返回，放弃这轮播放；被放弃的 surface 仍占着共用的 mpv client，本进程之后无法再创建播放器，只能重启应用");
+                Services.PlayerLifecycle.Log("create-player:timeout", $"PlayerVM#{LifecycleId}", "abandoned, no fallback, no dispose, process poisoned");
+                // 这里刻意**不** Dispose 这个 surface（Dispose 会撞原生层，见上面的注释），代价是它仍然连着
+                // mpv、会继续以 ~60Hz 抛 Position/PlaybackState。所以先把订阅摘掉（否则本 VM 会被这个
+                // 被放弃的 surface 一直推事件），并让 OnPlayerPropertyChanged /
+                // HandlePlayerPropertyChangedAsync / TrackWatchedVideo 都容忍 Player 为 null。
+                // 2026-11-24 实测过一次：超时后旧 surface 继续推事件，6,438 条空引用警告把日志冲掉。
+                if (Player is not null)
+                {
+                    Player.PropertyChanged -= OnPlayerPropertyChanged;
+                }
+
                 Player = null;
+                _mpvInitPoisoned = true;
                 IsConnecting = false;
                 ErrorMessage = "播放器初始化超时，请重开播放窗口";
                 return;
