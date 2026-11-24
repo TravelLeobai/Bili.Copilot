@@ -6,6 +6,8 @@
 
 ## 1. 口径与总账
 
+> **扫描快照**：语义数据于 2026-11-24 19:40–19:50 之间取得。在此期间团队并行提交了 4 个改动（`4e3566b` 修 Release 注释红灯、`d781292` 拆掉 UI 工程常开的 `PublishAot`、`f7fa0e3` 给 Visor.Models 补 runtime-async、`5fe32e5` 三个测试工程升 net11.0）。它们**只改构建属性与 1 行文档注释，没有改任何业务源码**，因此本文 735 条语义命中与逐文件清单在当前 HEAD 上仍然成立；受影响的只有"测试工程 TFM"与"PublishAot 开关"这两处叙述，已在正文按当前树标注。
+
 | 口径 | 数量 | 说明 |
 |---|---|---|
 | 参与编译的 .cs 文件（8 个编译单元） | 1268 | 5 个 src 工程 + 3 个测试工程，取 MSBuild 真实 csc 命令行里的源文件列表（已剔除混入的 .dll 参数） |
@@ -44,14 +46,14 @@
 
 | 项目 | 手写文件 | 行数 | 有命中文件 | 命中数 | 需改(是) | 需评估 | 说明 |
 |---|---|---|---|---|---|---|---|
-| BiliCopilot.CommentPoll.Tests | 12 | 2,279 | 4 | 25 | 1 | 2 | 测试工程（net9.0），链接了 UI 的源码 |
-| BiliCopilot.Diagnostics.Tests | 9 | 1,911 | 2 | 3 | 1 | 1 | 测试工程（net9.0），链接了 UI 的源码 |
-| BiliCopilot.Moment.Tests | 3 | 205 | 0 | 0 | 0 | 0 | 测试工程（net9.0），链接了 UI 的源码 |
+| BiliCopilot.CommentPoll.Tests | 12 | 2,279 | 4 | 25 | 1 | 2 | 测试工程（net11.0，5fe32e5 升级），链接了 UI 的源码 |
+| BiliCopilot.Diagnostics.Tests | 9 | 1,911 | 2 | 3 | 1 | 1 | 测试工程（net11.0，5fe32e5 升级），链接了 UI 的源码 |
+| BiliCopilot.Moment.Tests | 3 | 205 | 0 | 0 | 0 | 0 | 测试工程（net11.0，5fe32e5 升级），链接了 UI 的源码 |
 | BiliCopilot.UI | 696 | 78,415 | 181 | 698 | 82 | 78 | 主战场：WinUI3 + Reactor 混合，状态机/分配/异步形态都在这里 |
 | BiliCopilot.UI.Models | 42 | 1,563 | 0 | 0 | 0 | 0 | netstandard2.0：本工程永远拿不到 runtime-async（见 t2 §12-7） |
 | BiliCopilot.UI.ResourceGenerator | 1 | 93 | 0 | 0 | 0 | 0 | Roslyn 源生成器（netstandard2.0） |
 | BiliCopilot.Visor | 5 | 615 | 2 | 9 | 1 | 0 | 独立管道进程，Native AOT 发布 |
-| BiliCopilot.Visor.Models | 1 | 85 | 0 | 0 | 0 | 0 | net11.0 但未开 runtime-async |
+| BiliCopilot.Visor.Models | 1 | 85 | 0 | 0 | 0 | 0 | net11.0；runtime-async 已于 f7fa0e3 补上 |
 
 ## 5. 命中项分布（20 类检查）
 
@@ -527,10 +529,11 @@ XAML 只清点不语义分析：仓库把 `WMC1510` 长期抑制（XAML 两遍�
 ## 8. 已知局限
 
 1. **只在 x64 / Debug 一份编译单元上扫描**：`/define:` 用的是 `TRACE;LOCAL_DEV;ARCH_X64;...;DEBUG`。Release 下 `#if DEBUG` 的代码（6 个诊断源文件、部分诊断探针）不会被扫到；ARM64 分支同理。
-2. **nullable 上下文按 Disable 重建**：只为让语义解析不受 `#nullable` 影响，不影响本文任何判定（本文不查可空性）。
-3. **检查项是"形"而不是"罪"**：例如 `CONFIGUREAWAIT` 199 处多数是正确用法（库层/后台层），`LINQ_MATERIALIZE` 117 处多数无害——判定顺序在 hotspots 文档里，不在清单里。
-4. **`MISSING_CT` 只查"public/internal 异步方法无 CancellationToken 形参且有 await"**，不判断该调用是否真的可取消；114 条里需要人工分级。
-5. **不覆盖**：IL/反射调用（`MethodInfo.Invoke`）、动态类型（`dynamic`）、COM 互操作边界内的性能特征、以及 `.xaml` 标记本身的热路径（如 `ItemsRepeater` 模板复杂度）。
-6. **测试工程与 UI 的双宿主编译**：`Diagnostics.Tests`/`CommentPoll.Tests`/`Moment.Tests` 用 `<Compile Include>` 链接了 UI 的 8 个源文件，同一文件在清单里会出现两次（分别挂在测试工程与 UI 下），这是刻意的，不是重复计数。
+2. **测试工程的 TFM 已在扫描期间变化**：扫描时按当前树取到的是 `net11.0`（`5fe32e5`），所以"同一文件被 UI 与测试工程各编一次、但两边 TFM 不同"这个旧约束**当前已不存在**——两侧都是 net11，链接文件可以用 net11 专有 API 了。
+3. **nullable 上下文按 Disable 重建**：只为让语义解析不受 `#nullable` 影响，不影响本文任何判定（本文不查可空性）。
+4. **检查项是"形"而不是"罪"**：例如 `CONFIGUREAWAIT` 199 处多数是正确用法（库层/后台层），`LINQ_MATERIALIZE` 117 处多数无害——判定顺序在 hotspots 文档里，不在清单里。
+5. **`MISSING_CT` 只查"public/internal 异步方法无 CancellationToken 形参且有 await"**，不判断该调用是否真的可取消；清单里保留的 90 条需要人工分级（原始 114 条已剔除 24 条测试工程误报，见 §1）。
+6. **不覆盖**：IL/反射调用（`MethodInfo.Invoke`）、动态类型（`dynamic`）、COM 互操作边界内的性能特征、以及 `.xaml` 标记本身的热路径（如 `ItemsRepeater` 模板复杂度）。
+7. **测试工程与 UI 的双宿主编译**：`Diagnostics.Tests`/`CommentPoll.Tests`/`Moment.Tests` 用 `<Compile Include>` 链接了 UI 的 8 个源文件，同一文件在清单里会出现两次（分别挂在测试工程与 UI 下），这是刻意的，不是重复计数。
 
 

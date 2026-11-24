@@ -3,6 +3,8 @@
 > 分支 `exp/net11-optimization` · 仓库 `bili-copilot-v2` · 扫描日期 2026-11-24
 > 配套：[NET11_SOURCE_SCAN_MANIFEST.md](NET11_SOURCE_SCAN_MANIFEST.md)（逐文件清单）、[NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)（构建配置实测）、[NET11_RESEARCH.md](NET11_RESEARCH.md)（.NET 11 特性）
 > 数据来源：Roslyn 语义扫描（8 个真实编译单元、735 条命中、6,088 条调用点）+ 两轮全开分析器构建 + 现场提交记录。**本文只读代码，不改代码。**
+>
+> **快照说明**：语义数据取于 2026-11-24 19:40–19:50。期间团队并行提交了 `4e3566b`（修 Release 注释红灯）、`d781292`（拆掉 UI 工程常开的 `PublishAot`）、`f7fa0e3`（Visor.Models 补 runtime-async）、`5fe32e5`（三个测试工程升 net11.0）——**都不改业务源码**，所以本文的命中与调用链在当前 HEAD 上仍然成立。只有 P0-2 的前提（`PublishAot` 常开）已被 `d781292` 移除，该条已按当前树改写为"潜在依赖"。
 
 ---
 
@@ -10,7 +12,7 @@
 
 | 级别 | 定义（本仓库语境） | 条目 |
 |---|---|---|
-| **P0** | 已在现场造成过 UI 挂死/崩溃，或**当前构建配置下必然功能失效** | 2 组 |
+| **P0** | 已在现场造成过 UI 挂死/崩溃，或在特定构建开关下必然功能失效 | 2 组 |
 | **P1** | 高频路径上的确定性浪费或稳定性风险（每帧/每包/每事件级别），或结构性缺陷（形态本身就吃掉 .NET 11 的收益） | 7 组 |
 | **P2** | 中等频次路径的分配/取消/复用问题，或影响可维护性的形态问题 | 8 组 |
 | **P3** | 低频或纯风格，只在特定改动附近顺手处理 | 4 组 |
@@ -62,23 +64,19 @@ MpvPlayer.OnDataNotify                        ← 外部库（Richasy.MpvKernel�
 
 **建议方向**（留给 t4，不在本文实施）：位置类回调只保留 O(1) 的纯内存更新；`PositionText`/章节状态/投币检查分频（例如 ≥200ms 或进度变化 ≥0.1% 才更新）；`PlayNextWithoutTip`/`AutoPlayNext` 跟 `_wholeVideoAdTest` 一样做成"进视频时快照的字段"。
 
-### P0-2 关闭了 JSON 反射，但代码里仍有 4 处反射序列化 —— 当前构建下功能静默失效
+### P0-2 关闭了 JSON 反射，但代码里仍有 4 处反射序列化 —— 开关只要回来就静默失效
 
-**交叉事实**（与 t2 的 P0 直接相关）：UI 工程的 `PublishAot=True`（`BiliCopilot.UI.csproj:1500`）会在**普通 build** 的 `runtimeconfig.json` 里写 28 个裁剪特性开关，其中一条是：
+**先说当前状态（重要，与 t2 的报告不同）**：UI 工程那条"`PublishAot=True` 常开"已经在 `d781292` 里拆掉了，所以**新的构建不再写入** `System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault=false` 这类裁剪特性开关。也就是说这条 P0 现在是**潜在**而非现发——**只要有人按 `docs/NET11_P0_FIXES.md` 里的方式在命令上显式传 `-p:PublishAot=true`（或将来重开 AOT），下面 4 处立刻变成运行时异常**。留着它的理由：这 4 处是代码里的真实反射依赖，与构建开关解耦不了。
 
-```
-System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault : false
-```
-
-**实测这条开关的后果**（`_tmp/stjprobe`，net11.0 + 同款 runtimeconfig）：
+**当时的实测**（`_tmp/stjprobe`，net11.0 + t2 记录的 runtimeconfig 副本）：
 
 ```
-switch=false
-THREW InvalidOperationException: Reflection-based serialization has been disabled for this application.
-       Either use the source generator APIs or explicitly configure the 'JsonSerializerOptions.TypeInfoResolver' property.
+System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault = false
+→ THREW InvalidOperationException: Reflection-based serialization has been disabled for this application.
+         Either use the source generator APIs or explicitly configure the 'JsonSerializerOptions.TypeInfoResolver' property.
 ```
 
-**仓库里真正会踩到的位置**（11 条命中里逐点核对后的 4 条真反射；其余 7 条已正确传 `JsonTypeInfo`，是我的重建编译单元没跑 STJ 源生成器导致的误报，见 §9）：
+**仓库里真正会踩到的 4 处**（11 条命中里逐点核对后的真反射；其余 7 条已正确传 `JsonTypeInfo`，是重建编译单元没跑 STJ 源生成器造成的误报，见 §9）：
 
 | 位置 | 调用 | 后果 |
 |---|---|---|
@@ -87,9 +85,9 @@ THREW InvalidOperationException: Reflection-based serialization has been disable
 | `Services/LiveEmoteStore.cs:142` | `JsonSerializer.Deserialize<EmoteState>(json)` | 表情状态读不出来 |
 | `Services/LiveEmoteStore.cs:165` | `JsonSerializer.Serialize(_state, new JsonSerializerOptions{...})` | 表情状态写不进去（options 没带 resolver，仍是反射） |
 
-**症状不是崩溃，是静默失忆**：四处都被 `try/catch` 包着（`catch { _cache = []; }` 之类），异常吞掉后表现为"状态每次启动都回到初始值"。这解释了为什么它至今没被当成问题发现。
+**症状不是崩溃，是静默失忆**：四处都被 `try/catch` 包着（`catch { _cache = []; }` 之类），异常吞掉后表现为"状态每次启动都回到初始值"。这就是它至今没被当成问题发现的原因，也是它一旦回归（重开 AOT）时最难查的原因。
 
-**建议方向**：把 `EmoteState` / `Dictionary<string,string>` 加进已有的 `GlobalSerializeContext`（`GlobalSerializeContext.cs:12-19` 已有 7 个 `[JsonSerializable]`），调用点改成传 `GlobalSerializeContext.Default.XXX`。这条同时是 t2 P0（去掉 UI 工程的 `PublishAot=True`）的**替代方案**：即使保留 PublishAot，只要 4 处补齐源生成，就不会有反射依赖。
+**建议方向**：把 `EmoteState` / `Dictionary<string,string>` 加进已有的 `GlobalSerializeContext`（`GlobalSerializeContext.cs:12-19` 已有 7 个 `[JsonSerializable]`），调用点改成传 `GlobalSerializeContext.Default.XXX`。这是纯代码侧的解耦，与"是否开 AOT"无关——无论 t4 后续怎么决定构建开关，这 4 处都该改。
 
 ---
 
@@ -281,7 +279,7 @@ AI 对话/热评都是"几十到几百条"量级，`+=` 在这量级会明显抬
 
 ## 待 t4 决策的三个问题（本文不给答案）
 
-1. **P0-2 走哪条路**：改 4 处 JSON 加源生成（代码侧，约 20 行），还是按 t2 建议把 UI 工程的 `PublishAot=True` 关掉（构建侧，1 行）？两者都能消掉反射风险，但后者还会顺带消掉 `IsDynamicCodeSupported=false` 等另外 24 个开关对其它库的影响（例如 `System.Linq.Expressions`、`System.Management`）。
+1. **P0-2 只剩代码侧**：构建侧（`PublishAot` 常开）已由 `d781292` 解决，剩下的就是把这个 4 处反射改成源生成（约 20 行：2 个类型登记 + 4 个调用点传 `JsonTypeInfo`）。**做与不做取决于是否打算给 UI 进程上 AOT**——如果不打算，它只是"让代码不再依赖一个已被关掉的开关"，属于防御性清理，可以排到 P2 批次。
 2. **P1-1/P1-7 的改造顺序**：`async void` 79 处是"逐个补 try/catch"（低风险、机械）还是"抽 `async Task` + 统一基类 handler"（高收益、要动 55 个文件）？建议先做有崩溃记录的那几个（`PlayerViewModel` 相关 12 处）。
 3. **P0-1 的分频阈值**：位置回调里 `PositionText`/章节/投币检查各自的分频（200ms？位置变化 ≥0.1%？），需要 t5/t6 用 `PerfProbe` 的 UiLag 数据来定，不要凭感觉。
 
