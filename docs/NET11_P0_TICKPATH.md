@@ -182,3 +182,37 @@ dotnet-counters collect -p <BiliCopilot.UI pid> `
   增量更新维护的仍是同一组布尔值。
 - 设置项的「即时生效」没有引入设置变更事件（仓库里没有这类事件源）：这四项改为**下一个视频生效**，
   写进了提交说明；`SubtitleFontSize` 的即时路径本来就由命令负责。
+
+### 5.5 第三轮复测（t19，2026-11-24 22:34–22:38，HEAD=19d5d1d）
+
+用仓库外的验证脚本 2-play3.ps1 -PlaySeconds 75 -CountersSeconds 30 一次跑完冒烟 + 播放 + 采集：
+
+| 指标 | 结果 |
+|---|---|
+| 脚本退出码 / 用时 | **EXIT=0** / 176 s |
+| 尝试轨迹 | attempt1 
+o-player-window、attempt2 player-init-timeout、**attempt3 成功**（startup 2448 ms、open 1840 ms、playerInitState=ready、playerInitMs=8721、create-player:end elapsed=7871ms）|
+| 播放 | **75 秒**，15 个 Responding 采样（t=0…70 s）**全 true**；工作集 415.7 → 574 MB |
+| 关闭播放器 | closed=true，293 ms |
+| 空引用告警 | propWarnCount = 0（t17 的守卫在这轮同样生效）|
+| UiLag | 22:36:20 那个窗口 p95=1548 ms（**进播放页那一下**）；播放期 22:36:40–22:37:20 各窗 **p50 0.09–0.12 ms、p95 1.17–1.53 ms** |
+| counters | 脚本同轮产出 counters-play-r2-20261124-223441.csv 共 **211 行**；另把验收里那条命令逐字重跑（-o counters-play-r2-20261124-215944.csv）也 **EXIT=0、211 行** |
+| 冷启动 ×3 | 3203 / 2881 / 2372 ms，**中位数 2881 ms**，三次都 Responding=True、标题「哔哩助理」 |
+
+collect 命令（与验收逐字一致）：
+
+`powershell
+dotnet-counters collect -p <BiliCopilot.UI pid> --counters "System.Runtime[gc-heap-size,alloc-rate,gen-0-gc-count,gen-1-gc-count,gen-2-gc-count,time-in-gc,working-set]" -o E:\build-temp-dsh\verifier\results\counters-play-r2-20261124-215944.csv --duration 00:00:30
+`
+
+原始片段：
+
+`
+Timestamp,Provider,Counter Name,Counter Type,Mean/Increment
+11/24/2026 22:37:54,System.Runtime,Working Set (MB),Metric,278.511616
+11/24/2026 22:37:54,System.Runtime,GC Heap Size (MB),Metric,7.509472
+`
+
+两个解释性备注：
+- attempt2 那次 20 秒超时会把进程置毒（t17 的 _mpvInitPoisoned），但脚本每次都重启应用进程，所以 attempt3 是干净进程、可以正常起播；这也说明毒化是**进程内**语义，不是持久状态。
+- 22:36:20 的 p95=1548 ms 出现在 create-player:start 之后、播放稳定之前，属于进播放页那一下的布局/建实例开销，不属于播放期。
