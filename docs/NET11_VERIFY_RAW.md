@@ -505,3 +505,244 @@ E:\build-temp-dsh\verifier\results\counters-msbuild.csv
 E:\build-temp-dsh\verifier\results\counters-app-metricname.csv
 ```
 
+
+---
+
+# 附：第二轮实测（t14，2026-11-24 21:37–22:10）
+
+> 第一轮（t11）失败的三项在第二轮重跑：登录态已恢复、部署 bin 换成 HEAD 构建、dotnet-counters 能采到数。
+> 本节仍只放命令、原始输出与分档结论。
+
+## A0. 本轮对象与环境
+
+| 项 | 值 |
+|---|---|
+| HEAD | `dafb451`（`docs(net11): 补齐 t13 的运行时复测记录…`），工作区 `git status` **干净** |
+| SDK | `11.0.100` |
+| 隔离构建输出 | `E:\build-temp-dsh\out-verifier\` |
+| **已注册的包** | `Richasy.BiliCopilot.Dev_1.0.4.0_x64__g7ew4fxhv1f46` → `src\_build\x64\Debug\BiliCopilot.UI\bin`；dll 4,494,848 B，mtime 21:47:57，sha256 前 16 位 `669F6BA7…` |
+| **该 bin 的 runtimeconfig 开关数** | **4 条**（`MVVMTOOLKIT_ENABLE_INOTIFYPROPERTYCHANGING_SUPPORT`、`System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization`、`CSWINRT_USE_WINDOWS_UI_XAML_PROJECTIONS`、`Reactor.DevtoolsSupport=true`）；**没有** `System.Diagnostics.Tracing.EventSource.IsSupported` |
+| 登录态 | 21:30:55 / 21:33:31 / 21:33:39 / 21:33:46 / 21:37:30 / 21:51:13 / 21:58:03 均 `访问令牌：已就绪 access_token=**** uid=177800289` |
+
+对照第一轮：20:41 那份部署 bin 的 runtimeconfig 带 27 条裁剪开关（含 `EventSource.IsSupported=false`），对它的 counters 采集是 0 样本。本轮换成 4 条开关的 HEAD 构建后，同一条命令采到 **210 行** —— 两轮差异只在这一处，与 §7 的观测一致。
+
+## A1. 干净构建（Debug / Release 各一次）
+
+```powershell
+cd E:\Documents\deepseek-harness\default-workspace\bili-copilot-v2\src
+D:\dotnet\dotnet.exe build Desktop\BiliCopilot.UI\BiliCopilot.UI.csproj -c Debug -t:Rebuild -p:Platform=x64 `
+  "-p:SolutionDir=E:\Documents\deepseek-harness\default-workspace\bili-copilot-v2\src\" -p:BuildOutDir=E:/build-temp-dsh/out-verifier/
+# Release 同一条，仅 -c Release
+```
+
+| 配置 | 退出码 | 警告 | 错误 | 墙钟 | `BiliCopilot.UI.dll` | runtimeconfig 开关数 |
+|---|---|---|---|---|---|---|
+| Debug | 0 | 0 | 0 | 167.5 s（`已用时间 00:02:46.77`） | 4,495,360 B，mtime 21:41:08 | 4（`Reactor.DevtoolsSupport=true`） |
+| Release | 0 | 0 | 0 | 170.0 s（`已用时间 00:02:49.08`） | 3,893,248 B，mtime 21:47:52，sha16 `DB9DA0131D04850B` | 5（多 `MetadataUpdater.IsSupported`，`DevtoolsSupport=false`） |
+
+并发情况（实测）：21:38:47 另一条线在跑 `dotnet build … -c Release`（PID 35444），与我的 Debug 构建同时进行；因配置不同，obj 分属 `obj\x64\Debug` 与 `obj\x64\Release`，本次没有撞车。我的 Release 构建等了它 ~2 分 45 秒（锁 + 静默检查）才落锁开跑，`已用时间` 只统计构建本身。
+
+## A2. 状态机计数（读元数据）
+
+```powershell
+cd E:\build-temp-dsh\verifier
+D:\dotnet\dotnet.exe run count-states3.cs -- "<dll 路径>"
+```
+
+| 产物 | 大小 | async | asyncIterator | iterator | `d__` 类型 |
+|---|---|---|---|---|---|
+| Debug（21:41:08） | 4,495,360 B | **108** | 0 | **7** | **86** |
+| Release（21:47:52） | 3,893,248 B | **108** | 0 | **7** | **86** |
+| 已注册 bin（21:47:57） | 4,494,848 B | **108** | 0 | **7** | **86** |
+
+与第一轮（同样是 108 / 7 / 86）一致，没有任何一个配置在两次构建之间发生状态机数量变化。
+
+## A3. 单测（独立复跑）
+
+```powershell
+cd E:\Documents\deepseek-harness\default-workspace\bili-copilot-v2
+D:\dotnet\dotnet.exe test tests\BiliCopilot.CommentPoll.Tests\BiliCopilot.CommentPoll.Tests.csproj -p:BuildOutDir=E:/build-temp-dsh/out-verifier/
+D:\dotnet\dotnet.exe test tests\BiliCopilot.Diagnostics.Tests\BiliCopilot.Diagnostics.Tests.csproj -p:BuildOutDir=E:/build-temp-dsh/out-verifier/
+```
+
+```
+已通过! - 失败:     0，通过:    84，已跳过:     0，总计:    84，持续时间: 128 ms - BiliCopilot.CommentPoll.Tests.dll (net11.0)
+已通过! - 失败:     0，通过:    23，已跳过:     0，总计:    23，持续时间: 1 s - BiliCopilot.Diagnostics.Tests.dll (net11.0)
+```
+
+（`-p:BuildOutDir` 对测试工程仍不生效 —— `tests\` 不在 `src\` 下、没有继承 `src\Directory.Build.props`，产物落 `tests\<proj>\bin\Debug\net11.0\`，见 §3.2。）
+
+## A4. 冷启动 3 次（已登录态）
+
+```powershell
+pwsh -NoProfile -File E:\build-temp-dsh\verifier\coldstart.ps1 -Runs 3
+```
+
+| 次 | 出窗口 (ms) | 进程出现 (ms) | Responding | WorkingSet | UIA 元素 | 登录页 |
+|---|---|---|---|---|---|---|
+| 1 | 2,538 | 169 | True | 417.2 MB | 304 | 否 |
+| 2 | 2,479 | 115 | True | 509.6 MB | 304 | 否 |
+| 3 | 2,309 | 116 | True | 458.6 MB | 304 | 否 |
+
+**中位数 = 2,479 ms**（排序 2,309 / 2,479 / 2,538）。三次主窗口标题都是「哔哩助理」，UIA 命中导航项 `搜索|动态|直播|设置`，主窗口元素数 304（第一轮登录页时是 19）。
+
+## A5. 打开视频与播放 —— **播放未成立（mpv 初始化超时）**
+
+### A5.1 入口方式（实测记录，供后人复用）
+
+- 该版本 UI 树里**没有** `ControlType.Edit`，也没有任何支持 `ValuePattern` 的元素（全树 303 个元素的类型分布：Text 141 / Button 111 / ListItem 18 / Pane 11 / Group 3 / ScrollBar 2 / Custom 2 / List 2 / Window 1）→ 搜索框这条路走不通。
+- 首页卡片 `ListItem(Name='ItemContainer')` 只有 `SelectionItemPattern`（`InvokePattern` 不存在），`Select()` **只选中、不播放**；实测无效。
+- 可用配方：把窗口摆到 (40,20) 1500×950、`SetForegroundWindow` 后，点「页面上面积最大的元素」的中部（= 首条动态的大卡片缩略图）。点击后 `player-lifecycle` 日志出现 `create-player:start ← MomentItemViewModel.ActivateAsync`，播放窗口（类名 `Microsoft.UI.Windowing.Window`）在 **730–780 ms** 内出现。
+
+### A5.2 三次尝试，全部 mpv 初始化超时
+
+| 尝试 | 启动到出窗口 | 播放窗口出现 | 播放器初始化 | 结果 |
+|---|---|---|---|---|
+| 1 | 1,675 ms | 781 ms | `timeout` 20,726 ms | 放弃这轮播放 |
+| 2 | 2,288 ms | 734 ms | `timeout` 20,762 ms | 放弃这轮播放 |
+| 3 | 2,285 ms | 730 ms | `timeout` 20,741 ms | 放弃这轮播放 |
+| 4（30 轮循环第 1 轮） | — | — | `timeout`（22:00:18 告警） | 放弃这轮播放 |
+| 5（间隙 12 s 后再试） | — | 22:10:15 起 init | `timeout`（22:10:37.975 告警） | 放弃这轮播放 |
+
+原始日志（第三次，22:00 前后）：
+
+```
+2026-11-24 22:00:18.436 [WRN] mpv 播放器初始化超过 20 秒没返回，放弃这轮播放
+2026-11-24 22:00:26.629 [INF] PERF Load.MpvInit: n=1 p50=20012.34ms p95=20012.34ms max=20012.34ms
+2026-11-24 22:00:26.629 [INF] PERF COUNT Load.MpvInit.Timeout=1
+```
+
+`player-lifecycle-20261124.log`：
+
+```
+21:56:40.791 | create-mpv-client:start | PlayerVM#1 | tid=2
+21:56:41.077 | create-mpv-client:end   | PlayerVM#1 | tid=2 | elapsed=284ms
+21:56:41.803 | create-player:start    | PlayerVM#1 | tid=2
+21:57:01.821 | create-player:timeout  | PlayerVM#1 | tid=2 | abandoned, no fallback, no dispose
+```
+
+对照：21:40:29 那次（engineer2 的会话）是 `create-player:end … elapsed=11555ms`（成功）。同一台机、同一份已注册构建，21:56 之后连续 4 次全部超时；**播放是否成立在两次实验中不一致，原因未查明**（本节标「未验证」）。
+
+同一时间段里 mpv 其实已经出画（`[MPV] Event received: AudioReconfig / VideoReconfig`），但 ViewModel 侧的播放初始化没有完成，日志里同时刷出成片的 NRE（见 A7）。
+
+## A6. 播放器开关 30 轮（打开/关闭）
+
+```powershell
+pwsh -NoProfile -File E:\build-temp-dsh\verifier\r2-toggle-final.ps1 -Rounds 30 -CountersSeconds 30
+```
+
+每轮：杀进程 → 冷启动计时 → 点大卡片 → 等播放窗口出现（openMs）→ 关播放窗口（WM_CLOSE 等消失，closeMs）→ 记录「关闭后进程数」→ 杀进程记录残留。
+
+| 指标 | 值 |
+|---|---|
+| 轮数 | 30 |
+| 打开成功 | **29 / 30** |
+| 关闭成功 | **29 / 30** |
+| 失败 | **1**（第 26 轮：`Exception calling "FromHandle" … "Unrecognized error."` —— UIA 读元素时抛错，非应用崩溃） |
+| 启动中位数 | 2,291 ms |
+| 打开中位数 | 1,177 ms（样本 741–2,062 ms） |
+| 关闭中位数 | 232 ms（29 个样本，最小 220、最大 551） |
+| 每轮 Responding | 29 次采样全 True（第 26 轮无采样） |
+| 关闭播放窗口后的进程数 | 每一轮都是 UI=1 / Visor=1（= 应用还在，播放窗口已关） |
+| 杀进程后的残留 | 每一轮 0 |
+| 跑前 → 跑后进程 | UI 1→0、Visor 1→0 |
+
+**泄漏判定（实测）**：30 轮里每次关窗后都只剩 1 个 UI + 1 个 Visor（没有播放窗口/播放器残留成第二个进程），每轮结束杀进程后 0 残留，最终 0/0 —— 就进程维度看不到泄漏。**但**：`create-player:timeout` 的日志写明 `abandoned, no fallback, no dispose`，即这条路径上播放器 VM 没有走 dispose；进程数看不出来，不代表对象没留下。
+
+## A7. dotnet-counters（30 s）与 UiLag / 日志告警计数
+
+### A7.1 命令
+
+```powershell
+dotnet-counters collect -p <BiliCopilot.UI pid> --counters System.Runtime[gc-heap-size,alloc-rate,gen-0-gc-count,gen-1-gc-count,gen-2-gc-count,time-in-gc,working-set] -o counters-play-r2-20261124-215944.csv --duration 00:00:30
+```
+
+采集窗口：22:00:00–22:00:27（第 1 轮开关循环里，播放窗口已打开）。**注意**：这段里 mpv 初始化在 22:00:18 超时，所以这是「播放窗口打开、播放未成立」的采样，不是成功的播放场景。
+
+### A7.2 原始数值（210 行 = 7 项 × 30 次采样）
+
+| 计数器 | 最小 | 最大 | 平均 |
+|---|---|---|---|
+| Gen 2 GC Count (Count/sec) | 0 | 0 | 0 |
+| Gen 1 GC Count (Count/sec) | 0 | 0 | 0 |
+| Gen 0 GC Count (Count/sec) | 0 | 1 | 0 |
+| Allocation Rate (B/sec) | 24,552 | 4,085,432 | 331,493 |
+| GC Heap Size (MB) | 26.85 | 31.45 | 29.2 |
+| % Time in GC | 0 | 0 | 0 |
+| Working Set (MB) | 424.6 | 470.8 | 436.4 |
+
+### A7.3 UiLag（同一窗口）
+
+```
+2026-11-24 22:00:06.632 [INF] PERF UiLag: n=198 p50=0.11ms p95=419.71ms max=874.81ms
+2026-11-24 22:00:26.629 [INF] PERF UiLag: n=396 p50=0.09ms p95=0.20ms max=22.24ms
+```
+
+三次尝试期间的 UiLag（播放窗口开着、mpv 未就绪）：
+
+```
+21:56:50.241  p50=0.09ms p95=248.85ms max=701.74ms
+21:57:47.646  p50=0.11ms p95=302.61ms max=756.11ms
+21:58:21.690  p50=0.09ms p95=168.61ms max=622.38ms
+21:58:55.634  p50=0.10ms p95=234.46ms max=689.01ms
+21:59:15.630  p50=0.09ms p95=0.17ms  max=1.45ms (n=395)
+```
+
+**口径提醒**：UiLag 只在播放窗口存在的时候输出；`p50` 好看（0.09–0.11 ms）**不等于**没有异常，同窗口的 WRN 见下。
+
+### A7.4 同一窗口的日志告警（21:59:44–22:09，共 1,010 行）
+
+| 项 | 数量 |
+|---|---|
+| `[WRN]` | **363** |
+| `[ERR]` | **0** |
+| `处理播放器属性变更时出错`（全部是 `NullReferenceException`） | **360** |
+| └ Position | 332 |
+| └ CacheSpeed | 8 |
+| └ PlaybackState | 7 |
+| └ Duration | 3 |
+| └ PlaybackRate | 3 |
+| └ Volume | 3 |
+| └ IsPlaybackInitialized | 2 |
+| └ Title | 2 |
+| 其它 WRN | 3（`mpv 播放器初始化超过 20 秒没返回` 1、`空降助手：所有服务器都没拿到片段` 1、`兴趣分析返回内容为空` 1） |
+
+异常栈示例（21:31:43 首次出现的那批，行号即源码位置）：
+
+```
+System.NullReferenceException: Object reference not set to an instance of an object.
+   at BiliCopilot.UI.ViewModels.Core.PlayerViewModel.TrackWatchedVideo() … PlayerViewModel.Methods.cs:line 704
+   at BiliCopilot.UI.ViewModels.Core.PlayerViewModel.HandlePlayerPropertyChangedAsync(PropertyChangedEventArgs e) … line 746
+   at … OnPlayerPropertyChanged … line 729
+（同类：line 914 Duration / 927 Title / 952 IsPlaybackInitialized / 987 CacheSpeed）
+```
+
+`line 704` 是 `_watchTracker.Observe(Player.Position, Stopwatch.GetElapsedTime(0), Player.PlaybackState …)` —— `Player` 未判空即解引用。这条与 t17 的修复目标一致；本记录只报数，不判定归属。
+
+另外：`git log -S "处理播放器属性变更时出错"` 显示这条 catch 文案来自提交 `630bfaf`（`fix(player): 播放位置回调里不再逐次碰 WinRT，修整窗「未响应」`）。
+
+## A8. 本轮分档
+
+### 实测
+
+1. Debug / Release `-t:Rebuild` 均 退出码 0、0 警告 0 错误（167.5 s / 170.0 s），dll 4,495,360 B / 3,893,248 B。
+2. 状态机计数三处一致：async 108、迭代器 7、`d__` 86。
+3. 单测 84/84（128 ms）与 23/23（1 s），均 net11.0。
+4. 冷启动 3 次 2,538 / 2,479 / 2,309 ms，中位 **2,479 ms**，全 Responding，已登录（304 元素、四个导航项）。
+5. 播放器开关 30 轮：打开 29、关闭 29、失败 1（UIA 侧异常）；启动中位 2,291 ms、打开中位 1,177 ms、关闭中位 232 ms；进程无泄漏（每轮关窗后 UI=1/Visor=1，跑前 1/1 → 跑后 0/0）。
+6. `dotnet-counters` 在 4 条开关的 HEAD 构建上采到 **210 行**（Gen2/Gen1 全 0、Gen0 0–1/s、alloc-rate 24.5 KB/s–4.09 MB/s、time-in-GC 0%、工作集 424.6–470.8 MB）；同一命令在第一轮 27 条开关的部署 bin 上是 0 行。
+7. 播放窗口在 730–781 ms 内出现，但本轮 5 次尝试的 mpv 初始化都是 20 s 超时（`Load.MpvInit p50=20012.34ms`、`Load.MpvInit.Timeout=1`）。
+8. 采集窗口内 `[WRN]` 363 条、`[ERR]` 0 条，其中 360 条是播放器属性回调的 NRE（Position 占 332）。
+
+### 推断
+
+1. 开关 30 轮里「关闭播放窗口后 UI=1/Visor=1、无第二个进程」说明播放窗口本身被正确销毁；但 `create-player:timeout … no dispose` 提示失败路径上 VM 未释放 —— 进程数看不出来，对象层可能残留（未做 dump/GC 计数验证）。
+
+### 未验证
+
+1. **播放 ≥60 秒 + 播放期 Responding**：本轮 4 次尝试全部卡在 mpv 初始化 20 s 超时，播放从未进入稳定态。21:40 那次成功（`create-player:end elapsed=11555ms`）与 21:56 之后连续失败的原因未查明。
+2. **成功播放场景下的 counters / UiLag**：A7 的数值来自「播放窗口打开、mpv 超时」的窗口，不是成功播放。
+3. 30 轮里那 1 次失败（第 26 轮）是 UIA 报 `Unrecognized error`，没有重试该轮，因此「30/30」这个数字没有取到。
+4. mpv 初始化超时是否与 21:31–22:00 期间的反复杀进程/重开有关，本轮没有做隔离实验（例如重启 Visor、清空 LocalState 后单跑）。
+
+
