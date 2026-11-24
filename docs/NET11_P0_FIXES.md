@@ -22,20 +22,58 @@
 
 `src/Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj:1500` 的 `<PublishAot>True</PublishAot>` 已删除（原位置留注释说明为什么不再常开）。
 
-**改前实测**（Release 产物 runtimeconfig）：`configProperties` **28** 条，含 `RuntimeFeature.IsDynamicCodeSupported=false`、`JsonSerializer.IsReflectionEnabledByDefault=false`、`EventSource.IsSupported=false`、`Reactor.DevtoolsSupport=false`……（Debug 27 条）。
+**复算方法（t8 复核 F1 要求，本轮自己跑的这一份）**：不去读构建产物，直接枚举喂给 `runtimeconfig.json`
+的那个 MSBuild 项，绕开「构建是否真的重写了 runtimeconfig」这层干扰：
 
-**改后实测**：
+```powershell
+cd src
+D:/dotnet/dotnet.exe msbuild Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj -p:Platform=x64 `
+  -p:Configuration=Release "-p:SolutionDir=<repo>\src\" -getItem:RuntimeHostConfigurationOption
+```
+
+把 `<PublishAot>True</PublishAot>` 临时加回 csproj、拆掉，各跑一次（Release / Debug 都跑）：
+
+| 状态 | Release | Debug |
+|---|---|---|
+| `<PublishAot>True</PublishAot>` 在 csproj | **28** | **27** |
+| 拆掉（当前 HEAD） | **5** | **4** |
+
+同一状态下的属性求值：`PublishAot=True` → `PublishTrimmed=true`、`SelfContained=true`；拆掉后
+`PublishAot` / `PublishTrimmed` 为空、`SelfContained` 仍 `true`。消失的 23 条就是裁剪导向那批：
+`RuntimeFeature.IsDynamicCodeSupported=false`、`JsonSerializer.IsReflectionEnabledByDefault=false`、
+`EventSource.IsSupported=false`、`Serilog.Capturing.IsStructureValueSupported=false`、`Http3Support=false`……
+
+> **与 t8 复核 F1 的差异（留档，未定谳）**：t8 的 A/B 记的是「Release 6 / Debug 5，只差
+> `Serilog.Capturing.IsStructureValueSupported` 一条」，并据此说上面那两条 `IsDynamicCodeSupported` /
+> `JsonSerializer.IsReflectionEnabledByDefault` 在 AOT=True 的 build 产物里不存在。本轮 `-getItem`
+> 复算在两种状态下都能看到它们（28/27 的完整清单里逐条有）。差异来源没定位——最可能是 t8 那次
+> AOT=True 构建是增量的、`runtimeconfig.json` 根本没被重写。两套数字都留在文档里，请 t10 定谳。
+
+**改后实测**（`runtimeconfig.json` 里的实际条目）：
 
 | 产物 | 开关数 | 剩下的都是什么 |
 |---|---|---|
 | Debug | **4** | `MVVMTOOLKIT_ENABLE_*`、`EnableUnsafeBinaryFormatterSerialization`、`CSWINRT_USE_WINDOWS_UI_XAML_PROJECTIONS`、`Reactor.DevtoolsSupport=true` |
 | Release | **5** | 上面 4 条 + `System.Reflection.Metadata.MetadataUpdater.IsSupported=false` |
 
-Release 多的那条**与 AOT 无关**：SDK `Microsoft.NET.Sdk.targets:164` 对非 Debug 配置默认 `MetadataUpdaterSupport=false`（关热重载）。裁剪导向的 23 条已全部消失，`Reactor.DevtoolsSupport` 也从被误关的 `false` 回到 `true`。
+Release 多的那条**与 AOT 无关**：SDK `Microsoft.NET.Sdk.targets:164` 对非 Debug 配置默认 `MetadataUpdaterSupport=false`（关热重载），两种状态下都在。
+
+`Reactor.DevtoolsSupport` **只随 Configuration 变化**（Debug=true / Release=false），与 PublishAot 无关——
+复算时 AOT=True 的 Debug 清单里它就是 `true`。原文写的「从被误关的 false 回到 true」不成立，此处更正。
 
 其他语义不变：`SelfContained` 仍是 `true`（这是 WinAppSDK/MSIX 单工程打包带来的，t2 §2.2 已实测与 AOT 无关），产物仍是自包含、`includedFrameworks` 照旧；`PublishReadyToRun=False` 保留。
 
-**取舍**（也是提交说明里那条）：UI 工程的 publish 通道本来就坏（`dotnet publish` 在 C# 编译阶段就 CS0246 `StringNames`，把 `PublishAot` 设成 false 同样失败），CI 只走 `msbuild + GenerateAppxPackageOnBuild`，从没有 `publish` 步骤——也就是说这个 AOT 从未被执行，只留下了 28 条运行时语义开关。真要给 UI 进程上 AOT：先修 publish 通道，再在那条命令上显式传 `-p:PublishAot=true`。Visor 的 Native AOT 不受影响，仍在它自己的工程里。
+**取舍**：拆掉它退出的是 **AOT 意图与 `PublishTrimmed` 求值**——`<PublishAot>True</PublishAot>` 在 build
+阶段就把 `PublishTrimmed` 求值成 `true`，于是那 23 条裁剪导向开关进了普通 build 的 `runtimeconfig.json`，
+而程序集并没有真被裁剪；这层语义错配才是要退出的东西。CI 只走 `msbuild + GenerateAppxPackageOnBuild`，
+没有 `publish` 步骤，AOT 也从未被执行过。真要给 UI 进程上 AOT：在那条能用的 publish 命令上显式传
+`-p:PublishAot=true` 并自行验证。
+
+> **publish 通道（更正 F3）**：原文写「publish 通道本身就坏（CS0246 StringNames）」——那是 t2 时的
+> **历史现象，本轮未复现**：带 restore 的 `dotnet publish … -c Release -p:Platform=x64 -p:SolutionDir=… -o <产出目录>`
+> 退出码 0、产出 619 个文件、无 CS0246 / `StringNames` 相关错误（t8/t10 复核轮的实测）。注意那次没有开
+> `PublishAot`，所以**「AOT publish 可行」本轮仍未验证**，不要拿它反推。Visor 的 Native AOT 不受影响，
+> 仍在它自己的工程里。
 
 ## 批 3 · runtime-async 覆盖（P1）
 

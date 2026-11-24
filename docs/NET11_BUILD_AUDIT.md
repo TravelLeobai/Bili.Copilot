@@ -12,7 +12,7 @@
 2. **剩下 79 个状态机 = 79 个 `async void` 事件处理器，另有 7 个 `yield` 迭代器**——与 t1 给出的"回退形态"完全对上，没有出现"Task 返回却回退"的异常案例。
 3. **`PublishAot=True` 是 UI 工程的常开属性（`:1500`），它不只影响 publish**：实测它在**普通 build** 里就推出 `PublishTrimmed=true`、`SelfContained=true`，并往 `runtimeconfig.json` 写进 **28 个裁剪导向的特性开关**（含 `RuntimeFeature.IsDynamicCodeSupported=false`、`JsonSerializer.IsReflectionEnabledByDefault=false`、`EventSource.IsSupported=false`、`Reactor.DevtoolsSupport=false`）。关掉 PublishAot 后只剩 4 个。这是本轮最需要处理的一项。
 4. **Release 现在根本编不过**：`DiagnosticsReport.cs:14` 的 `<see cref="PlaybackStallDump"/>` 指向一个整体包在 `#if DEBUG` 里的类型，Release 下报 CS1574，被 `TreatWarningsAsErrors=true` 提升为错误。也就是说 **CI 的 Release 矩阵目前必然失败**。
-5. **`PublishAot` / `PublishReadyToRun` 从未被任何流程走到**：CI 只跑 `msbuild <csproj> /p:GenerateAppxPackageOnBuild=true`（build + 打包，不是 publish），工作流里没有任何 `pubxml` / `dotnet publish` / `-t:Publish`。而真去 `dotnet publish` 会在 C# 编译阶段就失败（CS0246 `StringNames`），且把 `PublishAot` 换成 `false` 照样失败——**publish 通道本身是坏的，与 AOT 无关**。
+5. **`PublishAot` / `PublishReadyToRun` 从未被任何流程走到**：CI 只跑 `msbuild <csproj> /p:GenerateAppxPackageOnBuild=true`（build + 打包，不是 publish），工作流里没有任何 `pubxml` / `dotnet publish` / `-t:Publish`。t2 当时真去 `dotnet publish` 会在 C# 编译阶段就失败（CS0246 `StringNames`），`PublishAot` 换成 `false` 同样失败——这条本轮**未复现**（见 §9 更正框）。
 6. **文档里说的 `UseRuntimeAsync=false` 在本机 SDK 无效**。实测 `-p:UseRuntimeAsync=false` 构建后仍是 86 个状态机（与开着完全一致）；只有 `-p:Features=` 能真正关断。SDK 的 targets/props 里搜不到 `UseRuntimeAsync`（见 §7）。
 7. **`CS1998` 在 .NET 11 编译器里已经不存在**，UI 工程 `NoWarn` 里的 `CS1998` 是死抑制项。用一个 net11 探针工程验证：3 个"async 无 await"方法，`/nowarn` 清空、`warn:11`，**0 条警告**。仓库里真正"async Task 却无 await"的方法实测只有 **8 个**（§11-B）。
 8. **三个测试工程升 net11 可行**：临时重定向后全部编过，`Diagnostics.Tests` **23/23** 通过、`CommentPoll.Tests` **84/84** 通过（net11.0 运行时）。但 `Diagnostics.Tests` 的大部分用例被 `#if DEBUG` 包着，`-c Release` 跑只剩 **5/23**。
@@ -154,6 +154,13 @@ Release（`-c Release`）复测：`BiliCopilot.UI.dll` 仍 **86**（TypeDef 2466
 | 顶层 `includedFrameworks` | Microsoft.NETCore.App 11.0.0 | 同（自包含与 AOT 无关） |
 | `configProperties` 条目数 | **28**（Debug 27） | **4** |
 
+> **本轮复算（t8 复核 F1 要求）**：不去读产物，直接枚举喂给 `runtimeconfig.json` 的 MSBuild 项——
+> `dotnet msbuild Desktop/BiliCopilot.UI/BiliCopilot.UI.csproj -p:Platform=x64 -p:Configuration=<cfg> -p:SolutionDir=<repo>\src\ -getItem:RuntimeHostConfigurationOption`。
+> `<PublishAot>True</PublishAot>` 在 csproj 里时：Release **28** / Debug **27**；拆掉后：Release **5** / Debug **4**。
+> 与上表一致（上表的 `PublishAot=false` 一列写 4，是 Debug 口径；Release 口径是 5，多出的那条是
+> SDK 对非 Debug 配置默认的 `MetadataUpdaterSupport=false`）。复算明细与"与 t8 数字不一致"的留档见
+> `docs/NET11_P0_FIXES.md` 批 2。
+
 默认构建多出来的开关（节选，完整见附录 B-4）：
 
 ```
@@ -180,7 +187,9 @@ System.Linq.Enumerable.IsSizeOptimized                                : true
 为什么这是 P0：
 
 - 这些开关是**运行时契约**，不是编译期优化。它们会在 **Debug/Release 的普通 build 产物**里生效，而 CI 打包用的正是 build 产物，所以**装到用户机器上的包带着"无动态代码 / JSON 反射关闭 / EventSource 关闭 / Reactor devtools 关闭"的语义**。
-- 其中 `Reactor.DevtoolsSupport=false` 明确是 Reactor 自己的 AOT 开关——被 UI 工程的 `PublishAot` 顺带关掉了。
+- 其中 `Reactor.DevtoolsSupport=false` 这一条在**上一版被误归因给 AOT**：它只随 Configuration 走
+  （Debug=true / Release=false），与 `PublishAot` 无关——复算时 AOT=True 的 Debug 清单里它就是 `true`。
+  本节表格是 Release 口径，所以看到的是 `false`。
 - 语义与"没开启裁剪"自相矛盾：程序集并没有真的被裁剪（`PublishTrimmed` 只在 publish 生效），但运行时被告知"不要做动态代码/反射"。这类错配是"平时没事、遇到 `JsonSerializer.Serialize<T>` 无 source-gen、`Expression.Compile`、`EventSource` 诊断、`BinaryFormatter` 兜底路径时猝死"的经典成因。
 - 官方口径也印证了这条链：`PublishAot` 蕴含 `PublishTrimmed` 且"不能关"（dotnet/runtime#109452），而 WinUI/WinAppSDK 的 AOT 支持长期受限（[microsoft-ui-xaml#8082](https://github.com/microsoft/microsoft-ui-xaml/discussions/8082)），这正是 UI 工程 `NoWarn` 里塞了 `IL2104/IL3053` 的原因——那两个是 `WinRT.Runtime` 的裁剪/AOT 警告。
 
@@ -253,6 +262,11 @@ src\Desktop\BiliCopilot.UI\Services\Diagnostics\DiagnosticsReport.cs(14,43): err
 
 1. **CI 不走 publish**：`build-app/action.yml:28-49` 只有 `msbuild <project> /p:Configuration /p:Platform /p:SolutionDir /p:UapAppxPackageBuildMode /p:GenerateAppxPackageOnBuild=true /p:AppxPackageDir`；6 个 workflow 里 `pubxml|PublishProfile|dotnet publish|-t:Publish` 命中数为 **0**。`PublishProfile` 属性（csproj `:10`）只对 VS 的"发布"菜单有意义。
 2. **真去 publish 会失败**（且与 AOT 无关）：
+
+   > **更正（t9，来源：t8 复核 F3）**：这条在**当前 HEAD 上未复现**。带 restore 的
+   > `dotnet publish … -c Release -p:Platform=x64 -p:SolutionDir=<repo>\src\ -o <产出目录>` 退出码 0、
+   > 产出 619 个文件、无 CS0246 / `StringNames` 错误。下面这段按「t2 时的历史现象，工作区状态相关」
+   > 保留；且那次 publish 没有开 `PublishAot`，**AOT publish 是否可行仍未验证**。
 
    ```
    dotnet publish src\Desktop\BiliCopilot.UI\BiliCopilot.UI.csproj -c Release -p:Platform=x64 -p:SolutionDir=<repo>\src\
@@ -328,7 +342,7 @@ src\Desktop\BiliCopilot.UI\Services\Diagnostics\DiagnosticsReport.cs(14,43): err
 - `PublishAot=True`（UI，`:1500`）、`PublishReadyToRun=False`（`:1499`）**都不会被现有发布流程执行**：CI 是 `msbuild + GenerateAppxPackageOnBuild`（build + MSIX 打包），没有 publish 步骤；`pubxml` 也没被任何 workflow 引用。
 - 但它们**不是无害的**：`PublishAot=True` 在 build 阶段就推出 `PublishTrimmed/SelfContained` 并写 28 个特性开关（§5）。所以"当前 R2R=False"这句现状描述要补一句：**R2R 确实没开，但 AOT 的副作用已经开了**。
 - `PublishReadyToRun=False` 本身是**正确**的选择：R2R + WinUI3 + 大量泛型/反射的组合收益不确定，且会增加 APPX 体积、让 `IL2104/IL3053` 之类警告变复杂。t1 提到的"R2R 默认比较器专用化最多 20×"要吃到，前提是开启 R2R；本轮不建议为它破例。
-- 真正的风险有三条，按严重度：① Release 编不过（§6）→ CI 必红；② `PublishAot` 的语义开关进了发布物（§5）；③ publish 通道损坏（§9），任何人想走"官方 publish"都会被 CS0246 拦住，且会被误导去怀疑 AOT。
+- 真正的风险有三条，按严重度：① Release 编不过（§6）→ CI 必红；② `PublishAot` 的语义开关进了发布物（§5）；③ ~~publish 通道损坏（§9），任何人想走"官方 publish"都会被 CS0246 拦住~~ → 本轮带 restore 的 publish 已能跑通（§9 更正），这条降级为"t2 时的历史现象，未复现"。
 
 ### D. x86-64-v2 基线
 
@@ -352,7 +366,7 @@ src\Desktop\BiliCopilot.UI\Services\Diagnostics\DiagnosticsReport.cs(14,43): err
 |---|---|---|---|
 | 1 | Release 命中 CS1574 → 构建失败 | `Services/Diagnostics/DiagnosticsReport.cs:14` + `Directory.Build.props:8` | §6 |
 | 2 | `PublishAot=True` 常开 | `BiliCopilot.UI.csproj:1500` | §5：普通 build 也写 28 个裁剪特性开关 |
-| 3 | publish 通道损坏（CS0246 StringNames） | `UI.Models.csproj:12` + 直连 build | §9 |
+| 3 | ~~publish 通道损坏（CS0246 StringNames）~~ 降级为历史现象（本轮带 restore 的 publish 退出码 0、619 个文件） | `UI.Models.csproj:12` + 直连 build | §9 + 更正框 |
 | 4 | CI 只装 .NET 9 | `.github/actions/setup-env/action.yml:61` | 干净 runner 上 `NETSDK1045` |
 
 ### P1（配置撒谎 / 覆盖不全 / 可维护性）
