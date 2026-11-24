@@ -1500,17 +1500,22 @@
     <!--
       PublishAot 刻意不再常开（.NET 11 审计结论，详见 docs/NET11_P0_FIXES.md）：
 
-      1) 它不只作用于 publish。普通 build 就会推出 PublishTrimmed / SelfContained，并往
-         runtimeconfig.json 写 28 个裁剪导向的特性开关（IsDynamicCodeSupported=false、
-         JsonSerializer.IsReflectionEnabledByDefault=false、EventSource.IsSupported=false、
-         Reactor.DevtoolsSupport=false……）。程序集并没有真被裁剪，等于给用户装了一套
-         "无动态代码"的运行时语义。
+      1) 它不只作用于 publish。属性在 restore 前就在位时，普通 build 就会推出 PublishTrimmed /
+         SelfContained，并往 runtimeconfig.json 写 23 条裁剪导向开关（IsDynamicCodeSupported=false、
+         JsonSerializer.IsReflectionEnabledByDefault=false、EventSource.IsSupported=false …）。
+         实测（2026-11-24，隔离输出、干净 restore）：Release 28 → 5、Debug 27 → 4，改后 5 条是
+         改前 28 条的严格子集。程序集并没有真被裁剪，等于给用户装上一套「无动态代码」的运行时语义。
+         注意口径：属性必须先进 restore 图（obj\*.nuget.g.props 里的 ILLink/ILCompiler props），
+         否则只会写 6 条开关——拿「加了属性但没重新 restore」的产物去比，会得出错误的小差值。
       2) 它从未被执行：CI 只走 msbuild + GenerateAppxPackageOnBuild（build + MSIX 打包），
          仓库里没有任何 pubxml / dotnet publish / -t:Publish 引用。
-      3) UI 工程的 publish 通道本身就是坏的（C# 编译阶段就 CS0246 StringNames，把 PublishAot
-         设成 false 同样失败），与 AOT 无关。
+      3) 关于 publish 通道：早期记录过 CS0246 StringNames，本轮带 restore 实测
+         `dotnet publish -c Release -p:Platform=x64` 退出码 0、产出 619 个文件，未能复现；
+         AOT publish 本身仍未验证。
 
-      真要给 UI 进程上 AOT，先修好 publish 通道，再在那条命令上显式传 -p:PublishAot=true。
+      真要给 UI 进程上 AOT：把 <PublishAot>true</PublishAot> 写进本工程的 csproj，再跑 publish。
+      不要在命令行传 -p:PublishAot=true——那是全局属性，会传染给 netstandard2.0 的
+      BiliCopilot.UI.Models / ResourceGenerator，那两个工程会直接 NETSDK1207 把整解打断。
       Visor 是独立进程，Native AOT 保留在它自己的工程里。
     -->
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
