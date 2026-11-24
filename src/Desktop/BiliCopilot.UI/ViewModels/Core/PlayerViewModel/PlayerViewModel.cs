@@ -534,14 +534,21 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             }
             catch (TimeoutException)
             {
-                // 超时说明这个 mpv 实例卡在初始化里，状态不可信。
-                // 以前会立刻回落网页播放器并 Dispose 卡住的实例 —— 两套播放器同时活着，
-                // 一边在销毁 mpv 的 vo、一边在建 WebView2，实测直接崩在原生层（coreclr c0000005）。
-                // 现在只报告状态、不碰那个实例，让用户重开窗口，进程退出时一并回收.
+                // 「20 秒超时」的真实含义（反编译 Richasy.MpvKernel.Player 0.0.2-preview2 得到）：
+                // PlayerSurface.InitializeAsync 里是 `_cachedSource = await GetSourceAsync()` 之后
+                // `await Client.PlayAsync(url, options)` —— 它等的是**播放真的起来**（文件打开 + 开始解码），
+                // 不只是「mpv 实例建好」。媒体地址打不开时 PlayAsync 会一直挂着，于是整条链在 20 秒处被判超时，
+                // 「媒体 403」就伪装成了「mpv 建不起来」。
+                // 日志佐证（2026-11-24 22:10）：22:10:45.493 Load.MpvInit 20021ms 超时 →
+                // 22:10:46.343 mpv 才打出 `HTTP error 403` / `Failed to open https://upos-sz-…` →
+                // 22:10:46.663 还有 VideoReconfig。mpv 明明活着、在报事件，只是打不开那个地址。
+                //
+                // 以前这里只报告状态、不碰那个实例（Dispose 会撞原生层 c0000005），然后整轮放弃。
+                // 现在仍然是「只报错、放弃」，但不再把它说成「mpv 建不起来」——失败原因在媒体地址那一层。
                 Services.PerfProbe.Count(Services.PerfProbe.LoadMpvInitTimeoutCounterName);
                 // 文案里把代价写清楚：放弃之后本进程再也建不出 mpv（client 被占），不是「再点一次就好」。
-                logger.LogWarning("mpv 播放器初始化超过 20 秒没返回，放弃这轮播放；被放弃的 surface 仍占着共用的 mpv client，本进程之后无法再创建播放器，只能重启应用");
-                Services.PlayerLifecycle.Log("create-player:timeout", $"PlayerVM#{LifecycleId}", "abandoned, no fallback, no dispose, process poisoned");
+                logger.LogWarning("mpv 初始化 20 秒未完成（等的是 PlayAsync 真的开播：媒体地址打不开/403 时必然超时），放弃这轮 mpv；被放弃的 surface 仍占着共用的 mpv client，本进程之后无法再创建 mpv 播放器");
+                Services.PlayerLifecycle.Log("create-player:timeout", $"PlayerVM#{LifecycleId}", "abandoned, no dispose, process poisoned (media address likely dead)");
                 // 这里刻意**不** Dispose 这个 surface（Dispose 会撞原生层，见上面的注释），代价是它仍然连着
                 // mpv、会继续以 ~60Hz 抛 Position/PlaybackState。所以先把订阅摘掉（否则本 VM 会被这个
                 // 被放弃的 surface 一直推事件），并让 OnPlayerPropertyChanged /
@@ -555,7 +562,16 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
                 Player = null;
                 _mpvInitPoisoned = true;
                 IsConnecting = false;
-                ErrorMessage = "播放器初始化超时，请重开播放窗口";
+
+                // 为什么不在这里「换网页播放器重试一次」：TryFallbackToWebEngineAsync 会先
+                // `await Player.DisposeAsync()` 再建 web player —— 而这里的 surface 正是被放弃、
+                // 已经 Dispose 过一次的那个，再 Dispose 就是原生层闪退。
+                // 2026-11-24 22:46 的一次实测正好踩到同一个坑：mpv 打不开地址后走了**既有的**
+                // 失败回落（同一条 Dispose 路径），22:46:47「网页播放器就绪」，
+                // 22:46:54 进程报 MoAppCrash（coreclr.dll / Microsoft.UI.Xaml.Controls.dll / combase.dll）。
+                // 所以在超时分支里只报错、不碰那个实例；「重新解析地址」这件事本来每次初始化都会做
+                // （见上面的反编译结论：InitializeAsync 每次都调 GetSourceAsync），不需要在这里补.
+                ErrorMessage = "视频地址打不开（可能是签名过期或版权限制），mpv 没能起播；本进程内无法再建 mpv，请重开播放窗口或重启应用";
                 return;
             }
             catch (OperationCanceledException)
