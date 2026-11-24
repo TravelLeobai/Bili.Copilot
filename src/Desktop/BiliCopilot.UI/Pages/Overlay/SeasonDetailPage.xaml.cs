@@ -50,6 +50,12 @@ public sealed partial class SeasonDetailPage : Page, IParameterPage
         var cookies = this.Get<IBiliCookiesResolver>();
         var subscriptionService = new SeasonSubscriptionService(cookies);
 
+        // 浮层命中同类型页面时只调 SetParameter、不卸载（OverlayFrame.NavigateTo 分支），
+        // 而这里每次都新建 Host：不先拆旧的，RootGrid 会一层层叠 Host，
+        // 旧外壳（SeasonDetailShell + 它的控件与订阅）也一直挂着.
+        _host?.Dispose();
+        RootGrid.Children.Clear();
+
         _host = new ReactorHostControl();
         RootGrid.Children.Add(_host);
         _host.Mount(new SeasonDetailShell(folder, favoriteService, appViewModel, subscriptionService));
