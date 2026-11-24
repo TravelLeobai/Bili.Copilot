@@ -746,3 +746,197 @@ System.NullReferenceException: Object reference not set to an instance of an obj
 4. mpv 初始化超时是否与 21:31–22:00 期间的反复杀进程/重开有关，本轮没有做隔离实验（例如重启 Visor、清空 LocalState 后单跑）。
 
 
+
+---
+
+# 附：第三轮实测（t20，2026-11-24 22:39–23:02）
+
+> 第三轮把第二轮唯一没跑通的「播放 ≥60 秒 + 播放期 counters」补齐了。代码基线换到 t17 修复之后（`19d5d1d`）。
+> 本节仍只放命令、原始输出与分档结论。
+
+## C0. 本轮对象与环境
+
+| 项 | 值 |
+|---|---|
+| HEAD | `4e7f539`（`docs(net11): 补 t19 第三轮运行时复测…`），`git status` **干净** |
+| SDK | `11.0.100` |
+| 隔离构建输出 | `E:\build-temp-dsh\out-verifier\` |
+| 已注册包 | `Richasy.BiliCopilot.Dev_1.0.4.0_x64__g7ew4fxhv1f46` → `src\_build\x64\Debug\BiliCopilot.UI\bin` |
+| 部署 bin 的 dll | 4,495,872 B，mtime **22:49:15**，sha16 `9A3358E1363706BC` |
+| 部署 bin 的 runtimeconfig | **4 条**开关，`EventSource.IsSupported` **不存在**（counters 可用口径） |
+
+**部署 bin 在我这轮里被重建过 3 次**（22:20:15 / 4,495,872 B → 22:44:02 / 4,496,384 B → 22:49:15 / 4,495,872 B；都是 4 条开关、状态机计数一致 108/7/86）。冷启动用的是 22:44:02 那份、播放与开关用 22:49:15 那份，逐项在正文里标了。我自己隔离目录的 Debug 产物是 4,495,872 B / 22:42:07 / sha16 `9772732FF2EA822A`。
+
+## C1. 干净构建（Debug / Release 各一次）
+
+```powershell
+cd E:\Documents\deepseek-harness\default-workspace\bili-copilot-v2\src
+D:\dotnet\dotnet.exe build Desktop\BiliCopilot.UI\BiliCopilot.UI.csproj -c Debug -t:Rebuild -p:Platform=x64 `
+  "-p:SolutionDir=E:\Documents\deepseek-harness\default-workspace\bili-copilot-v2\src\" -p:BuildOutDir=E:/build-temp-dsh/out-verifier/
+# Release 同一条，仅 -c Release
+```
+
+| 配置 | 退出码 | 警告 | 错误 | 墙钟 | `BiliCopilot.UI.dll` | runtimeconfig |
+|---|---|---|---|---|---|---|
+| Debug | 0 | 0 | 0 | 150.0 s（`已用时间 00:02:29.35`） | 4,495,872 B，mtime 22:42:07，sha16 `9772732F…` | 4 条 |
+| Release | 0 | 0 | 0 | 167.7 s（`已用时间 00:02:46.78`） | 3,894,272 B，mtime 22:46:52，sha16 `78B7943D…` | 5 条（多 `MetadataUpdater.IsSupported`） |
+
+两次构建都在「静默 + 锁文件」下进行（`E:\build-temp-dsh\ui-build.lock`），期间没有别的构建在跑。
+
+## C2. 状态机计数（读元数据）
+
+| 产物 | 大小 | async | asyncIterator | iterator | `d__` |
+|---|---|---|---|---|---|
+| Debug（22:42:07，本机隔离目录） | 4,495,872 B | **108** | 0 | **7** | **86** |
+| Release（22:46:52，本机隔离目录） | 3,894,272 B | **108** | 0 | **7** | **86** |
+| 部署 bin（22:49:15） | 4,495,872 B | **108** | 0 | **7** | **86** |
+
+三轮（108 / 7 / 86）完全一致 —— t17 的空引用修复没有改变任何状态机数量。
+
+## C3. 单测（独立复跑）
+
+```powershell
+cd E:\Documents\deepseek-harness\default-workspace\bili-copilot-v2
+D:\dotnet\dotnet.exe test tests\BiliCopilot.CommentPoll.Tests\BiliCopilot.CommentPoll.Tests.csproj -p:BuildOutDir=E:/build-temp-dsh/out-verifier/
+D:\dotnet\dotnet.exe test tests\BiliCopilot.Diagnostics.Tests\BiliCopilot.Diagnostics.Tests.csproj -p:BuildOutDir=E:/build-temp-dsh/out-verifier/
+```
+
+```
+已通过! - 失败:     0，通过:    84，已跳过:     0，总计:    84，持续时间: 76 ms - BiliCopilot.CommentPoll.Tests.dll (net11.0)
+已通过! - 失败:     0，通过:    23，已跳过:     0，总计:    23，持续时间: 725 ms - BiliCopilot.Diagnostics.Tests.dll (net11.0)
+```
+
+## C4. 冷启动 3 次
+
+```powershell
+pwsh -NoProfile -File E:\build-temp-dsh\verifier\coldstart.ps1 -Runs 3
+```
+
+| 次 | 出窗口 (ms) | 进程出现 (ms) | Responding | WorkingSet | UIA 元素 |
+|---|---|---|---|---|---|
+| 1 | 1,780 | 173 | True | 488.3 MB | 331 |
+| 2 | 3,021 | 121 | True | 415.2 MB | 238 |
+| 3 | 2,858 | 131 | True | 434.4 MB | 331 |
+
+**中位数 = 2,858 ms**（排序 1,780 / 2,858 / 3,021）。三次主窗口标题「哔哩助理」、UIA 命中 `搜索|动态|直播|设置`、非登录页。跑前有一枚残留 Visor（procsBefore Visor=1），被脚本 Stop-App 一并清掉。
+
+## C5. 播放 ≥60 秒（本轮跑通）
+
+```powershell
+pwsh -NoProfile -File E:\build-temp-dsh\verifier\r2-play3.ps1 -PlaySeconds 75 -CountersSeconds 30
+```
+
+第 1 次尝试 `player-init-timeout`，第 2 次成功（脚本自带重启重试）。成功那次的原始记录：
+
+```
+startup 2325 ms → 播放窗口 1228 ms → 播放器初始化 ready 4140 ms
+lifecycle: 22:51:40.400 create-mpv-client:end elapsed=63ms
+           22:51:41.241 create-player:start
+           22:51:44.565 create-player:end elapsed=3321ms mpv=3D3DB3D
+播放 75 s，15 次 Responding 采样全 True，工作集 428.4 → 555.8 MB
+关闭播放窗口 342 ms
+propWarnCount = 0（t17 修复后，播放器属性回调不再刷 NRE）
+```
+
+**对照第二轮**：同一脚本在 21:56–22:10 连续 5 次 mpv 初始化 20 s 超时；本轮第 2 次就 3.3 s 起播，第 1 次仍是超时 —— 说明这台机上 mpv 初始化本身是**间歇性**的（不是稳定的回归），三次会话里成功/失败都出现过。
+
+### C5.1 一次被外部打断的会话（记录在案，不计入结果）
+
+22:47:55 那轮第一次尝试其实已经 `create-player:end elapsed=13263ms` 起播成功，但 22:49:28 有**另一个应用进程**被启动（日志「启动读取播放增强记忆…」+「导航项被点击：MomentPage」22:49:32 + 新视频 aid 117668950580219 于 22:49:39 起播），我的会话进程随之消失（Responding 从 t≈20 s 起全 false，counters 只采到 113 行）。不是我的脚本所为（一轮只启一次应用）。该轮作废，全部数据丢弃。
+
+同一时段的崩溃证据（Windows 事件日志，实测）：
+
+```
+22:46:48 | Application Error 1000 | BiliCopilot.UI.exe 1.0.0.0 | 出错模块 coreclr.dll 11.0.26.53018 |
+          异常 0xc0000005，偏移 0x0000000000384f74
+22:46:54 | Windows Error Reporting 1001 ×6 | 其中 Microsoft.UI.Xaml.Controls.dll 3.3.0.0 0xc0000005 @0x9dbd、
+          combase.dll 10.0.29712.1000 0x80004005
+```
+
+（应用自己的 `crash-2026-11-24.txt` 只有 04:06:35 一条，是 `OverlayTransportControls.OnProgressValueChanged … xaml.cs:158` 的 NRE，与 22:46 这次无关 —— 也就是说 22:46 是硬崩，没走应用内异常处理。）
+
+## C6. dotnet-counters（30 s，播放中）
+
+```powershell
+dotnet-counters collect -p <pid> --counters System.Runtime[gc-heap-size,alloc-rate,gen-0-gc-count,gen-1-gc-count,gen-2-gc-count,time-in-gc,working-set] -o counters-play-r2-20261124-225048.csv --duration 00:00:30
+```
+
+采集窗口 **22:51:45–22:52:14**（`create-player:end` 22:51:44 之后立即开始，落在 75 秒播放区间内）。**210 行 = 7 项 × 30 次**：
+
+| 计数器 | 最小 | 最大 | 平均 |
+|---|---|---|---|
+| GC Heap Size (MB) | 15.08 | 64.16 | 43.3 |
+| Allocation Rate (B/sec) | 80,760 | 11,102,464 | 1,799,914 |
+| Working Set (MB) | 545.2 | 617.4 | 577.3 |
+| % Time in GC | 0 | 5 | 4.8 |
+| Gen 0 / Gen 1 / Gen 2 GC Count (Count/1 sec) | 11 / 10 / 10 | 60 / 60 / 60 | 见下 |
+
+**GC 次数这一列的口径问题（实测 + 推断分列）**：三项代数在 `Rate` 列上都读到「首样本 11/10/10，其后恒定 60」，三列完全相同；`Rate` 计数器的 `DisplayRateTimeScale` 在运行时是 1 分钟（`RuntimeEventSource` 里 `IncrementingPollingCounter("gen-2-gc-count", …) { DisplayRateTimeScale = 00:01:00 }`），所以「60」不能直接读成「每秒 60 次」。**我无法把 60 还原成各代真实次数**，也不认为三列相等是真实分布 —— 标为「未验证」。可用的确定性指标是堆大小、分配速率、工作集与 % Time in GC 四项（Metric 类型，无缩放歧义）。
+
+同一轮另有一份 `r2-toggle-final` 第 1 轮产出的 counters（211 行，`counters-play-r2-20261124-225325.csv`），与上面同量级。
+
+## C7. UiLag（播放期，同一日志窗口）
+
+```
+2026-11-24 22:51:48.865 [INF] PERF UiLag: n=195 p50=0.14ms p95=981.15ms max=1457.37ms   ← 进播放页那一下
+2026-11-24 22:51:58.866 [INF] PERF UiLag: n=198 p50=0.12ms p95=1.22ms  max=9.84ms
+2026-11-24 22:52:18.867 [INF] PERF UiLag: n=394 p50=0.11ms p95=0.70ms  max=67.75ms
+2026-11-24 22:52:28.867 [INF] PERF UiLag: n=198 p50=0.09ms p95=0.22ms  max=1.37ms
+2026-11-24 22:52:38.867 [INF] PERF UiLag: n=198 p50=0.08ms p95=0.17ms  max=0.34ms
+2026-11-24 22:52:48.868 [INF] PERF UiLag: n=198 p50=0.09ms p95=0.22ms  max=0.35ms
+2026-11-24 22:52:58.869 [INF] PERF UiLag: n=198 p50=0.09ms p95=0.20ms  max=0.37ms
+```
+
+稳定播放期（22:51:58 起 6 个窗口）：**p50 0.08–0.12 ms、p95 0.17–1.22 ms**、max ≤ 67.75 ms；第一个窗口 p95 981.15 ms 是进入播放页那一下（`create-player:end` 22:51:44 之后 4 秒内），不算播放期稳态。
+
+**日志告警（与 UiLag 分开报）**：该播放窗口内 `处理播放器属性变更时出错` = **0 条**，`[ERR]` = 0 条（第二轮同一路径是 360 条 NRE）。
+
+## C8. 播放器开关 30 轮
+
+```powershell
+pwsh -NoProfile -File E:\build-temp-dsh\verifier\r2-toggle-final.ps1 -Rounds 30 -CountersSeconds 30
+```
+
+每轮：杀进程 → 冷启动 → 点首页最大卡片 → 等播放窗口（openMs）→ 关播放窗口（closeMs）→ 记录进程数 → 杀进程记录残留。
+
+| 指标 | 值 |
+|---|---|
+| 轮数 | 30 |
+| 打开成功 | **30 / 30** |
+| 关闭成功 | **30 / 30** |
+| 失败 | **0** |
+| 启动中位数 | 2,286.5 ms |
+| 打开中位数 | 1,626 ms（735–2,090） |
+| 关闭中位数 | 228.5 ms（222–465） |
+| Responding | 30 次采样全 True |
+| 关窗后进程数 | 每一轮 UI=1 / Visor=1 |
+| 杀进程后残留 | 每一轮 0 |
+| 跑前 → 跑后 | UI 0→0、Visor 1→0 |
+
+无进程泄漏（进程维度）。
+
+## C9. 本轮分档
+
+### 实测
+1. Debug / Release `-t:Rebuild`：退出码 0、0 警告 0 错误（150.0 s / 167.7 s），dll 4,495,872 B / 3,894,272 B，4 / 5 条 runtimeconfig 开关。
+2. 状态机三处一致：async 108、迭代器 7、`d__` 86。
+3. 单测 84/84（76 ms）与 23/23（725 ms），均 net11.0。
+4. 冷启动 3 次 1,780 / 3,021 / 2,858 ms，中位 **2,858 ms**，全 Responding、已登录。
+5. 播放 75 s：15/15 Responding True，工作集 428.4→555.8 MB，播放器初始化 ready 4,140 ms（lifecycle `create-player:end 3321ms`），关窗 342 ms。
+6. 播放期 UiLag：p50 0.08–0.12 ms、p95 0.17–1.22 ms；同窗口 NRE 0 条、ERR 0 条。
+7. counters（播放中 30 s，210 行）：堆 15.08–64.16 MB、分配速率 80,760–11,102,464 B/s、工作集 545.2–617.4 MB、% Time in GC 0→5。
+8. 开关 30 轮：30/30 打开、30/30 关闭、0 失败；启动中位 2,286.5 ms、打开中位 1,626 ms、关闭中位 228.5 ms；每轮关窗后 UI=1/Visor=1、残留 0、跑前 0/1 → 跑后 0/0。
+9. 22:46:48 与 22:46:54 的事件日志里有一次 hard crash（coreclr.dll 0xc0000005），发生在我这轮开始之前，属于另一个会话。
+10. mpv 初始化在三次会话里成功过（21:40 11.5 s、22:51 3.3 s）、也超时过（21:56–22:10 五次、22:50 一次）—— 间歇性。
+
+### 推断
+1. 播放期 Gen0/Gen1/Gen2 三列读数相同且恒定 60，可能是 dotnet-counters 对 1 分钟 `DisplayRateTimeScale` 的换算或 .NET 11 Meter 维度未拆分导致的；未验证，不能当真实分代计数用。
+2. 第一轮那句「UiLag 只能说明 UI 线程不卡」在这里再次成立：本轮 NRE 计数为 0，是 t17 的守卫生效，不是「本来就没有」。
+
+### 未验证
+1. 22:46 那次 coreclr 0xc0000005 的触发原因（发生在别人会话里，我没有 dump）。
+2. mpv 初始化超时的根因（间歇性，本轮未能稳定复现条件）。**后续**：本轮构建之后出现的提交 `70237e3` 声称查清「等的是 PlayAsync 开播、媒体地址 403 会伪装成超时」——该提交不在本轮构建（HEAD 4e7f539）里，我未验证。
+3. 各代 GC 真实次数（见推断 1）。
+4. 播放期内存从 428 MB 涨到 556 MB 是否为缓存增长/泄漏 —— 只跑了 75 秒，没有长跑与 GC 后对照。
+
+
