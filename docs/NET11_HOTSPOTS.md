@@ -66,7 +66,7 @@ MpvPlayer.OnDataNotify                        ← 外部库（Richasy.MpvKernel�
 
 ### P0-2 关闭了 JSON 反射，但代码里仍有 4 处反射序列化 —— 开关只要回来就静默失效
 
-**先说当前状态（重要，与 t2 的报告不同）**：UI 工程那条"`PublishAot=True` 常开"已经在 `d781292` 里拆掉了，所以**新的构建不再写入** `System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault=false` 这类裁剪特性开关。也就是说这条 P0 现在是**潜在**而非现发——**只要有人按 `docs/NET11_P0_FIXES.md` 里的方式在命令上显式传 `-p:PublishAot=true`（或将来重开 AOT），下面 4 处立刻变成运行时异常**。留着它的理由：这 4 处是代码里的真实反射依赖，与构建开关解耦不了。
+**先说当前状态（重要，与 t2 的报告不同）**：UI 工程那条"`PublishAot=True` 常开"已经在 `d781292` 里拆掉了，所以**新的构建不再写入** `System.Text.Json.JsonSerializer.IsReflectionEnabledByDefault=false` 这类裁剪特性开关（实测 Release 28 条 → 5 条、Debug 27 → 4，口径见 `NET11_P0_FIXES.md` 批 2）。也就是说这条 P0 现在是**潜在**而非现发——**只要有人把 `<PublishAot>true</PublishAot>` 写回 UI 工程的 csproj 并重新 restore（或将来重开 AOT），下面 4 处立刻变成运行时异常**。留着它的理由：这 4 处是代码里的真实反射依赖，与构建开关解耦不了。
 
 **当时的实测**（`_tmp/stjprobe`，net11.0 + t2 记录的 runtimeconfig 副本）：
 
