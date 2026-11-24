@@ -37,6 +37,10 @@ public sealed partial class PlayerViewModel
     /// <returns><see cref="Task"/>.</returns>
     private async Task InitializeInternalAsync()
     {
+        // 每个视频的开始都会走到这里（InitializeCoreAsync 里调用）：把位置回调链要用的设置与
+        // 缓存刷一遍。位置回调每秒跑几十次，那里只允许读字段，不能再碰 WinRT.
+        RefreshTickPathCache();
+
         if (Connector is null)
         {
             Connector = _snapshot.Type switch
@@ -692,13 +696,18 @@ public sealed partial class PlayerViewModel
 
     private void TrackWatchedVideo()
     {
-        if (_watchRecorded || IsConnecting || _snapshot is null || _snapshot.IsPrivate)
+        // Player 可能是 null：初始化 20 秒超时那条路会把 Player 置空却**故意不 Dispose** 卡住的
+        // surface（见 InitializeCoreAsync 的 TimeoutException 分支），而那个 surface 还连着 mpv，
+        // 会继续以 ~60Hz 抛 Position/PlaybackState。2026-11-24 21:31:31 那次实测：超时后旧 surface
+        // 继续推事件，116 秒里这里空引用了 6,438 次，把日志整个冲掉。
+        var player = Player;
+        if (player is null || _watchRecorded || IsConnecting || _snapshot is null || _snapshot.IsPrivate)
         {
             return;
         }
 
-        if (!_watchTracker.Observe(Player.Position, System.Diagnostics.Stopwatch.GetElapsedTime(0),
-            Player.PlaybackState == MpvPlayerState.Playing, Player.PlaybackRate))
+        if (!_watchTracker.Observe(player.Position, System.Diagnostics.Stopwatch.GetElapsedTime(0),
+            player.PlaybackState == MpvPlayerState.Playing, player.PlaybackRate))
         {
             return;
         }
@@ -706,7 +715,10 @@ public sealed partial class PlayerViewModel
         var key = _snapshot.Type switch
         {
             BiliMediaType.Video => $"video_{_snapshot.Video!.Identifier.Id}",
-            BiliMediaType.Pgc when Connector is PgcConnectorViewModel pgc => $"episode_{pgc._episode.Identifier.Id}",
+            // _episode 是 EpisodeInformation?（PgcConnectorViewModel.Properties.cs:22），
+            // 构造期虽然一定会赋值，但 FindInitialEpisode 可能返回 null，所以这里按可空处理.
+            BiliMediaType.Pgc when Connector is PgcConnectorViewModel pgc && pgc._episode is not null
+                => $"episode_{pgc._episode.Identifier.Id}",
             _ => null,
         };
         if (key is not null)
@@ -732,6 +744,17 @@ public sealed partial class PlayerViewModel
 
     private async Task HandlePlayerPropertyChangedAsync(PropertyChangedEventArgs e)
     {
+        // 这个方法里的每条分支都作用于 Player，而 Player 确实会是 null：
+        //   ① 重建窗口期——InitializeCoreAsync 先 Dispose 旧 surface 再把 Player 置空，之后才建新的；
+        //   ② 初始化 20 秒超时——catch 里 `Player = null` 但**故意不 Dispose** 那个卡住的 surface
+        //      （同时 Dispose 会撞原生层），而它仍然连着 mpv，会继续以 ~60Hz 抛 Position/PlaybackState。
+        // ② 的旧事件会一直发下去（surface 没人 Dispose），所以必须在入口丢掉：
+        // 没有 Player 就没有任何可更新的状态，继续往下走只会是另一个空引用.
+        if (Player is null)
+        {
+            return;
+        }
+
         // 诊断（Debug）：只消费既有通知，不做任何新的 mpv 查询.
 #if DEBUG
         ObservePlaybackForStall(e.PropertyName);
@@ -772,27 +795,35 @@ public sealed partial class PlayerViewModel
 
         if (e.PropertyName == nameof(Player.Position))
         {
+            // 这条分支每个 tick（约 20~60 次/秒）都跑：下面只做字段读取与内存比较，
+            // 不再碰 WinRT（设置读的是 RefreshTickPathCache 缓存下来的字段），
+            // 也不再每 tick 格式化一次时间字符串.
+            var position = Player.Position;
             IsPreviewProgressChanging = false;
-            PositionText = TimeSpan.FromSeconds(Player.Position).ToString(@"hh\:mm\:ss");
-            ProgressChanged?.Invoke(this, Player.Position);
+            var wholeSecond = (int)position;
+            if (wholeSecond != _positionTextSecond)
+            {
+                // PositionText 只在整秒变化时更新：原来每 tick 一次 TimeSpan.FromSeconds +
+                // ToString 会白扔一个字符串，而显示粒度本来就只有秒.
+                _positionTextSecond = wholeSecond;
+                PositionText = TimeSpan.FromSeconds(wholeSecond).ToString(@"hh\:mm\:ss");
+            }
+
+            ProgressChanged?.Invoke(this, position);
             CheckSponsorBlock();
             CheckDanmakuJump();
 #if DEBUG
             // Debug：这一段顺便量「一次状态读取 + 消费」的耗时，供停滞监视器判定.
-            UpdateDanmakuPositionForStall(Player.Position);
+            UpdateDanmakuPositionForStall(position);
 #else
-            Danmaku.UpdatePosition(Convert.ToInt32(Player.Position));
+            Danmaku.UpdatePosition(Convert.ToInt32(position));
 #endif
-            foreach (var chapter in Chapters)
-            {
-                chapter.IsPlayed = chapter.Position <= Player.Position;
-                chapter.IsPlaying = Math.Abs(chapter.Position - Player.Position) < 2;
-            }
+            UpdateChapterPlaybackState(position);
 
             if (Player.Duration > 5)
             {
                 IsEnd = false;
-                var isShowTip = !SettingsToolkit.ReadLocalSetting(SettingNames.PlayNextWithoutTip, false);
+                var isShowTip = !_isPlayNextWithoutTip;
                 var endSec = isShowTip ? 2 : 0.1;
                 if (Math.Abs(Player.Position - Player.Duration) < endSec)
                 {
@@ -814,7 +845,7 @@ public sealed partial class PlayerViewModel
                     }
 
                     // 因为使用了 keep-open，所以视作播放结束.
-                    var autoPlayNext = SettingsToolkit.ReadLocalSetting(SettingNames.AutoPlayNext, true);
+                    var autoPlayNext = _isAutoPlayNext;
                     if (autoPlayNext && IsNextButtonEnabled && !IsConnecting)
                     {
                         if (isShowTip)
@@ -932,7 +963,7 @@ public sealed partial class PlayerViewModel
         else if (e.PropertyName == nameof(Player.PlaybackRate) && Player.IsPlaybackInitialized)
         {
             Danmaku.ExtraSpeed = Player.PlaybackRate;
-            if (SettingsToolkit.ReadLocalSetting(SettingNames.IsPlayerSpeedShare, true))
+            if (_isPlayerSpeedShare)
             {
                 SettingsToolkit.WriteLocalSetting(SettingNames.PlayerSpeed, Player.PlaybackRate);
             }
@@ -945,8 +976,7 @@ public sealed partial class PlayerViewModel
             CheckBottomProgressBarVisible();
             ResetSubtitlePositionCommand.Execute(default);
             ReloadFontsCommand.Execute(default);
-            var subtitleFontSize = SettingsToolkit.ReadLocalSetting(SettingNames.SubtitleFontSize, 32d);
-            ChangeSubtitleFontSizeCommand.Execute(Math.Max(1, subtitleFontSize));
+            ChangeSubtitleFontSizeCommand.Execute(Math.Max(1, _subtitleFontSize));
             if (_continuePosition > 0)
             {
                 await ApplySeekAsync(_continuePosition!.Value);
@@ -1003,6 +1033,141 @@ public sealed partial class PlayerViewModel
                 _ => MediaPlaybackStatus.Stopped,
             };
         }
+    }
+
+    // ---- 播放位置回调链的缓存 ----
+    // 下面这些全是纯内存字段：位置回调（每秒 20~60 次）只读它们，不再做 WinRT 读取、
+    // 也不再做周期性字符串格式化。设置在 RefreshTickPathCache 里每个视频刷新一次.
+
+    /// <summary>
+    /// 上一次写进 <see cref="PositionText"/> 的整秒值；<see cref="int.MinValue"/> 表示还没写过.
+    /// </summary>
+    private int _positionTextSecond = int.MinValue;
+
+    /// <summary>
+    /// 当前章节索引（最后一个 Position ≤ 播放位置的章节），-1 表示第一个章节还没开始.
+    /// </summary>
+    private int _chapterPlayedIndex = -1;
+
+    /// <summary>
+    /// 上一次被点亮 IsPlaying 的章节索引，-1 表示没有.
+    /// </summary>
+    private int _chapterPlayingIndex = -1;
+
+    private bool _isPlayNextWithoutTip;
+    private bool _isAutoPlayNext;
+    private bool _isPlayerSpeedShare;
+    private double _subtitleFontSize = 32d;
+
+    /// <summary>
+    /// 每个视频开始时刷一次位置回调链要用的设置与缓存.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SettingsToolkit.ReadLocalSetting{T}"/> 是「服务定位器 + WinRT 本地设置容器」，
+    /// 中间没有缓存层（Toolkits/SettingsToolkit.cs:22 → GlobalDependencies.Kernel.GetRequiredService），
+    /// 放在播放位置回调里就是每个 tick 都跨一次容器边界。这四项只在「接近片尾 / 换倍速 /
+    /// 开始播放」时才需要，所以每个视频读一次就够；改了设置后从下一部视频生效。
+    /// （倍速共享不用等下一部：它本来就写回同一个设置键，下次读到的就是新值.）
+    /// </remarks>
+    private void RefreshTickPathCache()
+    {
+        _positionTextSecond = int.MinValue;
+        _chapterPlayedIndex = -1;
+        _chapterPlayingIndex = -1;
+        _isPlayNextWithoutTip = SettingsToolkit.ReadLocalSetting(SettingNames.PlayNextWithoutTip, false);
+        _isAutoPlayNext = SettingsToolkit.ReadLocalSetting(SettingNames.AutoPlayNext, true);
+        _isPlayerSpeedShare = SettingsToolkit.ReadLocalSetting(SettingNames.IsPlayerSpeedShare, true);
+        _subtitleFontSize = SettingsToolkit.ReadLocalSetting(SettingNames.SubtitleFontSize, 32d);
+    }
+
+    /// <summary>
+    /// 按当前位置更新章节的「已播放 / 正在播放」标记.
+    /// </summary>
+    /// <param name="position">当前播放位置（秒）.</param>
+    /// <remarks>
+    /// 原来的实现每个 tick 都全量遍历 <see cref="Chapters"/>、并给每个章节写两个属性
+    /// （每次写都会发一次属性通知），章节多的视频里这是位置回调链上最贵的一段。
+    /// 这里改成：从上一次命中的章节出发挪到当前章节（正常播放只走 0~1 步，跳转时才走一段），
+    /// 并且只写真正需要变的属性。判定条件与原实现完全一致：
+    /// <c>IsPlayed = Position ≤ 播放位置</c>、<c>IsPlaying = |Position - 播放位置| &lt; 2</c>。
+    /// </remarks>
+    private void UpdateChapterPlaybackState(double position)
+    {
+        var chapters = Chapters;
+        var count = chapters.Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        // 当前章节 = 最后一个 Position ≤ position 的章节；-1 表示第一个章节还没开始.
+        var played = Math.Clamp(_chapterPlayedIndex, -1, count - 1);
+        while (played + 1 < count && chapters[played + 1].Position <= position)
+        {
+            played++;
+        }
+
+        while (played >= 0 && chapters[played].Position > position)
+        {
+            played--;
+        }
+
+        if (played != _chapterPlayedIndex)
+        {
+            if (played > _chapterPlayedIndex)
+            {
+                for (var i = Math.Max(0, _chapterPlayedIndex); i <= played; i++)
+                {
+                    if (!chapters[i].IsPlayed)
+                    {
+                        chapters[i].IsPlayed = true;
+                    }
+                }
+            }
+            else
+            {
+                // 往回拖：跳过的章节要褪回未播放.
+                for (var i = Math.Max(0, played + 1); i <= _chapterPlayedIndex && i < count; i++)
+                {
+                    if (chapters[i].IsPlayed)
+                    {
+                        chapters[i].IsPlayed = false;
+                    }
+                }
+
+                if (played >= 0 && !chapters[played].IsPlayed)
+                {
+                    chapters[played].IsPlayed = true;
+                }
+            }
+
+            _chapterPlayedIndex = played;
+        }
+
+        // 高亮窗口与原逻辑一致（±2 秒），命中的可能是当前章节，也可能是下一个.
+        var nextIndex = played + 1;
+        var isPlayingCurrent = played >= 0 && Math.Abs(chapters[played].Position - position) < 2;
+        var isPlayingNext = nextIndex < count && Math.Abs(chapters[nextIndex].Position - position) < 2;
+
+        if (_chapterPlayingIndex >= 0
+            && _chapterPlayingIndex < count
+            && _chapterPlayingIndex != played
+            && _chapterPlayingIndex != nextIndex)
+        {
+            chapters[_chapterPlayingIndex].IsPlaying = false;
+        }
+
+        if (played >= 0 && chapters[played].IsPlaying != isPlayingCurrent)
+        {
+            chapters[played].IsPlaying = isPlayingCurrent;
+        }
+
+        if (nextIndex < count && chapters[nextIndex].IsPlaying != isPlayingNext)
+        {
+            chapters[nextIndex].IsPlaying = isPlayingNext;
+        }
+
+        _chapterPlayingIndex = isPlayingCurrent ? played : (isPlayingNext ? nextIndex : -1);
     }
 
     private async void OnConnectorNewMediaRequest(object? sender, MediaSnapshot e)

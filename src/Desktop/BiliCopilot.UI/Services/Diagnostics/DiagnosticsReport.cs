@@ -11,7 +11,7 @@ namespace BiliCopilot.UI.Services.Diagnostics;
 /// </summary>
 internal static class DiagnosticsReport
 {
-    /// <summary>停滞 dump 的目录（与 <see cref="PlaybackStallDump"/> 写入位置一致）.</summary>
+    /// <summary>停滞 dump 的目录（与 <c>PlaybackStallDump.cs</c> 的写入位置一致；该类只在 Debug 构建里参与编译）.</summary>
     public static string DumpFolder => Path.Combine(Root, "Diagnostics", "StallDumps");
 
     /// <summary>日志目录.</summary>
