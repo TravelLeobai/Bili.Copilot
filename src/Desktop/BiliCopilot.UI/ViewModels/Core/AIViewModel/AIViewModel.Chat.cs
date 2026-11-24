@@ -1,4 +1,4 @@
-﻿// Copyright (c) Bili Copilot. All rights reserved.
+// Copyright (c) Bili Copilot. All rights reserved.
 
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
@@ -12,6 +12,7 @@ using Richasy.BiliKernel.Bili.Media;
 using Richasy.BiliKernel.Models;
 using Richasy.BiliKernel.Models.Media;
 using Richasy.WinUIKernel.Share.Base;
+using System.Text;
 using RichasyKernel;
 using System.Text.RegularExpressions;
 
@@ -297,21 +298,29 @@ public sealed partial class AIViewModel
             return default;
         }
 
-        var commentText = string.Empty;
+        // 拼接时用 StringBuilder：原来每条评论先 p.Content.Text + "\n------" 造一个临时字符串，
+        // 再 commentText += 一次（每次都复制已累积的全部内容），800 字上限内最多几十次无谓拷贝.
+        var builder = new StringBuilder(880);
         if (comments?.Comments.Count > 0)
         {
-            foreach (var item in comments.Comments.Select(p => p.Content.Text + "\n------"))
+            foreach (var item in comments.Comments)
             {
-                if (commentText.Length + item.Length > 800)
+                var text = item.Content.Text;
+                if (text is null)
+                {
+                    continue;
+                }
+
+                if (builder.Length + text.Length + 8 > 800)
                 {
                     break;
                 }
 
-                commentText += item;
+                builder.Append(text).Append("\n------");
             }
         }
 
-        return commentText;
+        return builder.ToString();
     }
 
     private async Task SendMessageAsync(string prompt)
@@ -367,6 +376,7 @@ public sealed partial class AIViewModel
         var service = GlobalDependencies.Kernel.GetRequiredService<IChatService>(type.ToString());
         service.Initialize(config);
         messages.Add(new(ChatRole.User, message));
+        var responseBuilder = new StringBuilder(1024);
         var responseContent = string.Empty;
         try
         {
@@ -384,7 +394,9 @@ public sealed partial class AIViewModel
                         streamingAction?.Invoke(partialResponse.Text);
                     }
 
-                    responseContent += partialResponse.Text;
+                    // 流式累积原来用 responseContent += 每片都复制一遍已累积内容（O(n²)）。
+                    // 一个 2 KB 的回答切成 200 片，等于白白搬了约 200 KB 内存.
+                    responseBuilder.Append(partialResponse.Text);
                 }
             }
         }
@@ -396,6 +408,11 @@ public sealed partial class AIViewModel
         {
             _logger.LogError(ex, $"{type} | {SelectedModel.Id} 发生错误");
             throw;
+        }
+
+        if (streamingAction is not null)
+        {
+            responseContent = responseBuilder.ToString();
         }
 
         return !string.IsNullOrEmpty(responseContent) ? responseContent : throw new KernelException($"{type} | {SelectedModel.Id} 返回空响应，具体错误请查看日志");
