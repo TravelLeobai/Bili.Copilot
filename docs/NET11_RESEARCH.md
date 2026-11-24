@@ -5,6 +5,7 @@
 - **目标版本**：.NET 11.0.0 GA（2026-11-10 发布，STS，两年支持）
 - **仓库基线**：本地分支 `exp/net11-optimization`；主项目 `net11.0-windows10.0.22621.0`，已开 `<Features>runtime-async=on</Features>`
 - **产出性质**：只写文档，不改代码，不推送远程
+- **修订**：v2（2026-11-24），按 [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)（t2 实测）回补。改动清单：`UseRuntimeAsync` 说法纠正（§1.2 NOTE）、状态改判为「正式 + opt-in」（§1.2）、运行时覆盖边界与实测数字（§1.9 / §1.10）、CS1998 判据失效（§1.8）、自包含与 R2R 事实（§2.7）、裁剪开关解释（§3 前言）、测试 TFM 已验可行（§4）、P0 项结项（§6）、未决项移出两条（§8）
 
 ## 0. 证据约定与状态判定
 
@@ -15,7 +16,7 @@
 3. `dotnet/runtime`、`dotnet/roslyn` 的设计文档与 PR
 4. `devblogs.microsoft.com`（官方博客）
 
-第三方文章仅用于**交叉印证**，且在正文中显式标注为"第三方"。凡本文无法从上述一手来源确认的内容，统一收进第 7 节"未决项"，不在正文里当事实用。
+第三方文章仅用于**交叉印证**，且在正文中显式标注为"第三方"。凡本文无法从上述一手来源确认的内容，统一收进第 8 节"未决项"，不在正文里当事实用。
 
 **状态四档的定义**（后文严格按此标注）：
 
@@ -25,6 +26,8 @@
 | **实验** | 需要 `#pragma warning disable SYSLIB5xxx` 之类显式豁免，可能变更 | 文档给出诊断号并在 WARNING 中写明"experimental" |
 | **预览** | 需要语言/构建开关（`LangVersion=preview`、`<Features>` 等），不随默认行为生效 | 需要显式开关才能编译或启用 |
 | **已取消** | 本版本被移除 / 需求被废弃 / 开关被删除 | 文档或发布说明明确写 removed / no longer / obsolete |
+
+> 允许组合标注：**「正式（opt-in）」**表示特性本身已 GA、但必须显式开关才生效——这类不能简单归进"预览"，也不能说成"默认开启"。
 
 ---
 
@@ -44,13 +47,20 @@
 | 项 | 结论 | 出处 |
 |---|---|---|
 | 启用方式 | 项目文件加 `<Features>$(Features);runtime-async=on</Features>`，**没有**"默认开启"这回事 | [runtime.md](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/runtime#runtime-async) |
-| `EnablePreviewFeatures` | 面向 `net11.0` 的项目**不再需要** | 同上 |
-| 环境变量 `DOTNET_RuntimeAsync` / `UNSUPPORTED_RuntimeAsync` | **已移除**（V1 时代的开关） | 同上（NOTE 段） |
-| 按项目退出 | 用 `<UseRuntimeAsync>false</UseRuntimeAsync>` | 同上 |
-| BCL 自身 | 运行时库整体以 `runtime-async=on` 编译，库内已无编译器生成的状态机 | 同上 |
-| 规范状态 | ECMA-335 修订仍是 **draft**，原文写"when the feature is officially supported" | [runtime-async.md 首段](https://github.com/dotnet/runtime/blob/main/docs/design/specs/runtime-async.md) |
+| `EnablePreviewFeatures` | 面向 `net11.0` 的项目**不再需要**。运行时仓库侧的说法更直接：runtime-async "不再是 preview 特性"，因此把测试与库构建里的 `EnablePreviewFeatures=true` 一并删掉了 | 同上（NOTE 段）；[dotnet/runtime#125406](https://github.com/dotnet/runtime/pull/125406) |
+| 环境变量 `DOTNET_RuntimeAsync` / `UNSUPPORTED_RuntimeAsync` | **已移除**（V1 时代的开关），运行时侧不再有全局关断手段 | 同上；[dotnet/runtime#125406](https://github.com/dotnet/runtime/pull/125406) |
+| 按项目退出（**文档口径**） | 文档写 `<UseRuntimeAsync>false</UseRuntimeAsync>` | [runtime.md](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/runtime#runtime-async)（NOTE 段） |
+| 按项目退出（**实测口径**） | 这个属性**在本仓库不生效**，唯一有效的关断是 `-p:Features=` + `-t:Rebuild` | 本仓库实测（t2），见下方 NOTE 与 §1.9 |
+| BCL 自身 | 运行时库整体以 `runtime-async=on` 编译，库内已无编译器生成的状态机 | [runtime.md](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/runtime#runtime-async) |
+| 规范状态 | ECMA-335 修订仍是 **draft**，原文写 "when the feature is officially supported" | [runtime-async.md 首段](https://github.com/dotnet/runtime/blob/main/docs/design/specs/runtime-async.md) |
 
-> **状态判定**：本文标为 **预览（opt-in）**。理由有两条：一是必须显式打开构建开关，默认不开；二是规范本身仍是草案。第三方报道把它称为 "remains a preview and is turned on with a feature flag"（[InfoQ](https://infoq.com/news/2026/11/dotnet-11-release)），与官方文档"不再需要 EnablePreviewFeatures"并不冲突——那是两件事：不要求 *PreviewFeatures* 开关，不等于默认启用。
+> [!NOTE] `UseRuntimeAsync` 为什么不生效（实测 + 溯源）
+> **实测**：t2 在本机 SDK **11.0.100** 上用 `-p:UseRuntimeAsync=false` 构建，产物**仍是 86 个状态机**；SDK 的 targets/props 里搜不到这个属性。详见 [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)。
+> **溯源**：`UseRuntimeAsync` 是 **dotnet/runtime 仓库自身 build** 的开关——[dotnet/runtime#125406](https://github.com/dotnet/runtime/pull/125406) 在 `src/libraries/Directory.Build.targets` 里定义它（"Per-project opt-out via UseRuntimeAsync=false"），作用对象是 shared framework 的源码工程，不是 SDK 提供给消费方项目的公共属性。想用它的工程得自己在 csproj 里把它映射成 `Features=runtime-async=off`——[dotnet/runtime#136004](https://github.com/dotnet/runtime/issues/136004) 里那个独立复现工程就是自己写了这行映射。
+> **工程结论**：要关掉 runtime-async，唯一可靠手段是直接覆盖 `Features`（`-p:Features=`），并且必须 `-t:Rebuild` 或换输出目录——`Features` 不是 MSBuild 的重编译输入。
+> **范围限定**：以上是**本机 SDK 版本的事实**，不是官方文档承诺的行为；不排除后续 SDK 把该属性接上。
+
+> **状态判定**：本文标为 **正式（opt-in）**。依据：[dotnet/runtime#125406](https://github.com/dotnet/runtime/pull/125406) 明确 "runtime-async is no longer a preview feature" 并删除两处 `EnablePreviewFeatures=true`；但代码侧仍必须显式打开 `Features` 才生效。ECMA-335 修订仍是草案，属规范层面的滞后，不改变"是不是 preview 特性"这个工程判定。第三方（[InfoQ](https://infoq.com/news/2026/11/dotnet-11-release)）称其 "remains a preview"，与上述一手来源冲突，本文不采用该说法，只保留可验证的"opt-in / 非默认"。
 
 ### 1.3 哪些 async 方法真的会走 runtime async
 
@@ -117,8 +127,39 @@
 ### 1.8 落到本仓库要注意的三件事
 
 1. **改 `<Features>` 必须 `-t:Rebuild`**：仓库自己已经在 `BiliCopilot.UI.csproj:23-26` 注释里记了这个坑——MSBuild 不把 `Features` 当重编译输入，普通 build 是空操作，编出来的还是老状态机程序集。
-2. **`async void` 那 81 处不会变快**：全仓 `async void` 命中 81 行，绝大多数是 WinUI 事件处理器（`OnLoadedAsync`、`OnListUpdatedAsync`、`OnClick` 之类）。它们按第 1.3 节一定回退状态机，**收益为零、风险为零**——不要把它们算进 runtime-async 的收益估算里。真正受益的是返回 `Task` 的 MVVM 命令与 Service 方法（如 `AsyncRelayCommand` 包的那些）。
-3. **无 await 的 async 方法反而是快路径**：`BiliCopilot.UI.csproj` 的 `NoWarn` 里带 `CS1998`，说明仓库确实存在"async 但没 await"的方法。这类方法在 runtime-async + R2R 下正是文档点名的"可被内联的同步快路径"，值得单独统计（留给后续扫描任务）。
+2. **`async void` 那 79 个声明不会变快**（grep 粗数为 81 行，口径见 §1.10）：绝大多数是 WinUI 事件处理器（`OnLoadedAsync`、`OnListUpdatedAsync`、`OnClick` 之类）。它们按第 1.3 节一定回退状态机，**收益为零、风险为零**——不要把它们算进 runtime-async 的收益估算里。真正受益的是返回 `Task` 的 MVVM 命令与 Service 方法（如 `AsyncRelayCommand` 包的那些）。
+3. **"async 但没 await"只能靠静态扫描来数**：`BiliCopilot.UI.csproj` 的 `NoWarn` 里那条 `CS1998` 已经是**死抑制项**——CS1998 警告在 Roslyn 侧被整体移除（[dotnet/roslyn#80144 "Remove CS1998 warning entirely and remove dependent C# code fix providers"](https://github.com/dotnet/roslyn/pull/80144)，已合并），替代品是两个代码样式分析器 [IDE0390/IDE0391: Make method synchronous](https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/ide0390-ide0391)（需要在 `.editorconfig` 里显式给 severity 才会报）。t2 用 net11 探针（3 个 async 无 await 方法、`NoWarn` 清空）验证 **0 警告**。所以判据不能靠 CS1998，只能静态扫描：t2 扫出 `src/` 745 个 `.cs`、406 个 `async Task` 方法中仅 8 个无 await（明细见 [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)）。这类方法在 runtime-async + R2R 下正是文档点名的"可被内联的同步快路径"。
+   - 口径提醒：`learn` 上的 [CS1998 错误页](https://learn.microsoft.com/dotnet/csharp/language-reference/compiler-messages/async-await-errors) 目前仍然在线，属文档滞后，不要拿它当"警告还在"的证据。
+
+### 1.9 运行时覆盖边界（t2 实测）
+
+runtime-async 的开关是**逐项目**的 `Features` 属性，不随 `ProjectReference` 传播。t2 从 csc 命令行（`-v:detailed`）抓到的 `/features:runtime-async=on` 只落在两个程序集：
+
+| 程序集 | 带 `/features:runtime-async=on` | 说明 |
+|---|---|---|
+| `BiliCopilot.UI.dll` | **是**（XAML 两遍编译各一次） | 项目里显式写了 `<Features>`（`BiliCopilot.UI.csproj:27`） |
+| `BiliCopilot.Visor.dll` | **是** | 同上（`BiliCopilot.Visor.csproj:8`） |
+| `BiliCopilot.Visor.Models`（`net11.0`） | 否 | TFM 够新，但没写 `Features` |
+| `BiliCopilot.UI.Models`（`netstandard2.0`） | 否 | 老 TFM，corlib 里也没有 `AsyncHelpers` |
+| `BiliCopilot.UI.ResourceGenerator`（`netstandard2.0`） | 否 | 同上 |
+| 三个测试工程（`net9.0`） | 否 | 同上 |
+
+**修正**：v1 写的"对符合条件的本地编译项目生效"过于含糊——实际边界是"**显式声明 `<Features>` 的那两个项目**"，TFM 是 net11 并不自动带上。
+
+### 1.10 本仓库实测数字（非官方数据，来源 t2）
+
+基线（未开）vs 开 runtime-async 后的产物对比，方法是 `System.Reflection.Metadata` 读 TypeDef 精确去重：
+
+| 指标 | `BiliCopilot.UI.dll` | `BiliCopilot.Visor.dll` |
+|---|---|---|
+| async 方法状态机 | 585 → **79**（−86.5%） | 3 → **0** |
+| 加上 7 个 `yield` 迭代器后的总数 | 592 → **86**（−85.5%） | — |
+| dll 体积 | 5,057,536 → **4,489,728 B**（−11.2%） | — |
+| Release 复测 | 同为 86 | — |
+
+**残留的 79 个状态机 = 源码里 79 个 `async void` 声明**，一一对应，没有"返回 `Task` 却回退"的案例。这正好把 §1.3 的回退形态表验证了一遍：`async void` 永不转换。
+
+> 计数口径说明：v1 用 grep 粗数得到"81 行含 `async void`"，t2 用语法级统计得到 **79 个声明**——差的 2 处是注释/多行签名造成的 grep 假阳性，以 t2 的 79 为准。
 
 ---
 
@@ -194,6 +235,8 @@ GA 文档单列一节：
 
 对本仓库：桌面应用面向普通用户，2013 年前后的老机器（无 SSE4.2）在 .NET 11 下**起不来**。当前 `PublishReadyToRun=False`，所以没有"R2R 镜像按 v3 编译、老 CPU 退化"的问题；一旦将来打开 R2R，就要按 v3 评估。
 
+t2 补了两条实测（详见 [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)）：① Windows 产物是**自包含**发布（`includedFrameworks: 11.0.0`），运行时基线由包内自带的 runtime 决定，不取决于用户机器上装了哪个 .NET 运行时；② 本仓库没开 R2R，`x86-64-v3` 那一层目标当前不适用。所以剩下的真实风险只有一个：**用户机器的 CPU 本身是否满足 `x86-64-v2`**，而本机 CPU 会把这个问题完全掩盖。
+
 ---
 
 ## 3. 库 API 增量（按域，带状态与仓库相关性）
@@ -202,6 +245,8 @@ GA 文档单列一节：
 
 1. 本仓库**不使用** `Microsoft.Extensions.*`（DI/Hosting/Options/Configuration/Caching）。`src/` 下所有 csproj 里没有任何 `Microsoft.Extensions` 的 `PackageReference`。所以 3.13 那一批（MemoryCache OTel 指标、`IAsyncStartupValidator`、`ChangeToken.OnChange` 异步重载、DataAnnotations 异步校验）**当前不适用**，除非后续引入 DI 容器。
 2. JSON 走的是 **source generation**（`GlobalSerializeContext`、`JsonGenContext` 两个 `JsonSerializerContext`），并且仓库注释明确"这个应用全局禁用了 JSON 反射序列化"（`Services/BiliJumpService.cs:62`）。所以新 JSON 特性要看**是否支持源生成**，不支持的就直接排除。
+
+   补一条因果（t2 实测，见 [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)）：这个"反射被禁用"不是谁手工配的，而是 `PublishAot=True` 这个常开属性（`BiliCopilot.UI.csproj:1500`）在**普通 build** 阶段就推出 `PublishTrimmed=true`/`SelfContained=true`，并向 `runtimeconfig.json` 写入 28 个裁剪特性开关（含 `JsonSerializer.IsReflectionEnabledByDefault=false`、`IsDynamicCodeSupported=false`、`EventSource.IsSupported=false`）；`-p:PublishAot=false` 时只剩 4 个。
 3. HTTP 是**多实例 `HttpClient` + `SocketsHttpHandler`**（`Services/` 下十几处，多处带 `ConnectCallback = IpV4Connector.ConnectAsync`）。3.9 的 handler 级新属性可以直接用在这些地方。
 
 ### 3.1 GC / 分配
@@ -422,9 +467,9 @@ GA 文档单列一节：
 | 实验 | `CompositeMLKem` | 实验，需豁免 SYSLIB5006 | [libraries.md#Experimental composite ML-KEM and HPKE APIs](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/libraries#experimental-composite-ml-kem-and-hpke-apis) |
 | 实验 | `Hpke` | 实验，需豁免 SYSLIB5009 | 同上 |
 | 实验 | `TlsContext`/`TlsSession`/`TlsBufferSession`/`TlsSocketSession`/`TlsOperationStatus` | 实验，报 SYSLIB5007 | [libraries.md#Experimental caller-driven TLS sessions](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/libraries#experimental-caller-driven-tls-sessions) |
-| 预览 | Runtime Async V2 | 预览（opt-in via `<Features>`；规范草案未定稿） | 见 1.2 |
+| 正式 + opt-in | Runtime Async V2 | 已 GA、不再是 preview 特性（dotnet/runtime#125406），但必须 `Features=runtime-async=on` 才生效；关断只能靠覆盖 `Features` | 见 1.2 / 1.9 |
 | 预览 | C# 15 memory safety（`unsafe`/`safe` 新模型、指针放宽） | 预览（`LangVersion=preview` + `updated-memory-safety-rules`） | [csharp-15#Memory safety](https://learn.microsoft.com/dotnet/csharp/whats-new/csharp-15#memory-safety) |
-| 已取消 | `DOTNET_RuntimeAsync`、`UNSUPPORTED_RuntimeAsync` 环境变量 | 已移除，改用 `<UseRuntimeAsync>false</UseRuntimeAsync>` | [runtime.md#Runtime Async](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/runtime#runtime-async) |
+| 已取消 | `DOTNET_RuntimeAsync`、`UNSUPPORTED_RuntimeAsync` 环境变量 | 已移除。文档建议改用 `<UseRuntimeAsync>false</UseRuntimeAsync>`，但该属性在本机 SDK 11.0.100 上**不生效**；实际关断手段是覆盖 `Features`（见 §1.2 NOTE） | [runtime.md#Runtime Async](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/runtime#runtime-async)；[dotnet/runtime#125406](https://github.com/dotnet/runtime/pull/125406) |
 | 已取消 | 用 runtime-async 需 `EnablePreviewFeatures` 的要求 | 已取消（net11.0 不再需要） | 同上 |
 | 已弃用 | `Microsoft.Extensions.Options.IStartupValidator` | 过时，改用 `IAsyncStartupValidator` | [libraries.md](https://learn.microsoft.com/dotnet/core/whats-new/dotnet-11/libraries#asynchronous-validation-with-dataannotations) |
 | 已移除（平台相关） | macOS 上的 DSA | 移除 | [compatibility/11](https://learn.microsoft.com/dotnet/core/compatibility/11) |
@@ -453,6 +498,8 @@ GA 文档单列一节：
 1. **net9.0 的测试项目吃不到任何 net11 新 API**。`tests/BiliCopilot.Diagnostics.Tests`、`tests/BiliCopilot.CommentPoll.Tests`、`tests/BiliCopilot.Moment.Tests` 都是 `net9.0`。C# 15 语法在它们里面能编译（`LangVersion=preview`），但 `UnionAttribute`、`LeftJoin`、`BitArray.PopCount` 这些运行时类型/方法不在 net9 框架里，会编译失败。要写这类测试，得先把测试 TFM 提到 net11.
 
    更细的一条约束：`BiliCopilot.Diagnostics.Tests.csproj:16-21` 用 `<Compile Include>` 直接链接了 UI 项目里 6 个诊断源文件（`PlaybackStallProbe`/`PlaybackStallPolicy`/`PlaybackStallDumpBudget`/`PlaybackStallDump`/`PlaybackStallWatch`/`DanmakuRebuildTiming`）。这 6 个文件必须**同时能在 net9.0 下编译**，所以升级它们时不能用 net11-only API，除非同步把测试 TFM 提上去。
+
+   **这条路 t2 已经验过可行**：三个测试工程改到 `net11.0` 后全部编过，`Diagnostics` 23/23、`CommentPoll` 84/84 在 net11 上通过（NU1510 提示 `Logging.Abstractions` 可以删掉）；但 `#if DEBUG` 让 `-c Release` 只剩 5/23。详见 [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)。
 2. **`union` 与 XAML/WinUI 工具链**没有任何官方兼容声明。本仓库用 Reactor + 原生 XAML 混合，XAML 侧的 `x:Bind` 不认 union 类型，所以 union 只适合放在 ViewModel/Service 层，不要出现在 XAML 绑定的属性类型上。
 
 ---
@@ -484,11 +531,13 @@ GA 文档单列一节：
 
 按"证据充分 + 与仓库现状对得上"排序，明确标注**本轮不改代码**，只交接给构建审计与源码扫描。
 
-### P0（低风险、可立即验证）
+### P0（前两项已由 t2 结项，第三项待闭环）
 
-1. **确认 runtime-async 真的生效**：`-t:Rebuild` 后对比程序集里是否还有编译器生成的状态机类型（`<...>d__` 命名），以及 `runtimeconfig.json` / IL 上方法是否带 `async` 标志。**判定依据**：`BiliCopilot.UI.csproj:23-26` 自己写了"Features 不是重编译输入"。
-2. **确认测试项目 TFM 缺口**：三个测试项目是 `net9.0`，任何 net11 新 API 的验证都落不了地。这是后续"分批升级"必须先解决的阻塞项（属 t2/t4 范围）。
-3. **硬件基线检查**：确认目标用户群机器满足 `x86-64-v2`；`PublishAot=True` 的发布产物尤其要看（AOT 目标跟随基线，见 2.7）。
+1. ~~确认 runtime-async 真的生效~~ → **t2 已做**：csc `/features:runtime-async=on` 只落在 UI 与 Visor 两个程序集；UI 状态机 592→86、dll −11.2%、Visor 3→0（§1.9 / §1.10）。剩下的动作只是把这套计数固化进回归脚本，不用再验证一遍。
+2. ~~确认测试项目 TFM 缺口~~ → **t2 已验证可解**：三工程改 `net11.0` 后全部编过，23/23 与 84/84 通过（§4 注 1）。真正的待办是排期决定"提 TFM"，外加处理 `-c Release` 下 `#if DEBUG` 只剩 5/23 的问题。
+3. **硬件基线检查（仍未闭环）**：产物自包含，基线由自带 runtime 决定；未开 R2R 故 v3 不适用。剩余风险是目标用户机器 CPU 是否满足 `x86-64-v2`，需要在对外说明里给口径（§2.7）。
+
+> 另有两个 t2 报的 P0 构建阻塞会卡住本节的验证动作，已记在 [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md)：Release 下 `DiagnosticsReport.cs:14` 的 cref 指向 `#if DEBUG` 里的类型，CS1574 被 `TreatWarningsAsErrors` 提升为错误（Release 编不过）；publish 通道 `CS0246 StringNames` 失败且与 AOT 无关。
 
 ### P1（中等收益、需要小改）
 
@@ -539,13 +588,19 @@ GA 文档单列一节：
 | STJ union 序列化 | https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/union-types |
 | STJ closed 体系多态 | https://learn.microsoft.com/dotnet/standard/serialization/system-text-json/polymorphism#infer-polymorphism-from-a-closed-hierarchy |
 | Roslyn 语言特性状态 | https://github.com/dotnet/roslyn/blob/main/docs/Language%20Feature%20Status.md |
+| 本仓库构建实测（t2，本文件多处引用） | [docs/NET11_BUILD_AUDIT.md](NET11_BUILD_AUDIT.md) |
+| Roslyn 移除 CS1998（已合并） | https://github.com/dotnet/roslyn/pull/80144 |
+| CS1998 的替代分析器 IDE0390 / IDE0391 | https://learn.microsoft.com/dotnet/fundamentals/code-analysis/style-rules/ide0390-ide0391 |
+| runtime-async 开关与 `UseRuntimeAsync` 定义（runtime 仓库 build） | https://github.com/dotnet/runtime/pull/125406 |
+| 消费方工程需自行映射 `UseRuntimeAsync` → `Features` 的复现 | https://github.com/dotnet/runtime/issues/136004 |
 
 ---
 
 ## 8. 未决项（本文不当作事实的部分）
 
-1. **runtime-async 的"预览/正式"措辞冲突**：GA 文档把它写进"what's new"且不再要求 `EnablePreviewFeatures`，但必须显式开 `<Features>`，且 ECMA-335 修订仍标 draft；第三方（InfoQ）称其 "remains a preview"。本文按工程语义记为"预览（opt-in）"。**若要对外表述，建议统一用"opt-in 功能（非默认）"而不是"预览特性"。**
-2. **Dynamic PGO 在 .NET 11 的默认值**：明确的"默认开启"表述只出现在 .NET 8 文档里；.NET 11 的 runtime.md 与 compilation.md 未重复声明。本文按"沿用 .NET 8 的默认开启"处理，属**合理推断**而非直接引文。
-3. **`ZstandardStream` 的"预览框架"标记**：API 目录页面标了 "The API is contained in a preview framework"，与 GA 文档把它当正式特性描述不一致；未找到官方解释，故本文只标"正式（11 新增）"并在此备注。
-4. **C# 15 `union` 与 MVVM Toolkit / WinUI 工具链的兼容性**：没有任何官方兼容矩阵，需实测，本文只给风险提示。
-5. **本仓库 `PublishAot=True` 是否真被走到**：`BiliCopilot.UI.csproj:1499-1500` 同时写 `PublishReadyToRun=False` 与 `PublishAot=True`，注释里又说"AOT 那条路本轮不测"。这条属构建配置审计（t2）的判定范围，本文不越界结论。
+> 已移出两条（v2）：原「runtime-async 的预览/正式措辞冲突」由 [dotnet/runtime#125406](https://github.com/dotnet/runtime/pull/125406) 消解，本文改标「正式 + opt-in」（§1.2）；原「UI 的 `PublishAot=True` 是否真走到」由 t2 实测消解——它是常开属性，普通 build 就会写裁剪特性开关（§3 前言）。
+
+1. **Dynamic PGO 在 .NET 11 的默认值**：明确的"默认开启"表述只出现在 .NET 8 文档里；.NET 11 的 `runtime.md` 与 `compilation.md` 未重复声明。本文按"沿用 .NET 8 的默认开启"处理，属**合理推断**而非直接引文。
+2. **`ZstandardStream` 的"预览框架"标记**：API 目录页面标了 "The API is contained in a preview framework"，与 GA 文档把它当正式特性描述不一致；未找到官方解释，故本文只标"正式（11 新增）"并在此备注。
+3. **C# 15 `union` 与 MVVM Toolkit / WinUI 工具链的兼容性**：没有任何官方兼容矩阵，需实测，本文只给风险提示。
+4. **`UseRuntimeAsync` 的"文档 vs SDK"不一致**：文档让消费方设这个属性，本机 SDK 11.0.100 并不认它（§1.2 NOTE）。已溯源到它是 runtime 仓库自身 build 的开关，但**官方文档尚未更正、也未说明消费方该怎么写**——这是文档缺陷，不是本文能定的事实；后续若 SDK 把它接上，§1.2 的结论需要跟着改。
