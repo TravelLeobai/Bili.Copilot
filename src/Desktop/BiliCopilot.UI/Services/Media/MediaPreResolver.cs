@@ -188,7 +188,9 @@ internal sealed class MediaPreResolver
         string videoId,
         string? title,
         string ownerKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? preferCid = null,
+        int preferQuality = 0)
     {
         if (string.IsNullOrEmpty(videoId))
         {
@@ -197,7 +199,12 @@ internal sealed class MediaPreResolver
 
         var identifier = new MediaIdentifier(videoId, title ?? string.Empty, default);
         var view = await _playerService.GetVideoPageDetailAsync(identifier, cancellationToken).ConfigureAwait(false);
-        var part = view?.Parts?.FirstOrDefault();
+
+        // 卡片带了 cid 就按它取流；否则按第一个分 P（与「点开默认播第一个分 P」保持一致）.
+        var part = string.IsNullOrEmpty(preferCid)
+            ? view?.Parts?.FirstOrDefault()
+            : view?.Parts?.FirstOrDefault(p => string.Equals(p.Identifier.Id, preferCid, StringComparison.Ordinal))
+              ?? view?.Parts?.FirstOrDefault();
         if (part is null || !long.TryParse(part.Identifier.Id, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cidValue))
         {
             _logger.LogDebug("预解析：{VideoId} 没有可用分P，跳过", videoId);
@@ -212,7 +219,7 @@ internal sealed class MediaPreResolver
             return null;
         }
 
-        var quality = ChooseQuality(playbackInfo);
+        var quality = ChooseQuality(playbackInfo, preferQuality);
         var preferCodec = AppToolkit.GetPreferCodecId();
         var displayName = string.IsNullOrEmpty(title)
             ? videoId
@@ -336,9 +343,18 @@ internal sealed class MediaPreResolver
     /// 返回的更高档位，预取按普通 dash 拉的档位和它对不上（缓存 key 不同），不如不预取。
     /// </para>
     /// </summary>
-    private int ChooseQuality(DashMediaInformation playbackInfo)
+    private int ChooseQuality(DashMediaInformation playbackInfo, int preferQuality = 0)
     {
         var isVip = this.Get<AccountViewModel>().MyProfile?.IsVip ?? false;
+
+        // 卡片已经写明画质（例如从历史/特定入口进来）时优先用它：
+        // 播放侧 VideoMediaSourceResolver 也是先看 snapshot.PreferQuality，两边口径必须一致，
+        // 否则预取按 qn=80 拉、播放按 qn=116 播，缓存键对不上，等于白拉.
+        if (preferQuality > 0
+            && playbackInfo.Videos.Any(p => string.Equals(p.Id, preferQuality.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)))
+        {
+            return preferQuality;
+        }
         var formats = playbackInfo.Formats?.ToList() ?? [];
         var usable = formats.Where(p => !p.NeedVip || isVip).ToList();
         if (usable.Count == 0)

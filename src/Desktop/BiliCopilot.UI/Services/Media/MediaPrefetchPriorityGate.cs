@@ -25,6 +25,16 @@ public sealed class MediaPrefetchCandidate
     public bool IsPgc { get; init; }
 
     /// <summary>
+    /// 这张卡片已经确定的分 P cid（卡片带 cid 时填，预取按它取流，避免和点击后的分 P 对不上）.
+    /// </summary>
+    public string? PreferCid { get; init; }
+
+    /// <summary>
+    /// 这张卡片已经确定的画质 qn（0 = 未知，交给设置里的画质偏好决策）.
+    /// </summary>
+    public int PreferQuality { get; init; }
+
+    /// <summary>
     /// 卡片在视口内的可见面积比例（0~1）.
     /// </summary>
     public double VisibleRatio { get; init; }

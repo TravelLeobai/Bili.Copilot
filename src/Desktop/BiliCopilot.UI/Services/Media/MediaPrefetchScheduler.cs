@@ -322,7 +322,15 @@ internal sealed class MediaPrefetchScheduler : IDisposable
                 return;
             }
 
-            if (QualityUnlockService.IsEnabled)
+            // 第三方解析服务器（画质解锁 / 代理取流）返回的地址与档位和本地 playurl 对不上，
+        // 预取的缓存键必然不一致，白拉带宽，这两种情况一律不预取.
+        if (ProxiedPlayUrlService.IsEnabled)
+        {
+            _logger.LogDebug("预取：第三方代理取流已启用，跳过预取");
+            return;
+        }
+
+        if (QualityUnlockService.IsEnabled)
             {
                 if (!_unlockSkipLogged)
                 {
@@ -459,7 +467,7 @@ internal sealed class MediaPrefetchScheduler : IDisposable
         entry.Resolving = true;
         try
         {
-            var result = await _resolver.ResolveAsync(candidate.VideoId, candidate.Title, ownerKey, token).ConfigureAwait(false);
+            var result = await _resolver.ResolveAsync(candidate.VideoId, candidate.Title, ownerKey, token, candidate.PreferCid, candidate.PreferQuality).ConfigureAwait(false);
             if (result?.VideoSource is null)
             {
                 return;
