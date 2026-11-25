@@ -424,6 +424,42 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     public partial double MaxCacheSeconds { get; set; }
 
+    /// <summary>
+    /// 「网络缓存」是否跟随 mpv 默认（打开后不下发前向缓存与预读秒数）.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCacheManualMode))]
+    public partial bool CacheAutoMode { get; set; }
+
+    /// <summary>
+    /// 前向缓存 / 预读秒数是否可以手动填（跟着 <see cref="CacheAutoMode"/> 取反）.
+    /// </summary>
+    public bool IsCacheManualMode => !CacheAutoMode;
+
+    /// <summary>
+    /// cache-secs 上限（秒）；0 表示不限制、不下发.
+    /// </summary>
+    [ObservableProperty]
+    public partial double CacheSecsLimit { get; set; }
+
+    /// <summary>
+    /// 前后向缓存互相借用（demuxer-donate-buffer）.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool DemuxerDonateBuffer { get; set; }
+
+    /// <summary>
+    /// 允许在已缓存范围内直接跳（demuxer-seekable-cache）.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool DemuxerSeekableCache { get; set; }
+
+    /// <summary>
+    /// 「缓冲与缓存」这一块是否展开.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsCacheAdvancedExpanded { get; set; }
+
     [ObservableProperty]
     public partial bool UseIntegrationWhenSinglePlayWindow { get; set; }
 

@@ -202,6 +202,18 @@ public enum SettingNames
     D3D11AdapterName,
     VulkanDeviceName,
     MaxBackCacheSize,
+
+    /// <summary>「网络缓存」是否跟随 mpv 默认（true = 不下发前向缓存与预读秒数）.</summary>
+    CacheAutoMode,
+
+    /// <summary>cache-secs 上限（秒），0 表示不限制、不下发.</summary>
+    CacheSecsLimit,
+
+    /// <summary>前向/后向缓存互相借用（demuxer-donate-buffer）.</summary>
+    DemuxerDonateBuffer,
+
+    /// <summary>允许在已缓存范围内跳转（demuxer-seekable-cache）.</summary>
+    DemuxerSeekableCache,
     MomentVideoLayoutPreset,
     LastOpenedMomentVideoId,
     LastOpenedPopularVideoId,

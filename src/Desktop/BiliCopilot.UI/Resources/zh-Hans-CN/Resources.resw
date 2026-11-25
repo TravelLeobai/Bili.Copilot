@@ -3064,10 +3064,10 @@
     <value>精确跳转选项</value>
   </data>
   <data name="MaxCacheSize" xml:space="preserve">
-    <value>最大缓冲大小（MB）</value>
+    <value>前向缓存大小（MB）</value>
   </data>
   <data name="MaxCacheSeconds" xml:space="preserve">
-    <value>最大缓冲秒数</value>
+    <value>预读秒数</value>
   </data>
   <data name="CacheOnDisk" xml:space="preserve">
     <value>将缓存写入硬盘</value>
@@ -3190,7 +3190,25 @@
     <value>清除着色器</value>
   </data>
   <data name="MaxBackCacheSize" xml:space="preserve">
-    <value>最大后向缓冲大小（MB）</value>
+    <value>后向缓存大小（MB）</value>
+  </data>
+  <data name="MpvCacheSection" xml:space="preserve">
+    <value>缓冲与缓存</value>
+  </data>
+  <data name="MpvCacheSectionDescription" xml:space="preserve">
+    <value>这些参数每集都会重新下发；用自定义 mpv.conf 时也一样，同名项以这里为准</value>
+  </data>
+  <data name="CacheAutoMode" xml:space="preserve">
+    <value>跟随 mpv 默认（自动）</value>
+  </data>
+  <data name="CacheSecsLimit" xml:space="preserve">
+    <value>缓存时长上限（秒，0 = 不限）</value>
+  </data>
+  <data name="DemuxerDonateBuffer" xml:space="preserve">
+    <value>前后向缓存互相借用</value>
+  </data>
+  <data name="DemuxerSeekableCache" xml:space="preserve">
+    <value>缓存内快速跳转</value>
   </data>
   <data name="MomentVideoLayoutDensity" xml:space="preserve">
     <value>动态页面视频排布紧凑程度</value>

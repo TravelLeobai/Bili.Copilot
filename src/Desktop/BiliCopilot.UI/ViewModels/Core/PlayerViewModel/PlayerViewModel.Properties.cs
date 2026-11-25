@@ -81,6 +81,17 @@ public sealed partial class PlayerViewModel
 
     public MpvClient? Client { get; private set; }
 
+    /// <summary>
+    /// 缓冲实况读取器：数值来自 demuxer-cache-state 事件 + 属性桥现查的两个标量.
+    /// 只被统计浮层按 1Hz 读，事件回调里只做一次引用赋值.
+    /// </summary>
+    private readonly Services.Mpv.MpvCacheStateReader _cacheStateReader = new();
+
+    /// <summary>
+    /// mpv 属性桥（内核没给 setter 的那几个缓冲项要走它）；client 换掉时置空重建.
+    /// </summary>
+    private Services.Mpv.IMpvPropertyBridge? _cacheBridge;
+
     public PlayerWindow? Window { get; private set; }
 
     /// <summary>
