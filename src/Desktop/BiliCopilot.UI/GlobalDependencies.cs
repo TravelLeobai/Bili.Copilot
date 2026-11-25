@@ -126,6 +126,11 @@ internal static class GlobalDependencies
             .AddTransient<PgcMediaSourceResolver>()
             .AddTransient<LiveMediaSourceResolver>()
             .AddTransient<PgcMediaHistoryResolver>()
+
+            // 主动预取：MediaPreResolver 负责「卡片 → cid → playurl」，MediaPrefetchScheduler 负责视口优先级与设置。
+            // 两者都是单例（无状态；预取目标挂在调度器按页面分的状态里）.
+            .AddSingleton<Services.Media.MediaPreResolver>()
+            .AddSingleton<Services.Media.MediaPrefetchScheduler>()
             .AddTransient<PlayerViewModel>()
             .AddTransient<DanmakuSendViewModel>()
             .AddNotificationViewModel()

@@ -104,6 +104,14 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         ProxyServerTw = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerTw, string.Empty);
         ProxyServerCn = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerCn, string.Empty);
         PrefetchProxyEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchProxyEnabled, false);
+        PrefetchEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchEnabled, false);
+        PrefetchSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchSeconds, 5);
+        PrefetchSecondsIndex = PrefetchSeconds switch { 10 => 1, 30 => 2, _ => 0 };
+        PrefetchMaxConcurrent = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchMaxConcurrent, 2);
+        PrefetchBudgetMiB = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchBudgetMiB, 256);
+        PrefetchRetentionSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchRetentionSeconds, 30);
+        PrefetchOnMeteredNetwork = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchOnMeteredNetwork, false);
+        PrefetchPauseDuringPlayback = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchPauseDuringPlayback, true);
         ReplaceCdnEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ReplaceCdnEnabled, true);
         CdnReplaceMode = SettingsToolkit.ReadLocalSetting(SettingNames.CdnReplaceMode, CdnReplaceMode.PcdnOnly);
         CdnReplaceModeIndex = (int)CdnReplaceMode;
@@ -213,6 +221,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         }
 
         _isInitialized = true;
+        RefreshPrefetchStatus();
     }
 
     [RelayCommand]
@@ -620,6 +629,60 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         // 切换在下次取播放地址时生效（中途停代理会让当前播放直接断流）.
         SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchProxyEnabled, value);
         Serilog.Log.Information("媒体字节范围代理开关：{Value}", value);
+    }
+
+    partial void OnPrefetchEnabledChanged(bool value)
+    {
+        SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchEnabled, value);
+        Serilog.Log.Information("主动预取开关：{Value}", value);
+        RefreshPrefetchStatus();
+    }
+
+    partial void OnPrefetchSecondsIndexChanged(int value)
+    {
+        PrefetchSeconds = value switch { 1 => 10, 2 => 30, _ => 5 };
+        SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchSeconds, PrefetchSeconds);
+        Serilog.Log.Information("预取目标秒数：{Seconds}s", PrefetchSeconds);
+    }
+
+    partial void OnPrefetchMaxConcurrentChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 1, 8);
+        SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchMaxConcurrent, clamped);
+    }
+
+    partial void OnPrefetchBudgetMiBChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 32, 4096);
+        SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchBudgetMiB, clamped);
+    }
+
+    partial void OnPrefetchRetentionSecondsChanged(int value)
+    {
+        var clamped = Math.Clamp(value, 5, 600);
+        SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchRetentionSeconds, clamped);
+    }
+
+    partial void OnPrefetchOnMeteredNetworkChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchOnMeteredNetwork, value);
+
+    partial void OnPrefetchPauseDuringPlaybackChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchPauseDuringPlayback, value);
+
+    /// <summary>
+    /// 刷新预取统计摘要（诊断用；按一次读一次，不轮询）.
+    /// </summary>
+    [RelayCommand]
+    private void RefreshPrefetchStatus()
+    {
+        try
+        {
+            PrefetchStatusText = this.Get<Services.Media.MediaPrefetchScheduler>().GetStatusText();
+        }
+        catch (Exception ex)
+        {
+            PrefetchStatusText = "读取预取统计失败：" + ex.Message;
+        }
     }
 
     partial void OnReplaceCdnEnabledChanged(bool value)

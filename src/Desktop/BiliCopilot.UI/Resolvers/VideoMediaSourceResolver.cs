@@ -226,6 +226,20 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             return;
         }
 
+        // 预解析命中：动态页的预取已经在点击前把「分P cid + dash 信息」取回来了，
+        // 这里直接用，省掉一次 playurl 往返（预取链与播放链共用同一份解析结果）。
+        // 只复用 dash 信息，不改下面选画质 / 选地址 / 代理包装的任何逻辑.
+        if (MediaPreResolutionCache.TryTake(_snapshot.Video.Identifier.Id, _part.Identifier.Id, out var preResolved)
+            && preResolved?.Videos?.Count > 0)
+        {
+            _playbackInfo = preResolved;
+            logger.LogInformation(
+                "预解析命中：{Title}（分P {Cid}），跳过首次播放信息请求",
+                _snapshot.Video.Identifier.Title,
+                _part.Identifier.Id);
+            return;
+        }
+
         if (_initTask?.Task.IsCompleted == true)
         {
             return;

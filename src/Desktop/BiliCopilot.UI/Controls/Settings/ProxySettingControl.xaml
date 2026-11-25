@@ -68,6 +68,91 @@
                 <ToggleSwitch IsOn="{x:Bind ViewModel.PrefetchProxyEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
 
+            <!--
+                主动预取：真正的「预缓冲」。它必须叠在字节缓存代理之上（代理是通道，预取是主动填充），
+                所以放在这一组里，并写清两个开关都要打开。
+            -->
+            <base:SettingsExpander
+                x:Name="PrefetchExp"
+                Description="把视口里卡片的开头字节提前拉进缓存，点击播放时首帧不用等网络；需要同时打开上面的「媒体字节缓存代理」"
+                Header="主动预取（实验性）">
+                <base:SettingsExpander.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Cloud" />
+                </base:SettingsExpander.HeaderIcon>
+                <base:SettingsExpander.Items>
+                    <base:SettingsCard Description="默认关闭；打开后视频动态页会按可见顺序预取" Header="启用主动预取">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="CheckmarkCircle" />
+                        </base:SettingsCard.HeaderIcon>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.PrefetchEnabled, Mode=TwoWay}" />
+                    </base:SettingsCard>
+                    <base:SettingsCard Description="阶段一 3 秒 → 阶段二 10 秒 → 阶段三 30 秒，按这里选的上限裁剪" Header="预取目标秒数">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="CalendarClock" />
+                        </base:SettingsCard.HeaderIcon>
+                        <ComboBox MinWidth="120" SelectedIndex="{x:Bind ViewModel.PrefetchSecondsIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="5 秒" />
+                            <ComboBoxItem Content="10 秒" />
+                            <ComboBoxItem Content="30 秒" />
+                        </ComboBox>
+                    </base:SettingsCard>
+                    <base:SettingsCard Description="同时最多几个上游区间请求在飞（默认 2）" Header="预取并发上限">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="ArrowSync" />
+                        </base:SettingsCard.HeaderIcon>
+                        <NumberBox
+                            MinWidth="120"
+                            Maximum="8"
+                            Minimum="1"
+                            SpinButtonPlacementMode="Compact"
+                            Value="{x:Bind ViewModel.PrefetchMaxConcurrent, Mode=TwoWay}" />
+                    </base:SettingsCard>
+                    <base:SettingsCard Description="预取账本预算，超了先淘汰最冷的卡片（默认 256 MiB）" Header="预取预算（MiB）">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="Collections" />
+                        </base:SettingsCard.HeaderIcon>
+                        <NumberBox
+                            MinWidth="120"
+                            Maximum="4096"
+                            Minimum="32"
+                            SpinButtonPlacementMode="Compact"
+                            Value="{x:Bind ViewModel.PrefetchBudgetMiB, Mode=TwoWay}" />
+                    </base:SettingsCard>
+                    <base:SettingsCard Description="卡片滚出视口后还留多久再释放（默认 30 秒）" Header="滚出后保留（秒）">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="History" />
+                        </base:SettingsCard.HeaderIcon>
+                        <NumberBox
+                            MinWidth="120"
+                            Maximum="600"
+                            Minimum="5"
+                            SpinButtonPlacementMode="Compact"
+                            Value="{x:Bind ViewModel.PrefetchRetentionSeconds, Mode=TwoWay}" />
+                    </base:SettingsCard>
+                    <base:SettingsCard Description="移动网络 / 计费热点下不预取，避免偷跑流量" Header="计量网络下也预取">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="Globe" />
+                        </base:SettingsCard.HeaderIcon>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.PrefetchOnMeteredNetwork, Mode=TwoWay}" />
+                    </base:SettingsCard>
+                    <base:SettingsCard Description="正在播放时暂停其它卡片的后台预取，避免和播放抢带宽" Header="播放中暂停预取">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="Video" />
+                        </base:SettingsCard.HeaderIcon>
+                        <ToggleSwitch IsOn="{x:Bind ViewModel.PrefetchPauseDuringPlayback, Mode=TwoWay}" />
+                    </base:SettingsCard>
+                    <base:SettingsCard Description="{x:Bind ViewModel.PrefetchStatusText, Mode=OneWay}" Header="预取统计">
+                        <base:SettingsCard.HeaderIcon>
+                            <ic:SymbolIcon Symbol="Poll" />
+                        </base:SettingsCard.HeaderIcon>
+                        <Button
+                            MinWidth="120"
+                            Command="{x:Bind ViewModel.RefreshPrefetchStatusCommand}"
+                            Content="刷新统计" />
+                    </base:SettingsCard>
+                </base:SettingsExpander.Items>
+            </base:SettingsExpander>
+
             <base:SettingsCard Description="只想修复卡顿时选「仅替换 PCDN 视频」" Header="替换模式">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="ContentSettings" />
