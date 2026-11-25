@@ -57,8 +57,12 @@ public sealed partial class PlayerViewModel
     private IReadOnlyList<SponsorSegment> _sponsorSegments = Array.Empty<SponsorSegment>();
     private double _lastSponsorSkipPosition = -1;
     private DateTime _lastSponsorSkipTime = DateTime.MinValue;
-    private bool _sponsorMuteApplied;
-    private double _sponsorMuteBackupVolume = 100;
+
+    /// <summary>
+    /// 片段静音状态（是否压过音量 + 原音量）：进出与换集复位都在这里，
+    /// 不再用两个裸字段（原来换集只清了片段表，漏清静音标记 → 下一集整集没声音）.
+    /// </summary>
+    private readonly Services.Sponsor.SponsorMuteState _sponsorMute = new();
     private bool _isSponsorLoading;
 
     // 应用数据目录只解析一次：LocalFolder 是 WinRT 调用，包在注册/服务被占时会卡死 UI 线程.
@@ -80,6 +84,17 @@ public sealed partial class PlayerViewModel
     public event EventHandler RequestHideNextTip;
 
     public MpvClient? Client { get; private set; }
+
+    /// <summary>
+    /// 缓冲实况读取器：数值来自 demuxer-cache-state 事件 + 属性桥现查的两个标量.
+    /// 只被统计浮层按 1Hz 读，事件回调里只做一次引用赋值.
+    /// </summary>
+    private readonly Services.Mpv.MpvCacheStateReader _cacheStateReader = new();
+
+    /// <summary>
+    /// mpv 属性桥（内核没给 setter 的那几个缓冲项要走它）；client 换掉时置空重建.
+    /// </summary>
+    private Services.Mpv.IMpvPropertyBridge? _cacheBridge;
 
     public PlayerWindow? Window { get; private set; }
 

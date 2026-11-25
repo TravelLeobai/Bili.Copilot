@@ -159,6 +159,9 @@ public sealed partial class PlayerViewModel
 
             AppendEnhancementStatistics(lines);
 
+            // 缓冲实况：面板上要的是「实际」而不是设置里的上限，所以单独一组.
+            AppendCacheStatistics(lines);
+
             // Lua 探针写出来的实时值：码率、丢帧、帧率.
             var probe = Services.MpvStatsProbe.Read();
             if (probe is { } stats)
@@ -209,6 +212,76 @@ public sealed partial class PlayerViewModel
     private void StopStatisticsTimer()
     {
         _statisticsTimer?.Stop();
+    }
+
+    /// <summary>
+    /// 缓冲实况.
+    /// <para>
+    /// 数字来源：前向/磁盘字节、可跳区间、bof/eof 来自 <c>demuxer-cache-state</c>（内核解析后通过
+    /// CacheStateChanged 送过来），缓存时长与缓冲进度走属性桥现查.
+    /// 读不到的项明确写「不支持」，<b>不拿设置里的上限顶替</b> —— 面板要能看出
+    /// 「配置 300MiB、实际只有 12MiB」这种差别.
+    /// </para>
+    /// <para>刷新由统计浮层的 1 秒定时器驱动（≤2Hz），这里只做一次快照读取.</para>
+    /// </summary>
+    /// <param name="lines">统计行.</param>
+    private void AppendCacheStatistics(List<PlayerStatisticItem> lines)
+    {
+        Services.Mpv.MpvCacheSnapshot snapshot;
+        try
+        {
+            snapshot = _cacheStateReader.Read(_cacheBridge);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Debug(ex, "读取缓冲实况失败");
+            lines.Add(new("缓冲实况", "读取失败"));
+            return;
+        }
+
+        if (!snapshot.HasEventData)
+        {
+            lines.Add(new("缓冲实况", "还没收到 demuxer-cache-state（未开始播放，或 mpv 没有推送）"));
+        }
+        else
+        {
+            lines.Add(new("前向缓存（实际）", FormatBytes(snapshot.ForwardBytes)));
+            lines.Add(new("磁盘缓存（实际）", snapshot.FileCacheBytes > 0 ? FormatBytes(snapshot.FileCacheBytes) : "未使用"));
+
+            if (snapshot.SeekableRanges.Count == 0)
+            {
+                // 本地文件整段可跳，mpv 不上报区间；网络流才有可跳片段.
+                lines.Add(new("可跳区间", "未上报（本地文件通常整段可跳）"));
+            }
+            else
+            {
+                var shown = string.Join(
+                    "、",
+                    snapshot.SeekableRanges.Take(3).Select(range => $"{FormatSkipStamp(range.Start)}–{FormatSkipStamp(range.End)}"));
+                if (snapshot.SeekableRanges.Count > 3)
+                {
+                    shown += $"…共 {snapshot.SeekableRanges.Count} 段";
+                }
+
+                lines.Add(new("可跳区间", shown));
+            }
+
+            lines.Add(new(
+                "已缓到两端",
+                snapshot.BofCached && snapshot.EofCached
+                    ? "是（整段已缓冲）"
+                    : $"开头 {(snapshot.BofCached ? "是" : "否")} / 结尾 {(snapshot.EofCached ? "是" : "否")}"));
+        }
+
+        lines.Add(new(
+            "缓冲中",
+            snapshot.BufferingPercent is { } percent
+                ? (percent < 100 ? $"是（{percent}%）" : "否")
+                : "不支持（cache-buffering-state 读不到）"));
+
+        lines.Add(new(
+            "缓存时长（实际）",
+            snapshot.CacheDurationSeconds is { } duration ? $"{duration:0.0} 秒" : "不支持（demuxer-cache-duration 读不到）"));
     }
 
     /// <summary>

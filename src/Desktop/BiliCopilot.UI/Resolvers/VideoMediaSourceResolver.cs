@@ -4,6 +4,7 @@ using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Services;
+using BiliCopilot.UI.Services.Media;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
@@ -29,12 +30,23 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
     public void Initialize(MediaSnapshot snapshot, VideoPart part)
     {
+        // 换集 / 换源的第一站：先把上一路播放的代理登记与缓存租约放掉（归属键不同才释放；
+        // 同一集换画质由 TryWrap 里的「同键旧登记清理」负责）。
+        // 不释放的话，带租约的缓存条目不允许淘汰，连播多个视频后缓存写不进、内存顶在容量上限.
+        MediaBufferProxyBridge.ReleasePreviousOwner(BuildProxyOwnerKey(snapshot, part));
         _snapshot = snapshot;
         _part = part;
         _playbackInfo = default;
         _initTask?.TrySetCanceled();
         _initCts?.Cancel();
     }
+
+    /// <summary>
+    /// 媒体代理的归属键：稳定形如 <c>player:{bvid}:{cid}</c>。
+    /// 换集释放、播放器销毁释放、应用退出释放都用同一个格式，三处必须一致.
+    /// </summary>
+    private static string BuildProxyOwnerKey(MediaSnapshot snapshot, VideoPart? part)
+        => $"player:{snapshot.Video?.Identifier.Id}:{part?.Identifier.Id}";
 
     internal void ResetSnapshot(MediaSnapshot snapshot)
     {
@@ -161,6 +173,34 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         await LoadMediaInfoAsync();
         var (videoUrl, audioUrl) = await GetPlayUrlsAsync();
+
+        // 媒体字节范围代理（设置里默认关闭）：把地址换成 127.0.0.1 上的 Range 代理，
+        // 代理负责缓存 + 合并并发请求 + 只补缺失块。关着、或代理起不来时 TryWrap 原样返回，
+        // 下面这段代码就等于不存在.
+        if (MediaBufferProxyBridge.IsEnabled && (!string.IsNullOrEmpty(videoUrl) || !string.IsNullOrEmpty(audioUrl)))
+        {
+            // 只有音频的场合把音频当主地址包，省掉一套分支.
+            var hasVideo = !string.IsNullOrEmpty(videoUrl);
+            var primaryUrl = hasVideo ? videoUrl : audioUrl!;
+            var secondaryUrl = hasVideo ? audioUrl : null;
+            var proxyRequest = MediaBufferProxyBridge.CreateRequest(
+                ownerKey: BuildProxyOwnerKey(_snapshot, _part),
+                bvid: _snapshot.Video.Identifier.Id,
+                cid: _part.Identifier.Id,
+                displayName: _snapshot.Video.Identifier.Title,
+                videoUrl: primaryUrl,
+                audioUrl: secondaryUrl,
+                playbackInfo: _playbackInfo,
+                quality: ActualQuality,
+                preferCodec: AppToolkit.GetPreferCodecId());
+            var wrapped = MediaBufferProxyBridge.TryWrap(proxyRequest, cookies, logger);
+            if (wrapped.Proxied)
+            {
+                videoUrl = wrapped.VideoUrl;
+                audioUrl = wrapped.AudioUrl;
+            }
+        }
+
         var fileUrl = string.Empty;
         if (!string.IsNullOrEmpty(videoUrl))
         {
@@ -194,6 +234,20 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         if (_playbackInfo is not null)
         {
+            return;
+        }
+
+        // 预解析命中：动态页的预取已经在点击前把「分P cid + dash 信息」取回来了，
+        // 这里直接用，省掉一次 playurl 往返（预取链与播放链共用同一份解析结果）。
+        // 只复用 dash 信息，不改下面选画质 / 选地址 / 代理包装的任何逻辑.
+        if (MediaPreResolutionCache.TryTake(_snapshot.Video.Identifier.Id, _part.Identifier.Id, out var preResolved)
+            && preResolved?.Videos?.Count > 0)
+        {
+            _playbackInfo = preResolved;
+            logger.LogInformation(
+                "预解析命中：{Title}（分P {Cid}），跳过首次播放信息请求",
+                _snapshot.Video.Identifier.Title,
+                _part.Identifier.Id);
             return;
         }
 

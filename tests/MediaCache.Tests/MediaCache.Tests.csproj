@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    纯逻辑 + 端到端测试（无 NuGet 依赖，用控制台跑）：
+      dotnet run (project) tests/MediaCache.Tests
+    直接编译 src 里的 Media/*.cs（link），保证测的就是生产代码本体。
+    这些文件刻意不依赖 Microsoft.Extensions.Logging / WinUI，才能在这里单独编译。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>MediaCache.Tests</AssemblyName>
+    <RootNamespace>MediaCache.Tests</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaStreamIdentity.cs" Link="Product\MediaStreamIdentity.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaByteRange.cs" Link="Product\MediaByteRange.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaRangeCache.cs" Link="Product\MediaRangeCache.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaBufferProxy.cs" Link="Product\MediaBufferProxy.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaSegmentIndex.cs" Link="Product\MediaSegmentIndex.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaPrefetchService.cs" Link="Product\MediaPrefetchService.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaPrefetchPriorityGate.cs" Link="Product\MediaPrefetchPriorityGate.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SponsorSegment.cs" Link="Product\SponsorSegment.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SegmentPlanner.cs" Link="Product\SegmentPlanner.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SponsorMuteState.cs" Link="Product\SponsorMuteState.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,10 +1,13 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using System.Globalization;
 using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Services;
+using BiliCopilot.UI.Services.Media;
+using BiliCopilot.UI.Services.Sponsor;
 using BiliCopilot.UI.Resolvers;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Items;
@@ -15,6 +18,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Richasy.WinUIKernel.Share.ViewModels;
 using Richasy.BiliKernel.Models.Danmaku;
+using Richasy.BiliKernel.Models.Media;
 using WinUIEx;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -124,6 +128,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             Client.ErrorOccurred -= OnClientErrorOccurred;
             Client.CacheStateChanged -= OnClientCacheStateChanged;
+            // 句柄跟着 client 一起作废：不清掉的话下次会拿着旧 handle 去读属性.
+            _cacheBridge = null;
+            _cacheStateReader.Reset();
             try
             {
                 await Client.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
@@ -145,8 +152,66 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _initCts = null;
         _lifetimeCts.Dispose();
 
+        // 播放器销毁 = 这一路播放结束：把代理登记和它的缓存租约一起放掉。
+        // 不释放的话，条目会一直被租约钉住（有租约的条目不允许淘汰），连播多个视频后
+        // 缓存写不进去、内存顶在容量上限.
+        ReleaseMediaProxyRegistration();
+
         this.Get<AppViewModel>().Players.Remove(this);
         Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "dispose", disposeWatch);
+    }
+
+    /// <summary>
+    /// 释放当前播放对应的媒体代理登记：按 <c>player:{bvid}:{cid}</c> 精确释放，
+    /// 拿不到 cid 时按 <c>player:{bvid}:</c> 前缀把整个视频的登记一起释放.
+    /// </summary>
+    private void ReleaseMediaProxyRegistration()
+    {
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        // 归属键必须和 Video/PgcMediaSourceResolver.Initialize 里的格式、取值顺序完全一致，
+        // 否则释放不到那条登记（只能等空闲回收兜底）.
+        string mediaId;
+        string cid;
+        switch (Connector)
+        {
+            case VideoConnectorViewModel videoConnector:
+                mediaId = _snapshot.Video?.Identifier.Id ?? string.Empty;
+                cid = videoConnector._part?.Identifier.Id ?? string.Empty;
+                break;
+            case PgcConnectorViewModel pgcConnector:
+                mediaId = _snapshot.Season?.Identifier.Id
+                    ?? pgcConnector._episode?.Identifier.Id
+                    ?? _snapshot.Episode?.Identifier.Id
+                    ?? string.Empty;
+                cid = pgcConnector._episode is null
+                    ? string.Empty
+                    : pgcConnector._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString(CultureInfo.InvariantCulture);
+                break;
+            default:
+                mediaId = _snapshot.Video?.Identifier.Id
+                    ?? _snapshot.Season?.Identifier.Id
+                    ?? _snapshot.Episode?.Identifier.Id
+                    ?? string.Empty;
+                cid = _snapshot.PreferPart?.Identifier.Id ?? string.Empty;
+                break;
+        }
+
+        if (string.IsNullOrEmpty(mediaId))
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(cid))
+        {
+            MediaBufferProxyBridge.ReleaseOwnerPrefix($"player:{mediaId}:");
+            return;
+        }
+
+        MediaBufferProxyBridge.ReleaseOwner($"player:{mediaId}:{cid}");
     }
 
     [RelayCommand]
@@ -288,6 +353,18 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _sponsorSegments = Array.Empty<SponsorSegment>();
         _lastSponsorSkipPosition = -1;
         _lastSponsorCheckPosition = -1;
+        _lastSponsorSkipTime = DateTime.MinValue;
+
+        // 换集收尾：上一集停在 mute 段时，音量已经被压到 0，_sponsorMute 里还留着
+        // 「已静音 + 原音量」。如果只清片段表不清它，下一集就带着这个标记进来 ——
+        // MuteForSponsoredSegment 看到标记直接 return，音量再也不会被压、也不会被恢复，
+        // 整集都是哑的（这是实测能复现的换集缺陷，2026-11 修）。
+        // 这里先把原音量还给上一集的播放器，再把状态复位。
+        if (_sponsorMute.ResetForNewMedia() is { } muteRestoreVolume)
+        {
+            logger.LogInformation("换集：上一集停在静音片段，先把音量恢复为 {Volume}", muteRestoreVolume);
+            _ = ApplyVolumeAsync(muteRestoreVolume);
+        }
 
         // 这里是每个视频的开始：自检开关在这里刷一次，播放位置回调里只读字段.
         // （本地文件开关的读取全走缓存路径，不再每次回调碰 WinRT，见 CheckSponsorBlock）
@@ -1055,13 +1132,15 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
             // 四路来源并行查：SponsorBlock（可换镜像）、云端广告库、Bilijump 数据库、AI 识别.
             // 并行是为了不让最慢的一路（AI）拖住其它来源，谁先回来先并入.
+            // cid 必须一起带上：缓存键与 Bilijump 查询都是按分 P 的，只用 bvid 会在换 P 时命中上一 P 的数据.
+            var currentCid = ResolveCurrentCid(snapshot);
             var segments = new List<SponsorSegment>();
-            var sponsorTask = SponsorBlockService.GetSegmentsAsync(videoId, logger);
+            var sponsorTask = SponsorBlockService.GetSegmentsAsync(videoId, currentCid, logger);
             var cloudTask = AdCloudService.IsEnabled
                 ? AdCloudService.GetSegmentsAsync(videoId, logger)
                 : Task.FromResult<IReadOnlyList<SponsorSegment>>([]);
             var bilijumpTask = BiliJumpService.IsEnabled
-                ? QueryBiliJumpAsync(videoId)
+                ? QueryBiliJumpAsync(videoId, currentCid)
                 : Task.FromResult<IReadOnlyList<SponsorSegment>>([]);
             var aiTask = AiAdAnalyzer.IsEnabled
                 ? AnalyzeAdsWithAiAsync(videoId, snapshot)
@@ -1124,7 +1203,14 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
             // 自检开关按视频刷新一次，播放位置回调里只读字段（见 CheckSponsorBlock 的说明）.
             RefreshAdSkipTestFlags();
             var testRanges = ReadSegmentRangeTest();
-            _sponsorSegments = testRanges.Count > 0 ? testRanges : MergeSegments(segments);
+
+            // 合并 + 校验统一走 SegmentPlanner（纯函数，见 tests 里的 6 个边界）：
+            // 重叠/相邻合并、倒挂与负数丢弃、超出时长的丢弃、用户禁用的类别过滤.
+            // 时长拿不到（Player.Duration <= 0）时不做时长校验，避免把有效片段全丢掉.
+            var mediaDuration = Player?.Duration ?? 0;
+            _sponsorSegments = testRanges.Count > 0
+                ? SegmentPlanner.Plan(testRanges, mediaDuration)
+                : SegmentPlanner.Plan(segments, mediaDuration, enabledCategories: SponsorBlockService.GetPlanCategoryAllowList());
             logger.LogInformation("跳过片段检查完成：{Count} 段", _sponsorSegments.Count);
             PushAdSkipLog($"检查完成：共 {_sponsorSegments.Count} 段", TimeSpan.FromSeconds(8));
             if (_sponsorSegments.Count > 0)
@@ -1148,11 +1234,34 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
     }
 
     /// <summary>
-    /// 查 Bilijump 云端广告库（按 cid），并行参与上面的多源合并.
+    /// 当前分 P 的 cid：优先问连接器（它持有「正在播的那个分 P」），
+    /// 其次看快照里的偏好分 P；都没有就返回空串，交给上游按第 1 P 兜底.
     /// </summary>
-    private async Task<IReadOnlyList<SponsorSegment>> QueryBiliJumpAsync(string videoId)
+    private string ResolveCurrentCid(MediaSnapshot snapshot)
     {
-        var cid = await BiliJumpService.ResolveCidAsync(videoId, logger);
+        if (Connector is VideoConnectorViewModel videoConnector
+            && !string.IsNullOrEmpty(videoConnector._part?.Identifier.Id))
+        {
+            return videoConnector._part!.Identifier.Id;
+        }
+
+        return snapshot.PreferPart?.Identifier.Id ?? string.Empty;
+    }
+
+    /// <summary>
+    /// 查 Bilijump 云端广告库（按 cid），并行参与上面的多源合并.
+    /// <para>
+    /// cid 跟着当前分 P 走：这个库是按 cid 存数据的，拿第 1 P 的 cid 去查第 3 P
+    /// 会命中别人的时间点（这就是「换 P 后跳过点错位」的来源）.
+    /// </para>
+    /// </summary>
+    /// <param name="videoId">视频 BV 号.</param>
+    /// <param name="currentCid">当前分 P 的 cid；为空时退回按 bvid 解析.</param>
+    private async Task<IReadOnlyList<SponsorSegment>> QueryBiliJumpAsync(string videoId, string currentCid)
+    {
+        var cid = !string.IsNullOrEmpty(currentCid)
+            ? currentCid
+            : await BiliJumpService.ResolveCidAsync(videoId, 1, logger);
         if (string.IsNullOrEmpty(cid))
         {
             logger.LogInformation("Bilijump：拿不到 cid，跳过");
@@ -1422,40 +1531,6 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         return null;
     }
 
-    private static IReadOnlyList<SponsorSegment> MergeSegments(IEnumerable<SponsorSegment> segments)
-    {
-        var ordered = segments
-            .Where(p => p.End > p.Start)
-            .OrderBy(p => p.Start)
-            .ToList();
-
-        var merged = new List<SponsorSegment>();
-        foreach (var segment in ordered)
-        {
-            // 只合并「同一分类」的相邻段：赞助广告和三连提醒贴着的时候，
-            // 合到一块会让结束时间顶到片尾，跳转目标超出时长就被拒掉了.
-            if (merged.Count > 0 &&
-                string.Equals(merged[^1].Category, segment.Category, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(merged[^1].Source, segment.Source, StringComparison.OrdinalIgnoreCase) &&
-                segment.Start <= merged[^1].End + 0.5)
-            {
-                merged[^1].End = Math.Max(merged[^1].End, segment.End);
-                continue;
-            }
-
-            merged.Add(new SponsorSegment
-            {
-                Start = segment.Start,
-                End = segment.End,
-                Category = segment.Category,
-                Source = segment.Source,
-                ActionType = segment.ActionType,
-            });
-        }
-
-        return merged;
-    }
-
     /// <summary>
     /// 自检开关：LocalState 下放一个 adskip-test.txt，就把整段视频当成广告片段，用来验证跳过链路.
     /// </summary>
@@ -1676,27 +1751,26 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
 
     private void MuteForSponsoredSegment()
     {
-        if (_sponsorMuteApplied)
+        // 状态的进出全交给 SponsorMuteState：它记得「这次是不是真的从有声变静音」，
+        // 重复 tick 不会覆盖原音量，换集复位也不会漏（见 InitializeCoreAsync 的收尾）.
+        if (!_sponsorMute.Mute(Player?.Volume ?? SponsorMuteState.DefaultVolume))
         {
             return;
         }
 
-        _sponsorMuteApplied = true;
-        _sponsorMuteBackupVolume = Player?.Volume ?? 100;
-        logger.LogInformation("片段要求静音：音量 {Volume} -> 0", _sponsorMuteBackupVolume);
+        logger.LogInformation("片段要求静音：音量 {Volume} -> 0", _sponsorMute.BackupVolume);
         _ = ApplyVolumeAsync(0);
     }
 
     private void RestoreSponsoredMute()
     {
-        if (!_sponsorMuteApplied)
+        if (!_sponsorMute.TryRestore(out var volume))
         {
             return;
         }
 
-        _sponsorMuteApplied = false;
-        logger.LogInformation("静音片段结束，恢复音量 {Volume}", _sponsorMuteBackupVolume);
-        _ = ApplyVolumeAsync(_sponsorMuteBackupVolume);
+        logger.LogInformation("静音片段结束，恢复音量 {Volume}", volume);
+        _ = ApplyVolumeAsync(volume);
     }
 
     private void ShowSkipPrompt(SponsorSegment segment)

@@ -202,6 +202,18 @@ public enum SettingNames
     D3D11AdapterName,
     VulkanDeviceName,
     MaxBackCacheSize,
+
+    /// <summary>「网络缓存」是否跟随 mpv 默认（true = 不下发前向缓存与预读秒数）.</summary>
+    CacheAutoMode,
+
+    /// <summary>cache-secs 上限（秒），0 表示不限制、不下发.</summary>
+    CacheSecsLimit,
+
+    /// <summary>前向/后向缓存互相借用（demuxer-donate-buffer）.</summary>
+    DemuxerDonateBuffer,
+
+    /// <summary>允许在已缓存范围内跳转（demuxer-seekable-cache）.</summary>
+    DemuxerSeekableCache,
     MomentVideoLayoutPreset,
     LastOpenedMomentVideoId,
     LastOpenedPopularVideoId,
@@ -220,6 +232,48 @@ public enum SettingNames
     BlockLowLevelUsers,
     DanmakuJumpEnabled,
     LastSeasonVideoIds,
+
+    /// <summary>
+    /// 媒体字节范围代理（只在本机回环上开一个 Range 代理，播放器从本地缓存取流）.
+    /// 默认关闭，关掉时播放链路与原来完全一致.
+    /// </summary>
+    PrefetchProxyEnabled,
+
+    /// <summary>
+    /// 主动预取（实验性）：把视口里卡片的开头若干块提前拉进字节缓存，点击播放时首帧不等网络.
+    /// 默认关闭；需要同时打开 <see cref="PrefetchProxyEnabled"/> 才有效.
+    /// </summary>
+    PrefetchEnabled,
+
+    /// <summary>
+    /// 预取目标秒数：5 / 10 / 30（默认 5）.
+    /// </summary>
+    PrefetchSeconds,
+
+    /// <summary>
+    /// 预取全局并发上限（默认 2）.
+    /// </summary>
+    PrefetchMaxConcurrent,
+
+    /// <summary>
+    /// 预取账本预算（MiB，默认 256）.
+    /// </summary>
+    PrefetchBudgetMiB,
+
+    /// <summary>
+    /// 卡片滚出视口后保留多久（秒，默认 30）.
+    /// </summary>
+    PrefetchRetentionSeconds,
+
+    /// <summary>
+    /// 计量网络（移动网络 / 计费热点）下是否也预取（默认 false）.
+    /// </summary>
+    PrefetchOnMeteredNetwork,
+
+    /// <summary>
+    /// 正在播放时是否暂停其它卡片的预取（默认 true）.
+    /// </summary>
+    PrefetchPauseDuringPlayback,
 }
 
 

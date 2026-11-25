@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
+using BiliCopilot.UI.Services.Media;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Core;
 using H.NotifyIcon;
@@ -362,6 +363,10 @@ public partial class App : Application
         TrayIcon = null;
         _notificationManager?.Unregister();
         _notificationManager = null;
+
+        // 应用退出：停掉媒体代理（释放全部登记与缓存租约、断开在飞下载、等后台循环退出）.
+        // 不做这一步的话，进程退出阶段还挂着回环监听和缓存租约，只能靠 ProcessExit 兜底.
+        MediaBufferProxyBridge.Shutdown();
         Exit();
     }
 

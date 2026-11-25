@@ -156,6 +156,66 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     private string _proxyServerCn;
 
+    /// <summary>
+    /// 媒体字节范围代理（本机回环 Range 代理 + 字节缓存），默认关闭.
+    /// </summary>
+    [ObservableProperty]
+    private bool _prefetchProxyEnabled;
+
+    /// <summary>
+    /// 主动预取（实验性），默认关闭。需要同时打开「媒体字节缓存代理」.
+    /// </summary>
+    [ObservableProperty]
+    private bool _prefetchEnabled;
+
+    /// <summary>
+    /// 预取目标秒数（5 / 10 / 30）.
+    /// </summary>
+    [ObservableProperty]
+    private int _prefetchSeconds = 5;
+
+    /// <summary>
+    /// 预取秒数下拉框的选中项（0=5s，1=10s，2=30s）.
+    /// </summary>
+    [ObservableProperty]
+    private int _prefetchSecondsIndex;
+
+    /// <summary>
+    /// 预取全局并发上限.
+    /// </summary>
+    [ObservableProperty]
+    private int _prefetchMaxConcurrent = 2;
+
+    /// <summary>
+    /// 预取账本预算（MiB）.
+    /// </summary>
+    [ObservableProperty]
+    private int _prefetchBudgetMiB = 256;
+
+    /// <summary>
+    /// 卡片滚出视口后的保留时间（秒）.
+    /// </summary>
+    [ObservableProperty]
+    private int _prefetchRetentionSeconds = 30;
+
+    /// <summary>
+    /// 计量网络下是否预取.
+    /// </summary>
+    [ObservableProperty]
+    private bool _prefetchOnMeteredNetwork;
+
+    /// <summary>
+    /// 播放中是否暂停其它卡片的预取.
+    /// </summary>
+    [ObservableProperty]
+    private bool _prefetchPauseDuringPlayback = true;
+
+    /// <summary>
+    /// 预取统计摘要（诊断用）.
+    /// </summary>
+    [ObservableProperty]
+    private string _prefetchStatusText = "点右侧「刷新统计」查看当前预取状态";
+
     [ObservableProperty]
     private bool _replaceCdnEnabled;
 
@@ -423,6 +483,42 @@ public sealed partial class SettingsPageViewModel
 
     [ObservableProperty]
     public partial double MaxCacheSeconds { get; set; }
+
+    /// <summary>
+    /// 「网络缓存」是否跟随 mpv 默认（打开后不下发前向缓存与预读秒数）.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCacheManualMode))]
+    public partial bool CacheAutoMode { get; set; }
+
+    /// <summary>
+    /// 前向缓存 / 预读秒数是否可以手动填（跟着 <see cref="CacheAutoMode"/> 取反）.
+    /// </summary>
+    public bool IsCacheManualMode => !CacheAutoMode;
+
+    /// <summary>
+    /// cache-secs 上限（秒）；0 表示不限制、不下发.
+    /// </summary>
+    [ObservableProperty]
+    public partial double CacheSecsLimit { get; set; }
+
+    /// <summary>
+    /// 前后向缓存互相借用（demuxer-donate-buffer）.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool DemuxerDonateBuffer { get; set; }
+
+    /// <summary>
+    /// 允许在已缓存范围内直接跳（demuxer-seekable-cache）.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool DemuxerSeekableCache { get; set; }
+
+    /// <summary>
+    /// 「缓冲与缓存」这一块是否展开.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsCacheAdvancedExpanded { get; set; }
 
     [ObservableProperty]
     public partial bool UseIntegrationWhenSinglePlayWindow { get; set; }

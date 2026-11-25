@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    缓冲参数的规划/下发/状态读取逻辑不引用 WinUI、不引用 mpv 原生库，所以直接把源码编进测试工程：
+    一份源码，两个宿主（桌面应用 + 测试），不需要为可测性拆新项目、也不引入新包版本.
+    真正碰 libmpv 的那一层（MpvPropertyBridge）刻意不编进来：单测不该启动 mpv 实例.
+  -->
+  <ItemGroup>
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Mpv/MpvCacheOptions.cs" Link="Linked/MpvCacheOptions.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Mpv/IMpvPropertyBridge.cs" Link="Linked/IMpvPropertyBridge.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Mpv/MpvCacheOptionApplier.cs" Link="Linked/MpvCacheOptionApplier.cs" />
+    <Compile Include="../../src/Desktop/BiliCopilot.UI/Services/Mpv/MpvCacheStateReader.cs" Link="Linked/MpvCacheStateReader.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <PackageReference Include="xunit" Version="2.7.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.7">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
