@@ -570,6 +570,15 @@ public sealed partial class VideoMomentSectionDetailControl : VideoMomentSection
             return;
         }
 
+        // ViewModel 由外层页面在数据就绪后注入，而本方法会从 SizeChanged / 调度回调里跑，
+        // 首帧时它常常还是 null。这里不判空会抛 NullReferenceException —— 该异常发生在
+        // XAML 的布局/调度回调里，会升级成 0xc000027b（stowed exception + FailFast），
+        // 表现就是「一进动态页/一切换分区，窗口直接消失、且没有 managed crash 日志」。
+        if (ViewModel?.Items is null)
+        {
+            return;
+        }
+
         MomentItemViewModel? anchor = null;
         var top = double.MaxValue;
         var right = double.MinValue;
