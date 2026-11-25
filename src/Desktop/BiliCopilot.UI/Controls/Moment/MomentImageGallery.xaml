@@ -26,6 +26,8 @@
                             VerticalAlignment="Stretch"
                             CornerRadius="{StaticResource ControlCornerRadius}"
                             DecodeWidth="300"
+                            ImageLoaded="OnItemImageLoaded"
+                            PreserveSourceAspect="True"
                             Source="{x:Bind Uri}"
                             Tag="{x:Bind}"
                             Tapped="OnImageTapped" />

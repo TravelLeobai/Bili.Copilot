@@ -69,6 +69,77 @@ internal static class ImageUrlToolkit
     }
 
     /// <summary>
+    /// 把缩略图地址里的「裁剪」参数换成「只限宽」，让服务端按原图比例缩放。
+    /// B 站接口给的动态图片常常自带 <c>@240w_240h_1c.jpg</c> 这种方形裁剪参数，
+    /// 不换掉的话缩略图永远是个正方形，看不出原图是横是竖.
+    /// </summary>
+    /// <param name="source">原 Source（Uri 或 string）.</param>
+    /// <param name="width">目标像素宽度.</param>
+    /// <returns>处理后的 Source；无需处理时返回原对象.</returns>
+    internal static object? BuildAspectPreservingSource(object? source, double width)
+    {
+        if (source is null || width <= 0)
+        {
+            return source;
+        }
+
+        var raw = source switch
+        {
+            Uri uri => uri.OriginalString,
+            string text => text,
+            _ => null,
+        };
+
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return source;
+        }
+
+        var rewritten = BuildAspectPreservingUrl(raw, width);
+        if (string.IsNullOrEmpty(rewritten) || string.Equals(rewritten, raw, StringComparison.Ordinal))
+        {
+            return source;
+        }
+
+        return source is Uri ? new Uri(rewritten) : rewritten;
+    }
+
+    /// <summary>
+    /// 把 <c>@240w_240h_1c.jpg</c> 这类带高度的裁剪参数改写成 <c>@300w.webp</c>；
+    /// 本来就只有宽度（不限高度）时原样返回.
+    /// </summary>
+    internal static string? BuildAspectPreservingUrl(string? url, double width)
+    {
+        if (string.IsNullOrWhiteSpace(url) || width <= 0)
+        {
+            return url;
+        }
+
+        var targetWidth = (int)Math.Ceiling(width);
+        var atIndex = url.IndexOf('@', StringComparison.Ordinal);
+        var queryIndex = url.IndexOf('?', StringComparison.Ordinal);
+        var pathEnd = queryIndex < 0 ? url.Length : queryIndex;
+        var suffix = $"@{targetWidth}w.webp";
+
+        if (atIndex < 0 || atIndex > pathEnd)
+        {
+            // 没有处理参数：直接补一个只限宽的.
+            return queryIndex < 0
+                ? url + suffix
+                : url[..queryIndex] + suffix + url[queryIndex..];
+        }
+
+        // 已有参数：只有带高度的（裁剪）才改写，只限宽的保持原样.
+        var parameter = url[(atIndex + 1)..pathEnd];
+        if (!parameter.Contains("h_", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        return url[..atIndex] + suffix + url[pathEnd..];
+    }
+
+    /// <summary>
     /// 把任意 Source（Uri 或 string）补成缩略图，类型保持不变.
     /// </summary>
     /// <param name="source">原 Source.</param>

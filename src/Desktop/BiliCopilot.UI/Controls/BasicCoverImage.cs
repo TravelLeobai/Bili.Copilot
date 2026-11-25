@@ -10,6 +10,18 @@ namespace BiliCopilot.UI.Controls;
 
 public sealed partial class BasicCoverImage : ImageExBase
 {
+    /// <summary>
+    /// 是否保留原图长宽比。默认 false：沿用调用方给的 <c>@宽_高_1c</c> 方形裁剪地址
+    /// （列表缩略图对齐好看）。置 true 时把地址里的裁剪参数换成「只限宽」，
+    /// 服务端按原比例缩放 —— 动态九宫格需要它才能拿到真实比例.
+    /// </summary>
+    public static readonly DependencyProperty PreserveSourceAspectProperty =
+        DependencyProperty.Register(
+            nameof(PreserveSourceAspect),
+            typeof(bool),
+            typeof(BasicCoverImage),
+            new PropertyMetadata(false, OnPreserveSourceAspectChanged));
+
     // 解码宽度档位：同档位共用一份磁盘缓存与解码结果，不散成一堆相近尺寸.
     private static readonly int[] DecodeBuckets = [64, 96, 128, 160, 200, 256, 320, 400, 480, 600, 720, 960, 1280];
 
@@ -18,6 +30,23 @@ public sealed partial class BasicCoverImage : ImageExBase
     private readonly System.Diagnostics.Stopwatch _loadStopwatch = new();
 
     private bool _isNormalizingSource;
+
+    /// <summary>
+    /// 是否保留原图长宽比.
+    /// </summary>
+    public bool PreserveSourceAspect
+    {
+        get => (bool)GetValue(PreserveSourceAspectProperty);
+        set => SetValue(PreserveSourceAspectProperty, value);
+    }
+
+    private static void OnPreserveSourceAspectChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is BasicCoverImage image)
+        {
+            image.NormalizeSource();
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BasicCoverImage"/> class.
@@ -156,7 +185,9 @@ public sealed partial class BasicCoverImage : ImageExBase
             return;
         }
 
-        var thumbnail = ImageUrlToolkit.BuildThumbnailSource(current, DecodeWidth);
+        var thumbnail = PreserveSourceAspect
+            ? ImageUrlToolkit.BuildAspectPreservingSource(current, DecodeWidth)
+            : ImageUrlToolkit.BuildThumbnailSource(current, DecodeWidth);
         if (thumbnail is null || Equals(thumbnail, current))
         {
             return;
