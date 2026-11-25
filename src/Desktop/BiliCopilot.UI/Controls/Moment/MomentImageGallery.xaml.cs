@@ -37,15 +37,17 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
     private const double MinAspectSingle = 0.68d;
 
     /// <summary>
-    /// 多图时更紧一点：格子一竖，整张动态卡片就跟着长，别让它长成一根棍.
+    /// 多图的下限：格子一竖，整张卡片跟着长，所以比单图/双图收得紧一点，
+    /// 但也不能收到 0.8 —— 漫画长条基本都在 0.5~0.7，收太紧就只剩中间一截.
+    /// 0.5 大约等于「宽 : 高 = 1 : 2」.
     /// </summary>
-    private const double MinAspectMulti = 0.8d;
+    private const double MinAspectMulti = 0.3d;
 
     /// <summary>
     /// 长图双图的下限：两张竖长条并排时允许更瘦，让长图能完整读下来。
     /// 0.35 大约等于「宽 : 高 = 1 : 2.9」，再长就只剩一条线了.
     /// </summary>
-    private const double MinAspectTallPair = 0.35d;
+    private const double MinAspectTallPair = 0.2d;
 
     /// <summary>
     /// 横图最多压到这么扁的比例（宽/高）.
@@ -53,10 +55,10 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
     private const double MaxAspect = 1.6d;
 
     /// <summary>
-    /// 单图高度上限 = 卡片宽 × 这个比例。超了就把图收窄（保比例、不撑满整行），
-    /// 免得一张长图把整张动态卡片顶得老高.
+    /// 单图里竖图取卡片宽的多少：长图本来就不该铺满整行，给一半宽，
+    /// 高度按原比例走，这样长图能整条看完，卡片也不至于宽到离谱.
     /// </summary>
-    private const double SingleImageMaxHeightRatio = 0.55d;
+    private const double SingleImagePortraitWidthRatio = 0.5d;
 
     /// <summary>
     /// 取不到图片尺寸时的兜底比例（正方形）.
@@ -241,8 +243,8 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
     /// 格子小于 <see cref="MinTileEdge"/> 就减一列，直到 1 列。
     /// 格子高度：按这批图片实际的长宽比（取中位数）算，让缩略图尽量接近原图比例、
     /// 少裁一点；同一张动态里的格子比例统一。
-    /// 单图不强求撑满整行：竖图会把宽度收窄，保证高度不超过卡片宽的
-    /// <see cref="SingleImageMaxHeightRatio"/>，免得一张长图把卡片顶得很高。
+    /// 单图不强求撑满整行：横图铺满，竖图只占半行宽、高度按原比例给足，
+    /// 让长图整条能看完，而不是被高度上限压成一小截。
     /// </summary>
     private void UpdateGridMetrics()
     {
@@ -295,9 +297,11 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
         double tileHeight;
         if (isSingle)
         {
-            // 单图：保原图比例。竖图收窄宽度，横图直接用整行宽；高度都有上限.
-            var maxHeight = Math.Max(MinTileEdge, width * SingleImageMaxHeightRatio);
-            tileWidth = Math.Min(tileWidth, Math.Max(MinTileEdge, maxHeight * aspect));
+            // 单图：保原图比例。横图铺满整行；竖图（长图）只占半行宽，
+            // 高度按原比例给足 —— 不再用高度上限把长图压扁或挤成一条.
+            tileWidth = aspect >= 1d
+                ? tileWidth
+                : Math.Max(MinTileEdge, width * SingleImagePortraitWidthRatio);
             tileHeight = tileWidth / aspect;
         }
         else
@@ -368,14 +372,22 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
     {
         _loggedTileWidth = tileWidth;
         _loggedTileHeight = tileHeight;
+        var first = (ItemsSource as IReadOnlyList<BiliImage>)?.FirstOrDefault()?.Uri?.OriginalString;
+        if (first is { Length: > 90 })
+        {
+            first = first[..90];
+        }
+
         Serilog.Log.Information(
-            "动态九宫格：可用宽 {Width:F0}，图 {Count} 张（比例 {Aspect:F2}）→ {Columns} 列，格子 {TileW:F0}x{TileH:F0}",
+            "动态九宫格：可用宽 {Width:F0}，图 {Count} 张（比例 {Aspect:F2}，原始 {Raw:F2}）→ {Columns} 列，格子 {TileW:F0}x{TileH:F0}，首图 {First}",
             width,
             count,
             aspect,
+            _learnedAspect > 0 ? _learnedAspect : -1d,
             columns,
             tileWidth,
-            tileHeight);
+            tileHeight,
+            first);
     }
 
     /// <summary>取中位数：个别长图/宽图不至于把整行带偏.</summary>
