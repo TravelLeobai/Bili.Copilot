@@ -42,6 +42,12 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
     private const double MinAspectMulti = 0.8d;
 
     /// <summary>
+    /// 长图双图的下限：两张竖长条并排时允许更瘦，让长图能完整读下来。
+    /// 0.35 大约等于「宽 : 高 = 1 : 2.9」，再长就只剩一条线了.
+    /// </summary>
+    private const double MinAspectTallPair = 0.35d;
+
+    /// <summary>
     /// 横图最多压到这么扁的比例（宽/高）.
     /// </summary>
     private const double MaxAspect = 1.6d;
@@ -81,6 +87,9 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
 
     /// <summary>解码后学到的比例（取已加载图片的中位数）；0 表示还没学到.</summary>
     private double _learnedAspect;
+
+    /// <summary>兜底重排是否已经排上，避免每张图解码都排一次.</summary>
+    private bool _fallbackScheduled;
 
     /// <summary>本轮已经解码完成的图片比例.</summary>
     private readonly List<double> _loadedAspects = new();
@@ -133,6 +142,7 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
             gallery._hasAppliedLayout = false;
             gallery._learnedAspect = 0d;
             gallery._loadedAspects.Clear();
+            gallery._fallbackScheduled = false;
             gallery._loggedTileWidth = -1d;
             gallery._loggedTileHeight = -1d;
 
@@ -158,8 +168,13 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
         }
 
         var total = (ItemsSource as IReadOnlyList<BiliImage>)?.Count ?? 0;
-        var isSingle = total == 1;
-        _loadedAspects.Add(ClampAspect(image.DecodeWidth / image.DecodeHeight, isSingle));
+
+        // 这里存原始比例，不做夹取：夹取放在应用时按张数分别处理，
+        // 否则长图在取中位数之前就被压到 0.8，后面再也认不出「这是长图」.
+        _loadedAspects.Add(image.DecodeWidth / image.DecodeHeight);
+
+        // 先起一个兜底：有的图会加载失败或迟迟不回来，一直等「全都到齐」就永远不重排了.
+        ScheduleAspectFallback();
 
         // 等这批图都解码完再重排一次：提前重排只会让中位数随解码进度来回跳，
         // 一张卡片连着重排两三次，看着像在抖.
@@ -177,6 +192,32 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
         _learnedAspect = median;
         _aspectReflowCount++;
         QueueReflow();
+    }
+
+    /// <summary>
+    /// 兜底：首张图解码后等一会儿，即使还有图没回来也拿已有比例重排一次，
+    /// 否则只要有一张加载失败，整张卡片就永远停在中位数 1.00（方形）上.
+    /// </summary>
+    private void ScheduleAspectFallback()
+    {
+        if (_fallbackScheduled)
+        {
+            return;
+        }
+
+        _fallbackScheduled = true;
+        _ = Task.Delay(1500).ContinueWith(
+            _ => DispatcherQueue?.TryEnqueue(() =>
+            {
+                if (_learnedAspect > 0 || _loadedAspects.Count == 0 || _aspectReflowCount >= MaxAspectReflows)
+                {
+                    return;
+                }
+
+                _learnedAspect = Median(_loadedAspects);
+                _aspectReflowCount++;
+                QueueReflow();
+            }));
     }
 
     private void QueueReflow()
@@ -235,7 +276,16 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
         var isSingle = count == 1;
 
         // 学到的真实比例优先（列表接口不给宽高）；还没学到就按模型字段，再没有就按正方形.
-        var aspect = _learnedAspect > 0 ? ClampAspect(_learnedAspect, isSingle) : GetRepresentativeAspect(images!, isSingle);
+        var rawAspect = _learnedAspect > 0 ? _learnedAspect : GetRepresentativeAspect(images!, isSingle);
+
+        // 长图双图：两张竖长条并排，各按自己的比例铺满高度（不夹到 0.8 那么严），
+        // 这样两张长图能完整读下来，而不是各裁成一片中介。
+        // 横图（比例 ≥ 1）不受影响，仍走原来的夹取规则.
+        var isTallPair = count == 2 && rawAspect < 1d;
+        var aspect = isTallPair
+            ? Math.Clamp(rawAspect, MinAspectTallPair, 1d)
+            : ClampAspect(rawAspect, isSingle);
+
         _appliedAspect = aspect;
         _hasAppliedLayout = true;
         var stretch = isSingle
