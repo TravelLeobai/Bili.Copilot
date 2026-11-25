@@ -61,6 +61,13 @@
                 <ToggleSwitch IsOn="{x:Bind ViewModel.ReplaceCdnEnabled, Mode=TwoWay}" />
             </base:SettingsCard>
 
+            <base:SettingsCard Description="在本机回环上开一个 Range 代理，播放器从本地字节缓存取流；默认关闭，关掉时播放链路与原来完全一致" Header="媒体字节缓存代理">
+                <base:SettingsCard.HeaderIcon>
+                    <ic:SymbolIcon Symbol="Save" />
+                </base:SettingsCard.HeaderIcon>
+                <ToggleSwitch IsOn="{x:Bind ViewModel.PrefetchProxyEnabled, Mode=TwoWay}" />
+            </base:SettingsCard>
+
             <base:SettingsCard Description="只想修复卡顿时选「仅替换 PCDN 视频」" Header="替换模式">
                 <base:SettingsCard.HeaderIcon>
                     <ic:SymbolIcon Symbol="ContentSettings" />

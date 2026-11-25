@@ -4,6 +4,7 @@ using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Services;
+using BiliCopilot.UI.Services.Media;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
 using BiliCopilot.UI.ViewModels.Items;
@@ -161,6 +162,34 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
         await LoadMediaInfoAsync();
         var (videoUrl, audioUrl) = await GetPlayUrlsAsync();
+
+        // 媒体字节范围代理（设置里默认关闭）：把地址换成 127.0.0.1 上的 Range 代理，
+        // 代理负责缓存 + 合并并发请求 + 只补缺失块。关着、或代理起不来时 TryWrap 原样返回，
+        // 下面这段代码就等于不存在.
+        if (MediaBufferProxyBridge.IsEnabled && (!string.IsNullOrEmpty(videoUrl) || !string.IsNullOrEmpty(audioUrl)))
+        {
+            // 只有音频的场合把音频当主地址包，省掉一套分支.
+            var hasVideo = !string.IsNullOrEmpty(videoUrl);
+            var primaryUrl = hasVideo ? videoUrl : audioUrl!;
+            var secondaryUrl = hasVideo ? audioUrl : null;
+            var proxyRequest = MediaBufferProxyBridge.CreateRequest(
+                ownerKey: $"{_snapshot.Video.Identifier.Id}:{_part.Identifier.Id}",
+                bvid: _snapshot.Video.Identifier.Id,
+                cid: _part.Identifier.Id,
+                displayName: _snapshot.Video.Identifier.Title,
+                videoUrl: primaryUrl,
+                audioUrl: secondaryUrl,
+                playbackInfo: _playbackInfo,
+                quality: ActualQuality,
+                preferCodec: AppToolkit.GetPreferCodecId());
+            var wrapped = MediaBufferProxyBridge.TryWrap(proxyRequest, cookies, logger);
+            if (wrapped.Proxied)
+            {
+                videoUrl = wrapped.VideoUrl;
+                audioUrl = wrapped.AudioUrl;
+            }
+        }
+
         var fileUrl = string.Empty;
         if (!string.IsNullOrEmpty(videoUrl))
         {
