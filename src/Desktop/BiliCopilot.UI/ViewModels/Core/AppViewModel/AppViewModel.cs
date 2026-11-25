@@ -151,6 +151,20 @@ public sealed partial class AppViewModel : ViewModelBase
     [RelayCommand]
     private async Task OpenPlayerAsync(MediaSnapshot snapshot)
     {
+        // 预取诊断：点击这一刻缓存里已经有多少字节。纯记录，失败也不影响播放.
+        try
+        {
+            if (snapshot?.Video is { } clickedVideo)
+            {
+                this.Get<Services.Media.MediaPrefetchScheduler>().NotifyPlaybackStarting(clickedVideo.Identifier.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            // 预取诊断只是记录，任何异常都不该影响播放.
+            Serilog.Log.Debug(ex, "预取诊断记录失败，忽略");
+        }
+
         var playerVM = this.Get<PlayerViewModel>();
         this.Get<AppViewModel>().Players.Add(playerVM);
         await playerVM.InitializeAsync(snapshot);

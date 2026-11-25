@@ -238,6 +238,42 @@ public enum SettingNames
     /// 默认关闭，关掉时播放链路与原来完全一致.
     /// </summary>
     PrefetchProxyEnabled,
+
+    /// <summary>
+    /// 主动预取（实验性）：把视口里卡片的开头若干块提前拉进字节缓存，点击播放时首帧不等网络.
+    /// 默认关闭；需要同时打开 <see cref="PrefetchProxyEnabled"/> 才有效.
+    /// </summary>
+    PrefetchEnabled,
+
+    /// <summary>
+    /// 预取目标秒数：5 / 10 / 30（默认 5）.
+    /// </summary>
+    PrefetchSeconds,
+
+    /// <summary>
+    /// 预取全局并发上限（默认 2）.
+    /// </summary>
+    PrefetchMaxConcurrent,
+
+    /// <summary>
+    /// 预取账本预算（MiB，默认 256）.
+    /// </summary>
+    PrefetchBudgetMiB,
+
+    /// <summary>
+    /// 卡片滚出视口后保留多久（秒，默认 30）.
+    /// </summary>
+    PrefetchRetentionSeconds,
+
+    /// <summary>
+    /// 计量网络（移动网络 / 计费热点）下是否也预取（默认 false）.
+    /// </summary>
+    PrefetchOnMeteredNetwork,
+
+    /// <summary>
+    /// 正在播放时是否暂停其它卡片的预取（默认 true）.
+    /// </summary>
+    PrefetchPauseDuringPlayback,
 }
 
 

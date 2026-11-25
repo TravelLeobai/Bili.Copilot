@@ -31,6 +31,12 @@ public sealed partial class IncrementVerticalScrollControl : LayoutUserControlBa
         set => SetValue(ElementProperty, value);
     }
 
+    /// <summary>
+    /// 内部的 <see cref="ScrollView"/>：给视口哨兵（预取）订阅滚动与尺寸变化用。
+    /// 只暴露读与事件，改滚动位置请走 <see cref="ResetScrollPosition"/> / <see cref="GetScrollPosition"/>.
+    /// </summary>
+    public ScrollView ScrollHost => View;
+
     public ICommand LoadMoreCommand
     {
         get => (ICommand)GetValue(LoadMoreCommandProperty);

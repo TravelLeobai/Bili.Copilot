@@ -24,6 +24,9 @@
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaByteRange.cs" Link="Product\MediaByteRange.cs" />
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaRangeCache.cs" Link="Product\MediaRangeCache.cs" />
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaBufferProxy.cs" Link="Product\MediaBufferProxy.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaSegmentIndex.cs" Link="Product\MediaSegmentIndex.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaPrefetchService.cs" Link="Product\MediaPrefetchService.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaPrefetchPriorityGate.cs" Link="Product\MediaPrefetchPriorityGate.cs" />
   </ItemGroup>
 
 </Project>
