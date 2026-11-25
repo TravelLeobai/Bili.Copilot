@@ -156,6 +156,12 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty]
     private string _proxyServerCn;
 
+    /// <summary>
+    /// 媒体字节范围代理（本机回环 Range 代理 + 字节缓存），默认关闭.
+    /// </summary>
+    [ObservableProperty]
+    private bool _prefetchProxyEnabled;
+
     [ObservableProperty]
     private bool _replaceCdnEnabled;
 

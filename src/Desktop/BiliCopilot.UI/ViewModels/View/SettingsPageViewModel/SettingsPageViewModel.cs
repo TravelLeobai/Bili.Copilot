@@ -103,6 +103,7 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         ProxyServerHk = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerHk, string.Empty);
         ProxyServerTw = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerTw, string.Empty);
         ProxyServerCn = SettingsToolkit.ReadLocalSetting(SettingNames.ProxyServerCn, string.Empty);
+        PrefetchProxyEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.PrefetchProxyEnabled, false);
         ReplaceCdnEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.ReplaceCdnEnabled, true);
         CdnReplaceMode = SettingsToolkit.ReadLocalSetting(SettingNames.CdnReplaceMode, CdnReplaceMode.PcdnOnly);
         CdnReplaceModeIndex = (int)CdnReplaceMode;
@@ -612,6 +613,14 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnProxyServerCnChanged(string value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.ProxyServerCn, value);
+
+    partial void OnPrefetchProxyEnabledChanged(bool value)
+    {
+        // 只写设置：正在播放的那一路继续用已登记的代理地址，
+        // 切换在下次取播放地址时生效（中途停代理会让当前播放直接断流）.
+        SettingsToolkit.WriteLocalSetting(SettingNames.PrefetchProxyEnabled, value);
+        Serilog.Log.Information("媒体字节范围代理开关：{Value}", value);
+    }
 
     partial void OnReplaceCdnEnabledChanged(bool value)
     {

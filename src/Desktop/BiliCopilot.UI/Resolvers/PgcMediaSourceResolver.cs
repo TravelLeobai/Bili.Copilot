@@ -3,6 +3,7 @@
 using BiliCopilot.UI.Extensions;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Services;
+using BiliCopilot.UI.Services.Media;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Toolkits;
 using BiliCopilot.UI.ViewModels.Components;
@@ -106,6 +107,33 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
 
         await LoadMediaInfoAsync();
         var (videoUrl, audioUrl) = await GetPlayUrlsAsync();
+
+        // 同点播：默认关闭的媒体字节范围代理，代理起不来就原样回退.
+        if (MediaBufferProxyBridge.IsEnabled && (!string.IsNullOrEmpty(videoUrl) || !string.IsNullOrEmpty(audioUrl)))
+        {
+            var hasVideo = !string.IsNullOrEmpty(videoUrl);
+            var primaryUrl = hasVideo ? videoUrl : audioUrl!;
+            var secondaryUrl = hasVideo ? audioUrl : null;
+            var cid = _episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var ownerId = _snapshot.Season?.Identifier.Id ?? _episode.Identifier.Id;
+            var proxyRequest = MediaBufferProxyBridge.CreateRequest(
+                ownerKey: $"{ownerId}:{cid}",
+                bvid: ownerId,
+                cid: cid,
+                displayName: title ?? string.Empty,
+                videoUrl: primaryUrl,
+                audioUrl: secondaryUrl,
+                playbackInfo: _playbackInfo,
+                quality: GetCurrentFormat()?.Quality ?? 0,
+                preferCodec: AppToolkit.GetPreferCodecId());
+            var wrapped = MediaBufferProxyBridge.TryWrap(proxyRequest, cookies, logger);
+            if (wrapped.Proxied)
+            {
+                videoUrl = wrapped.VideoUrl;
+                audioUrl = wrapped.AudioUrl;
+            }
+        }
+
         var fileUrl = string.Empty;
         if (!string.IsNullOrEmpty(videoUrl))
         {

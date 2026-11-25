@@ -232,6 +232,12 @@ public enum SettingNames
     BlockLowLevelUsers,
     DanmakuJumpEnabled,
     LastSeasonVideoIds,
+
+    /// <summary>
+    /// 媒体字节范围代理（只在本机回环上开一个 Range 代理，播放器从本地缓存取流）.
+    /// 默认关闭，关掉时播放链路与原来完全一致.
+    /// </summary>
+    PrefetchProxyEnabled,
 }
 
 
