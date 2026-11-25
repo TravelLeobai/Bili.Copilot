@@ -10,6 +10,7 @@ Console.WriteLine();
 RegisterRangeTests();
 RegisterCacheTests();
 RegisterProxyTests();
+FfmpegE2ETest.Register();
 
 var filter = args.Length > 0 ? args[0] : null;
 return await TestHost.RunAsync(filter);
