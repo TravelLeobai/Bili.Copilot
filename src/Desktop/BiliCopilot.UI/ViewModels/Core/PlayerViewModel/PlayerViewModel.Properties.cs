@@ -57,8 +57,12 @@ public sealed partial class PlayerViewModel
     private IReadOnlyList<SponsorSegment> _sponsorSegments = Array.Empty<SponsorSegment>();
     private double _lastSponsorSkipPosition = -1;
     private DateTime _lastSponsorSkipTime = DateTime.MinValue;
-    private bool _sponsorMuteApplied;
-    private double _sponsorMuteBackupVolume = 100;
+
+    /// <summary>
+    /// 片段静音状态（是否压过音量 + 原音量）：进出与换集复位都在这里，
+    /// 不再用两个裸字段（原来换集只清了片段表，漏清静音标记 → 下一集整集没声音）.
+    /// </summary>
+    private readonly Services.Sponsor.SponsorMuteState _sponsorMute = new();
     private bool _isSponsorLoading;
 
     // 应用数据目录只解析一次：LocalFolder 是 WinRT 调用，包在注册/服务被占时会卡死 UI 线程.

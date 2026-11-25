@@ -11,6 +11,8 @@ RegisterRangeTests();
 RegisterCacheTests();
 RegisterProxyTests();
 PrefetchTests.Register();
+SegmentPlannerTests.Register();
+SponsorMuteTests.Register();
 FfmpegE2ETest.Register();
 
 var filter = args.Length > 0 ? args[0] : null;

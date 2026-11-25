@@ -27,6 +27,9 @@
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaSegmentIndex.cs" Link="Product\MediaSegmentIndex.cs" />
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaPrefetchService.cs" Link="Product\MediaPrefetchService.cs" />
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaPrefetchPriorityGate.cs" Link="Product\MediaPrefetchPriorityGate.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SponsorSegment.cs" Link="Product\SponsorSegment.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SegmentPlanner.cs" Link="Product\SegmentPlanner.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SponsorMuteState.cs" Link="Product\SponsorMuteState.cs" />
   </ItemGroup>
 
 </Project>
