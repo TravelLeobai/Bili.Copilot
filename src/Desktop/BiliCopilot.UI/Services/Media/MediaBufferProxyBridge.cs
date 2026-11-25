@@ -351,12 +351,18 @@ internal static class MediaBufferProxyBridge
                 }
             }
 
-            var previousOwner = _state?.ActiveOwnerKey;
+            string? previousOwner = null;
+            lock (Gate)
+            {
+                _state?.ActiveOwnerKeyByBvid.TryGetValue(request.Bvid, out previousOwner);
+            }
+
             if (!string.IsNullOrEmpty(previousOwner) && !string.Equals(previousOwner, request.OwnerKey, StringComparison.Ordinal))
             {
-                // 换集 / 换源：上一路的登记和它的缓存租约在这里释放，别让旧条目被租约钉住.
+                // 同一视频换了分 P / 换源：上一路的登记和它的缓存租约在这里释放，别让旧条目被租约钉住.
+                // 只释放这一条 bvid 的旧登记——别的播放窗口正在用的登记不动.
                 proxy.ReleaseAllOwnedBy(previousOwner);
-                logger?.LogInformation("媒体代理释放上一路登记：{Owner}", previousOwner);
+                logger?.LogInformation("媒体代理释放同一视频的上一路登记：{Owner}", previousOwner);
             }
             else
             {
@@ -370,7 +376,10 @@ internal static class MediaBufferProxyBridge
 
             if (_state is not null)
             {
-                _state.ActiveOwnerKey = request.OwnerKey;
+                lock (Gate)
+                {
+                    _state.ActiveOwnerKeyByBvid[request.Bvid] = request.OwnerKey;
+                }
             }
 
             logger?.LogInformation(
@@ -399,10 +408,24 @@ internal static class MediaBufferProxyBridge
     /// <param name="nextOwnerKey">这一路的归属键，形如 <c>player:{bvid}:{cid}</c>.</param>
     public static void ReleasePreviousOwner(string nextOwnerKey)
     {
+        if (string.IsNullOrEmpty(nextOwnerKey))
+        {
+            return;
+        }
+
+        // 归属键形如 player:{bvid}:{cid}；按 bvid 取「这一路」的上一条，别牵连别的播放窗口.
+        var bvid = TryExtractBvid(nextOwnerKey);
         string? previous;
         lock (Gate)
         {
-            previous = _state?.ActiveOwnerKey;
+            if (bvid is null || _state is null)
+            {
+                previous = null;
+            }
+            else
+            {
+                _state.ActiveOwnerKeyByBvid.TryGetValue(bvid, out previous);
+            }
         }
 
         if (string.IsNullOrEmpty(previous) || string.Equals(previous, nextOwnerKey, StringComparison.Ordinal))
@@ -411,6 +434,17 @@ internal static class MediaBufferProxyBridge
         }
 
         ReleaseOwner(previous);
+    }
+
+    /// <summary>
+    /// 从归属键里取 bvid：<c>player:BV1xx:12345</c> → <c>BV1xx</c>.
+    /// </summary>
+    /// <param name="ownerKey">归属键.</param>
+    /// <returns>bvid；格式不对时返回 null.</returns>
+    private static string? TryExtractBvid(string ownerKey)
+    {
+        var parts = ownerKey.Split(':');
+        return parts.Length >= 2 && !string.IsNullOrEmpty(parts[1]) ? parts[1] : null;
     }
 
     /// <summary>
@@ -428,9 +462,11 @@ internal static class MediaBufferProxyBridge
         proxy.ReleaseAllOwnedBy(ownerKey);
         lock (Gate)
         {
-            if (_state is not null && string.Equals(_state.ActiveOwnerKey, ownerKey, StringComparison.Ordinal))
+            if (_state is not null && TryExtractBvid(ownerKey) is { } bvid
+                && _state.ActiveOwnerKeyByBvid.TryGetValue(bvid, out var active)
+                && string.Equals(active, ownerKey, StringComparison.Ordinal))
             {
-                _state.ActiveOwnerKey = null;
+                _state.ActiveOwnerKeyByBvid.Remove(bvid);
             }
         }
     }
@@ -450,9 +486,19 @@ internal static class MediaBufferProxyBridge
         proxy.ReleaseAllOwnedByPrefix(prefix);
         lock (Gate)
         {
-            if (_state?.ActiveOwnerKey is { } active && active.StartsWith(prefix, StringComparison.Ordinal))
+            if (_state is null)
             {
-                _state.ActiveOwnerKey = null;
+                return;
+            }
+
+            // 前缀是 player:{bvid}: 这种形状：把匹配到的 bvid 条目全部清掉，别留悬空指针.
+            var stale = _state.ActiveOwnerKeyByBvid
+                .Where(p => p.Value.StartsWith(prefix, StringComparison.Ordinal))
+                .Select(p => p.Key)
+                .ToList();
+            foreach (var bvid in stale)
+            {
+                _state.ActiveOwnerKeyByBvid.Remove(bvid);
             }
         }
     }
@@ -508,7 +554,15 @@ internal static class MediaBufferProxyBridge
     {
         public MediaBufferProxy? Proxy { get; set; }
 
-        public string? ActiveOwnerKey { get; set; }
+        /// <summary>
+        /// 按 bvid 记录「这一路当前的归属键」。
+        /// <para>
+        /// 这里刻意不做成全局单值：应用允许多个播放窗口同时存在（<c>AppViewModel.Players</c> 是列表），
+        /// 全局单值会让第二个窗口初始化时把第一个窗口的登记整批释放掉，第一路后续 Range 请求直接 404。
+        /// 按 bvid 分开之后，只有「同一视频换了分 P / 画质」才会释放上一路，不同视频互不影响。
+        /// </para>
+        /// </summary>
+        public Dictionary<string, string> ActiveOwnerKeyByBvid { get; } = new(StringComparer.Ordinal);
 
         public bool StartFailureLogged { get; set; }
     }
