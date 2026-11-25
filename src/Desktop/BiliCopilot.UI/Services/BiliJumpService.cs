@@ -1,5 +1,7 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using BiliCopilot.UI.Models.Constants;
@@ -29,6 +31,9 @@ internal static class BiliJumpService
     {
         Timeout = TimeSpan.FromSeconds(8),
     };
+
+    // bvid#page → cid：换 P 会换键，所以解析结果不会跨分 P 复用.
+    private static readonly ConcurrentDictionary<string, string> CidCache = new(StringComparer.Ordinal);
 
     /// <summary>
     /// 这个来源是否参与查询.
@@ -86,13 +91,38 @@ internal static class BiliJumpService
     }
 
     /// <summary>
-    /// 把 bvid 换成第 1 个分 P 的 cid.
+    /// 把 bvid 换成指定分 P 的 cid.
+    /// <para>
+    /// 这里原来固定取 <c>data[0]</c>（第 1 P），于是多 P 视频从第 3 P 播放时，
+    /// Bilijump 那条查询用的还是第 1 P 的 cid —— 命中的是别人的时间点。
+    /// 现在按 <paramref name="page"/> 取，并按 <c>bvid#page</c> 缓存，
+    /// 所以换 P 一定换 cid（解析结果不会跨分 P 复用）。
+    /// </para>
+    /// <para>
+    /// 有当前分 P 的 cid 时不要调这里：播放器侧已经能直接拿到 cid，
+    /// 这条只当「拿不到 cid 时的兜底」。
+    /// </para>
     /// </summary>
-    public static async Task<string> ResolveCidAsync(string bvid, ILogger? logger = null)
+    /// <param name="bvid">视频 BV 号.</param>
+    /// <param name="page">分 P 序号（1 开始）；&lt; 1 按 1 处理.</param>
+    /// <param name="logger">日志.</param>
+    /// <returns>cid；拿不到返回空串.</returns>
+    public static async Task<string> ResolveCidAsync(string bvid, int page = 1, ILogger? logger = null)
     {
         if (string.IsNullOrEmpty(bvid))
         {
             return string.Empty;
+        }
+
+        if (page < 1)
+        {
+            page = 1;
+        }
+
+        var cacheKey = string.Create(CultureInfo.InvariantCulture, $"{bvid}#{page}");
+        if (CidCache.TryGetValue(cacheKey, out var cachedCid))
+        {
+            return cachedCid;
         }
 
         try
@@ -110,11 +140,19 @@ internal static class BiliJumpService
             using var document = JsonDocument.Parse(text);
             if (document.RootElement.TryGetProperty("data", out var data)
                 && data.ValueKind == JsonValueKind.Array
-                && data.GetArrayLength() > 0
-                && data[0].TryGetProperty("cid", out var cidNode))
+                && data.GetArrayLength() >= page
+                && data[page - 1].TryGetProperty("cid", out var cidNode))
             {
-                return cidNode.ToString();
+                var cid = cidNode.ToString();
+                if (!string.IsNullOrEmpty(cid))
+                {
+                    CidCache[cacheKey] = cid;
+                }
+
+                return cid;
             }
+
+            logger?.LogDebug("取 cid 失败：pagelist 里没有第 {Page} P", page);
         }
         catch (Exception ex)
         {

@@ -24,6 +24,9 @@
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaByteRange.cs" Link="Product\MediaByteRange.cs" />
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaRangeCache.cs" Link="Product\MediaRangeCache.cs" />
     <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Media\MediaBufferProxy.cs" Link="Product\MediaBufferProxy.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SponsorSegment.cs" Link="Product\SponsorSegment.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SegmentPlanner.cs" Link="Product\SegmentPlanner.cs" />
+    <Compile Include="..\..\src\Desktop\BiliCopilot.UI\Services\Sponsor\SponsorMuteState.cs" Link="Product\SponsorMuteState.cs" />
   </ItemGroup>
 
 </Project>

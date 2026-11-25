@@ -14,77 +14,17 @@ using Richasy.WinUIKernel.Share.Toolkits;
 namespace BiliCopilot.UI.Services;
 
 /// <summary>
-/// 需要跳过的片段.
-/// </summary>
-public sealed class SponsorSegment
-{
-    /// <summary>
-    /// 开始时间（秒）.
-    /// </summary>
-    public double Start { get; set; }
-
-    /// <summary>
-    /// 结束时间（秒）.
-    /// </summary>
-    public double End { get; set; }
-
-    /// <summary>
-    /// 片段分类（sponsor / intro / ai / cloud 等）.
-    /// </summary>
-    public string Category { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 片段来源（sponsorblock / cloud / ai）.
-    /// </summary>
-    public string Source { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 备注（Bilijump 云端库给的广告主名称；其它来源为空）.
-    /// </summary>
-    public string Note { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 细节（Bilijump 云端库给的广告内容描述；其它来源为空）.
-    /// </summary>
-    public string Detail { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 动作类型（skip / mute / full），对齐 SponsorBlock 的 actionType.
-    /// </summary>
-    public string ActionType { get; set; } = "skip";
-
-    /// <summary>
-    /// 分类的可读名字（借用 biliuwp-lite 的映射）.
-    /// </summary>
-    public string CategoryName => Category switch
-    {
-        "sponsor" => "赞助广告",
-        "intro" => "开场动画",
-        "outro" => "片尾",
-        "selfpromo" => "自我推广",
-        "interaction" => "三连提醒",
-        "preview" => "预告回顾",
-        "music_offtopic" => "非音乐部分",
-        "poi_highlight" => "精彩时刻",
-        "filler" => "填充内容",
-        "ai" => "AI 识别",
-        "cloud" => "云端数据",
-        _ => Category,
-    };
-
-    /// <summary>
-    /// 时长.
-    /// </summary>
-    public double Duration => Math.Max(0, End - Start);
-}
-
-/// <summary>
 /// SponsorBlock 兼容服务（小电视空降助手 / SponsorBlock 镜像）.
 /// 实现方式参考 hanydd/BilibiliSponsorBlock：
 /// 1. 先用哈希前缀接口 <c>/api/skipSegments/{sha256(bvid)[..4]}</c> 拉同前缀的所有视频再按 videoID 过滤；
 /// 2. 老服务不支持前缀接口时退回 <c>/api/skipSegments?videoID=</c>；
-/// 3. 按 category + actionType 过滤，并做会话内缓存（同一 bvid 5 分钟内不重复请求）。
+/// 3. 按 category + actionType 过滤，并做会话内缓存（同一 bvid + cid 5 分钟内不重复请求）。
 /// </summary>
+/// <remarks>
+/// 缓存键必须带 cid：上游按 bvid 查（B 站视频的时间点是整条的），
+/// 但仓储侧的「片段表」是按分 P 消费的 —— 只用 bvid 做键时，从第 1 P 换到第 3 P
+/// 会命中第 1 P 那次查询的结果，跳过点就落在错的地方。
+/// </remarks>
 public static class SponsorBlockService
 {
     /// <summary>
@@ -221,24 +161,36 @@ public static class SponsorBlockService
     /// 取指定视频的跳过片段.
     /// </summary>
     /// <param name="videoId">视频 BVID.</param>
-    public static async Task<IReadOnlyList<SponsorSegment>> GetSegmentsAsync(string videoId)
-        => await GetSegmentsAsync(videoId, null);
+    public static Task<IReadOnlyList<SponsorSegment>> GetSegmentsAsync(string videoId)
+        => GetSegmentsAsync(videoId, null, null);
 
     /// <summary>
     /// 取指定视频的跳过片段（带日志）.
     /// </summary>
     /// <param name="videoId">视频 BVID.</param>
     /// <param name="logger">日志.</param>
-    public static async Task<IReadOnlyList<SponsorSegment>> GetSegmentsAsync(string videoId, ILogger? logger)
+    public static Task<IReadOnlyList<SponsorSegment>> GetSegmentsAsync(string videoId, ILogger? logger)
+        => GetSegmentsAsync(videoId, null, logger);
+
+    /// <summary>
+    /// 取指定视频的跳过片段（带分 P cid）.
+    /// </summary>
+    /// <param name="videoId">视频 BVID.</param>
+    /// <param name="cid">分 P 的 cid；拿不到时传 null（此时缓存键退化为只有 bvid）.</param>
+    /// <param name="logger">日志.</param>
+    public static async Task<IReadOnlyList<SponsorSegment>> GetSegmentsAsync(string videoId, string? cid, ILogger? logger)
     {
         if (string.IsNullOrWhiteSpace(videoId))
         {
             return Array.Empty<SponsorSegment>();
         }
 
-        if (Cache.TryGetValue(videoId, out var cached) && DateTime.Now - cached.Time < TimeSpan.FromMinutes(5))
+        // 缓存键带 cid：换 P 之后不能复用上一 P 的片段表（见类注释）.
+        // 上游查询本身只认 bvid，所以带 cid 的代价是换 P 会多查一次 —— 换来的是跳对位置.
+        var cacheKey = BuildCacheKey(videoId, cid);
+        if (Cache.TryGetValue(cacheKey, out var cached) && DateTime.Now - cached.Time < TimeSpan.FromMinutes(5))
         {
-            logger?.LogInformation("空降助手命中缓存：{VideoId} {Count} 段", videoId, cached.Segments.Count);
+            logger?.LogInformation("空降助手命中缓存：{VideoId}（cid={Cid}）{Count} 段", videoId, string.IsNullOrEmpty(cid) ? "?" : cid, cached.Segments.Count);
             return cached.Segments;
         }
 
@@ -251,7 +203,7 @@ public static class SponsorBlockService
             var byPrefix = await TryQueryPrefixAsync(server, prefix, videoId, categories, actionTypes, logger);
             if (byPrefix is { Count: > 0 })
             {
-                Cache[videoId] = (DateTime.Now, byPrefix);
+                Cache[cacheKey] = (DateTime.Now, byPrefix);
                 return byPrefix;
             }
 
@@ -259,15 +211,26 @@ public static class SponsorBlockService
             var byVideoId = await TryQueryVideoAsync(server, videoId, categories, actionTypes, logger);
             if (byVideoId is { Count: > 0 })
             {
-                Cache[videoId] = (DateTime.Now, byVideoId);
+                Cache[cacheKey] = (DateTime.Now, byVideoId);
                 return byVideoId;
             }
         }
 
-        logger?.LogWarning("空降助手：所有服务器都没拿到片段（{VideoId}）", videoId);
-        Cache[videoId] = (DateTime.Now, Array.Empty<SponsorSegment>());
+        logger?.LogWarning("空降助手：所有服务器都没拿到片段（{VideoId}，cid={Cid}）", videoId, string.IsNullOrEmpty(cid) ? "?" : cid);
+        Cache[cacheKey] = (DateTime.Now, Array.Empty<SponsorSegment>());
         return Array.Empty<SponsorSegment>();
     }
+
+    /// <summary>
+    /// 计算缓存键：<c>bvid#cid</c>；cid 为空时只用 bvid.
+    /// </summary>
+    /// <param name="videoId">视频 BVID.</param>
+    /// <param name="cid">分 P cid，可为 null.</param>
+    /// <returns>缓存键.</returns>
+    public static string BuildCacheKey(string videoId, string? cid)
+        => string.IsNullOrWhiteSpace(cid)
+            ? videoId ?? string.Empty
+            : string.Concat(videoId ?? string.Empty, "#", cid);
 
     /// <summary>
     /// 计算 SponsorBlock 用的哈希前缀：sha256(bvid) 的十六进制前 4 位.
@@ -484,6 +447,37 @@ public static class SponsorBlockService
             ActionType = string.IsNullOrWhiteSpace(actionType) ? "skip" : actionType,
             Source = "sponsorblock",
         };
+    }
+
+    /// <summary>
+    /// 用户启用的类别集合（读设置；含固定启用的几个类别）.
+    /// <para>
+    /// 对外暴露是为了让合并/校验（<c>SegmentPlanner.Plan</c>）能把「用户关掉的类别」
+    /// 从四路来源的并集里一起剔掉 —— 原来只有 SponsorBlock 那一路在解析时过滤，
+    /// AI / 云端 / Bilijump 的路子绕过了这道闸.
+    /// </para>
+    /// </summary>
+    /// <returns>类别集合（大小写不敏感）.</returns>
+    public static IReadOnlySet<string> GetEnabledCategories() => GetEnabledCategorySet();
+
+    /// <summary>
+    /// 合并/校验阶段用的类别白名单：用户启用的类别 + 那些「没有独立类别开关」的来源类别.
+    /// <para>
+    /// 为什么不直接拿 <see cref="GetEnabledCategories"/> 去过滤四路来源的并集：
+    /// 那张集合只描述 SponsorBlock 的类别词表（sponsor / intro / outro …），
+    /// AI 与云端来源用的是 <c>ai</c> / <c>cloud</c>，它们由各自的总开关控制，
+    /// 拿前者过滤会把这两路整批删掉.
+    /// </para>
+    /// </summary>
+    /// <returns>白名单类别集合.</returns>
+    public static IReadOnlySet<string> GetPlanCategoryAllowList()
+    {
+        var set = new HashSet<string>(GetEnabledCategorySet(), StringComparer.OrdinalIgnoreCase)
+        {
+            "ai",
+            "cloud",
+        };
+        return set;
     }
 
     private static HashSet<string> GetEnabledCategorySet()
