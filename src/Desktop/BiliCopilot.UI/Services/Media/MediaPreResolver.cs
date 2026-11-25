@@ -183,6 +183,8 @@ internal sealed class MediaPreResolver
     /// <param name="title">标题（日志用，可为 null）.</param>
     /// <param name="ownerKey">归属键（页面级；预取登记会加上预取前缀）.</param>
     /// <param name="cancellationToken">取消.</param>
+    /// <param name="preferCid">卡片已经确定的分 P cid；为空时按第一个分 P.</param>
+    /// <param name="preferQuality">卡片已经确定的画质 qn；0 表示交给设置里的画质偏好决策.</param>
     /// <returns>结果；无法预取（番剧 / 无音视频轨 / 请求失败）时返回 null.</returns>
     public async Task<MediaPreResolutionResult?> ResolveAsync(
         string videoId,
