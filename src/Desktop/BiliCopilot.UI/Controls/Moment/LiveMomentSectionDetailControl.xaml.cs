@@ -107,10 +107,6 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
         Services.StartupTrace.Mark("LiveCard:loaded", $"items={ViewModel?.Items.Count ?? -1}");
         UpdateItemWidth();
 
-        // 底部哨兵挂到外层 ScrollViewer 上；同时盯住集合变化，
-        // 首屏卡片到齐后补到撑满一屏就停.
-        _pager?.Reset();
-        _pager?.Attach(CardSentinel);
         if (ViewModel is not null)
         {
             ViewModel.Items.CollectionChanged -= OnItemsCollectionChanged;
@@ -121,14 +117,29 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
 
         // 首帧尺寸可能还是 0，下一轮调度再算一次；顺手把滚动偏移归零，
         // 否则第一行卡片上半截（作者头像行）会被初始偏移切掉.
+        //
+        // 注意：哨兵挂载（订阅外层 ScrollView.ViewChanged）与 ChangeView 都必须放到这里，
+        // 不能在 Loaded 里同步做 —— 在 Loaded 里紧接着 UpdateItemWidth 改 MinItemWidth
+        // 会在同一次布局 pass 里引发滚动宿主重入，实测直接 0xc000027b（CoreMessagingXP
+        // FailFast，XAML 里 catch 不到），表现为启动就退出、且不产生 managed crash 日志.
         this.Get<Microsoft.UI.Dispatching.DispatcherQueue>().TryEnqueue(
             Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
             () =>
             {
                 UpdateItemWidth();
+
+                // 底部哨兵挂到外层 ScrollViewer 上；同时盯住集合变化，
+                // 首屏卡片到齐后补到撑满一屏就停.
+                _pager?.Reset();
+                _pager?.Attach(CardSentinel);
+
                 try
                 {
-                    CardScroller?.ChangeView(null, 0, null, true);
+                    // 已经在顶端就别碰 ChangeView：重复设置偏移同样会扰动滚动宿主.
+                    if (CardScroller is { VerticalOffset: > 0.5 })
+                    {
+                        CardScroller.ChangeView(null, 0, null, true);
+                    }
                 }
                 catch
                 {
@@ -143,7 +154,10 @@ public sealed partial class LiveMomentSectionDetailControl : LiveSectionControlB
                     {
                         try
                         {
-                            CardScroller?.ChangeView(null, 0, null, true);
+                            if (CardScroller is { VerticalOffset: > 0.5 })
+                            {
+                                CardScroller.ChangeView(null, 0, null, true);
+                            }
                         }
                         catch
                         {
