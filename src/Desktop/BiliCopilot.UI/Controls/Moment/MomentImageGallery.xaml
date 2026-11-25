@@ -5,21 +5,23 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:appearance="using:Richasy.BiliKernel.Models.Appearance"
     xmlns:base="using:Richasy.WinUIKernel.Share.Base"
-    xmlns:components="using:BiliCopilot.UI.Controls.Components"
     xmlns:controls="using:BiliCopilot.UI.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:BiliCopilot.UI.Controls.Moment"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <!--
+        九宫格随卡片宽度自适应：列数与格子尺寸由代码按可用宽度算，
+        这里只给 UniformGridLayout 一个初值（ItemsStretch=Fill 让格子铺满整行）。
+        格子不再写死 120×120 —— 固定尺寸正是「窄卡片里图片被裁掉、宽卡片里留大片空白」的原因.
+    -->
     <Grid>
         <ItemsRepeater x:Name="ImageRepeater" ItemsSource="{x:Bind ItemsSource, Mode=OneWay}">
             <ItemsRepeater.ItemTemplate>
                 <DataTemplate x:DataType="appearance:BiliImage">
-                    <Grid>
+                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                         <controls:BasicCoverImage
-                            Width="120"
-                            Height="120"
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             CornerRadius="{StaticResource ControlCornerRadius}"
@@ -31,10 +33,16 @@
                 </DataTemplate>
             </ItemsRepeater.ItemTemplate>
             <ItemsRepeater.Layout>
-                <ColumnMajorUniformToLargestGridLayout
-                    ColumnSpacing="4"
-                    MaxColumns="3"
-                    RowSpacing="4" />
+                <UniformGridLayout
+                    x:Name="ImageLayout"
+                    ItemsJustification="Start"
+                    ItemsStretch="Fill"
+                    MaximumRowsOrColumns="3"
+                    MinColumnSpacing="4"
+                    MinItemHeight="120"
+                    MinItemWidth="120"
+                    MinRowSpacing="4"
+                    Orientation="Horizontal" />
             </ItemsRepeater.Layout>
         </ItemsRepeater>
     </Grid>
