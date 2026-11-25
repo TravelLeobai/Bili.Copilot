@@ -319,6 +319,7 @@ internal static class MediaBufferProxyBridge
             });
 
             string? audioProxyUrl = null;
+            MediaProxyRegistration? audioRegistration = null;
             if (!string.IsNullOrEmpty(request.AudioUrl) && !MediaBufferProxy.IsProxyUrl(request.AudioUrl))
             {
                 try
@@ -333,7 +334,7 @@ internal static class MediaBufferProxyBridge
                         null,
                         null,
                         request.AudioUrl);
-                    var audioRegistration = proxy.Register(new MediaStreamSourceDescriptor(request.AudioUrl, audioIdentity)
+                    audioRegistration = proxy.Register(new MediaStreamSourceDescriptor(request.AudioUrl, audioIdentity)
                     {
                         Cookie = cookie,
                         Referer = InternalHttpExtensions.VideoReferer,
@@ -353,7 +354,18 @@ internal static class MediaBufferProxyBridge
             var previousOwner = _state?.ActiveOwnerKey;
             if (!string.IsNullOrEmpty(previousOwner) && !string.Equals(previousOwner, request.OwnerKey, StringComparison.Ordinal))
             {
+                // 换集 / 换源：上一路的登记和它的缓存租约在这里释放，别让旧条目被租约钉住.
                 proxy.ReleaseAllOwnedBy(previousOwner);
+                logger?.LogInformation("媒体代理释放上一路登记：{Owner}", previousOwner);
+            }
+            else
+            {
+                // 同一归属键重复包装（换画质 / 换播放地址）：旧的那几条已经没有播放器在用，
+                // 只留这次刚登记的两条，避免同一集攒下多份租约.
+                var keep = audioRegistration is null
+                    ? new[] { videoRegistration.Id }
+                    : new[] { videoRegistration.Id, audioRegistration.Id };
+                proxy.ReleaseAllOwnedBy(request.OwnerKey, keep);
             }
 
             if (_state is not null)
@@ -377,7 +389,32 @@ internal static class MediaBufferProxyBridge
     }
 
     /// <summary>
-    /// 释放一个归属键下的全部登记（换集 / 换源时用）.
+    /// 换集 / 换源时调用：如果上一路播放的归属键和 <paramref name="nextOwnerKey"/> 不同，
+    /// 就释放上一路的全部登记（连带缓存租约）。
+    /// <para>
+    /// 解析器是 transient 的（每次初始化都是新实例），所以「上一路的归属键」由本桥接层持有，
+    /// 解析器只负责在 Initialize 里报一次「这一路是谁」。
+    /// </para>
+    /// </summary>
+    /// <param name="nextOwnerKey">这一路的归属键，形如 <c>player:{bvid}:{cid}</c>.</param>
+    public static void ReleasePreviousOwner(string nextOwnerKey)
+    {
+        string? previous;
+        lock (Gate)
+        {
+            previous = _state?.ActiveOwnerKey;
+        }
+
+        if (string.IsNullOrEmpty(previous) || string.Equals(previous, nextOwnerKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        ReleaseOwner(previous);
+    }
+
+    /// <summary>
+    /// 释放一个归属键下的全部登记（换集 / 换源 / 播放器销毁时用）.
     /// </summary>
     /// <param name="ownerKey">归属键.</param>
     public static void ReleaseOwner(string ownerKey)
@@ -392,6 +429,28 @@ internal static class MediaBufferProxyBridge
         lock (Gate)
         {
             if (_state is not null && string.Equals(_state.ActiveOwnerKey, ownerKey, StringComparison.Ordinal))
+            {
+                _state.ActiveOwnerKey = null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 释放归属键以某个前缀开头的全部登记（拿不到 cid 时按 bvid 前缀整片释放）.
+    /// </summary>
+    /// <param name="prefix">归属键前缀，例如 <c>player:BV1xx:</c>.</param>
+    public static void ReleaseOwnerPrefix(string prefix)
+    {
+        var proxy = Shared;
+        if (proxy is null || string.IsNullOrEmpty(prefix))
+        {
+            return;
+        }
+
+        proxy.ReleaseAllOwnedByPrefix(prefix);
+        lock (Gate)
+        {
+            if (_state?.ActiveOwnerKey is { } active && active.StartsWith(prefix, StringComparison.Ordinal))
             {
                 _state.ActiveOwnerKey = null;
             }

@@ -522,7 +522,44 @@ public sealed class MediaPrefetchService : IDisposable
             OwnerKey = PrefetchOwnerPrefix + (source.OwnerKey ?? string.Empty),
         };
         var registration = _proxy.Register(descriptor);
-        return AttachCore(registration, value, ownsRegistration: true);
+        try
+        {
+            AfterRegistrationHook?.Invoke(registration);
+            return AttachCore(registration, value, ownsRegistration: true);
+        }
+        finally
+        {
+            // Register 成功之后的任何一步失败都必须把登记还回去：
+            // 漏一条登记就漏一个缓存租约，那个条目会被永久钉住（有租约的条目不允许淘汰）.
+            if (!IsTargetAttached(registration))
+            {
+                try
+                {
+                    registration.Dispose();
+                }
+                catch
+                {
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 测试用注入点：登记成功后、挂目标之前调一次。测试里让它抛异常，
+    /// 验证「Register 之后任何一步失败，登记与租约都必须被释放」的 finally 路径；
+    /// 生产代码里保持 null（不参与任何行为）.
+    /// </summary>
+    internal Action<MediaProxyRegistration>? AfterRegistrationHook { get; set; }
+
+    /// <summary>
+    /// 这条登记是否已经挂在某个存活目标上（挂上了就归目标管，不能在这里释放）.
+    /// </summary>
+    private bool IsTargetAttached(MediaProxyRegistration registration)
+    {
+        lock (_gate)
+        {
+            return _targets.Any(p => string.Equals(p.Id, registration.Id, StringComparison.Ordinal));
+        }
     }
 
     /// <summary>

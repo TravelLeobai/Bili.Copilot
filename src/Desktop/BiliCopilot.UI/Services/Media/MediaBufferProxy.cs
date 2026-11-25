@@ -126,9 +126,24 @@ public sealed class MediaProxyOptions
     public TimeSpan RequestHeaderTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
     /// <summary>
-    /// 登记空闲多久后自动释放（默认 45 分钟）.
+    /// 登记空闲多久后自动释放（默认 3 分钟）.
+    /// <para>
+    /// 登记持有缓存租约，而带租约的条目不允许被淘汰；空闲回收窗口过长（原本是 45 分钟）会让
+    /// 连播多个视频后缓存写不进去、内存一直顶在容量上限。现在降到 3 分钟：换集 / 关播放器时
+    /// 还会主动释放，这是最后的兜底。
+    /// </para>
     /// </summary>
-    public TimeSpan RegistrationIdleTimeout { get; set; } = TimeSpan.FromMinutes(45);
+    public TimeSpan RegistrationIdleTimeout { get; set; } = TimeSpan.FromMinutes(3);
+
+    /// <summary>
+    /// 空闲登记回收的扫描间隔（默认 1 分钟；测试里可以调小）.
+    /// </summary>
+    public TimeSpan JanitorInterval { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// 时钟（测试里可以注入可控时钟来验证空闲回收，生产环境保持 <see cref="TimeProvider.System"/>）.
+    /// </summary>
+    public TimeProvider TimeProvider { get; set; } = TimeProvider.System;
 
     /// <summary>
     /// 上游 403 / 412 / 429 的最大重试次数（指数退避），默认 2.
@@ -144,7 +159,7 @@ public sealed class MediaProxyRegistration : IDisposable
 {
     private readonly MediaBufferProxy _proxy;
     private int _disposed;
-    private long _lastAccessTicks = Environment.TickCount64;
+    private long _lastAccessTicks;
 
     internal MediaProxyRegistration(MediaBufferProxy proxy, string id, string proxyUrl, MediaStreamSourceDescriptor source, MediaCacheLease lease)
     {
@@ -153,6 +168,7 @@ public sealed class MediaProxyRegistration : IDisposable
         ProxyUrl = proxyUrl;
         Source = source;
         Lease = lease;
+        _lastAccessTicks = proxy.NowTicks;
     }
 
     /// <summary>
@@ -199,7 +215,7 @@ public sealed class MediaProxyRegistration : IDisposable
 
     internal long LastAccessTicks => Volatile.Read(ref _lastAccessTicks);
 
-    internal void Touch() => Volatile.Write(ref _lastAccessTicks, Environment.TickCount64);
+    internal void Touch() => Volatile.Write(ref _lastAccessTicks, _proxy.NowTicks);
 
     /// <inheritdoc/>
     public void Dispose()
@@ -270,11 +286,16 @@ public sealed class MediaBufferProxy : IDisposable
     private readonly MediaProxyOptions _options;
     private readonly MediaRangeCache _cache;
     private readonly ConcurrentDictionary<string, MediaProxyRegistration> _registrations = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, Lazy<Task<byte[]?>>> _blockFlights = new(StringComparer.Ordinal);
-    private readonly CancellationTokenSource _cts = new();
+    private readonly ConcurrentDictionary<string, BlockFlight> _blockFlights = new(StringComparer.Ordinal);
     private readonly HttpClient _upstream;
+    private readonly TimeProvider _time;
 
+    // 监听与取消源都在 Stop() 里按「先停监听、等后台循环退出、再释放 CTS」的顺序处理，
+    // 分析器看不到这条间接路径，所以这里显式说明（否则 CA2213 会当成泄漏）.
+#pragma warning disable CA2213 // Disposable fields should be disposed
+    private CancellationTokenSource? _cts;
     private TcpListener? _listener;
+#pragma warning restore CA2213
     private Task? _acceptTask;
     private Task? _janitorTask;
     private string _sessionToken = string.Empty;
@@ -293,6 +314,7 @@ public sealed class MediaBufferProxy : IDisposable
     public MediaBufferProxy(MediaProxyOptions? options = null)
     {
         _options = options ?? new MediaProxyOptions();
+        _time = _options.TimeProvider ?? TimeProvider.System;
         _cache = new MediaRangeCache(_options.CapacityBytes, _options.BlockSize);
         var handler = new SocketsHttpHandler
         {
@@ -337,6 +359,16 @@ public sealed class MediaBufferProxy : IDisposable
     public string SessionToken => _sessionToken;
 
     /// <summary>
+    /// 当前时钟的 UTC ticks（空闲回收用；测试可以注入可控时钟）.
+    /// </summary>
+    internal long NowTicks => _time.GetUtcNow().UtcTicks;
+
+    /// <summary>
+    /// 代理自身的取消令牌；停止后给出一个已取消的令牌（任何残留循环立即退出）.
+    /// </summary>
+    private CancellationToken ProxyToken => _cts?.Token ?? new CancellationToken(canceled: true);
+
+    /// <summary>
     /// 判断一个地址是不是本代理给出的地址（避免重复包装）.
     /// </summary>
     /// <param name="url">播放地址.</param>
@@ -367,21 +399,103 @@ public sealed class MediaBufferProxy : IDisposable
 
         try
         {
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start(16);
             Port = ((IPEndPoint)listener.LocalEndpoint).Port;
             _sessionToken = _options.SessionToken ?? CreateToken();
             _listener = listener;
-            _acceptTask = Task.Run(AcceptLoopAsync);
-            _janitorTask = Task.Run(JanitorLoopAsync);
+            _acceptTask = Task.Run(() => AcceptLoopAsync(listener, token));
+            _janitorTask = Task.Run(() => JanitorLoopAsync(token));
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
             LogMessage(MediaProxyLogLevel.Information, string.Create(CultureInfo.InvariantCulture, $"媒体代理已启动：127.0.0.1:{Port}（块 {_cache.BlockSize / 1024} KiB，上限 {_cache.CapacityBytes / 1024 / 1024} MiB）"));
         }
         catch (Exception)
         {
-            Interlocked.Exchange(ref _started, 0);
-            _listener = null;
+            Stop();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 停止监听：释放全部登记（连带缓存租约）、断开在飞的上游下载、清空缓存、等后台循环退出.
+    /// 幂等，且停止后可以再次 <see cref="Start"/>（应用退出时由 <see cref="Dispose"/> 调用）.
+    /// </summary>
+    public void Stop()
+    {
+        var cts = Interlocked.Exchange(ref _cts, null);
+        var listener = Interlocked.Exchange(ref _listener, null);
+        if (cts is null && listener is null && Volatile.Read(ref _started) == 0)
+        {
+            return;
+        }
+
+        Interlocked.Exchange(ref _started, 0);
+        try
+        {
+            cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        try
+        {
+            listener?.Stop();
+            listener?.Dispose();
+        }
+        catch
+        {
+        }
+
+        // 等后台循环真的退出：留着它们就是在退出阶段留后台线程.
+        WaitQuietly(Interlocked.Exchange(ref _acceptTask, null));
+        WaitQuietly(Interlocked.Exchange(ref _janitorTask, null));
+
+        // 在飞的块下载一律断掉（取消后不写缓存），再释放登记与缓存.
+        foreach (var flight in _blockFlights.Values)
+        {
+            flight.Cancel();
+        }
+
+        foreach (var id in _registrations.Keys.ToArray())
+        {
+            Release(id);
+        }
+
+        _blockFlights.Clear();
+
+        // 登记全释放后缓存里已经没有租约保护的块：整表清掉，别让下一次播放接着背这份内存.
+        _cache.Clear();
+
+        AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
+        Port = 0;
+        try
+        {
+            cts?.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        LogMessage(MediaProxyLogLevel.Information, "媒体代理已停止");
+    }
+
+    private static void WaitQuietly(Task? task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        try
+        {
+            task.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            // 后台循环的异常不影响停止流程.
         }
     }
 
@@ -417,10 +531,23 @@ public sealed class MediaBufferProxy : IDisposable
         // 在「没有 moov 的 DASH 分片」上容易判错；扩展名只是给播放器的提示，代理不读它.
         var url = string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{Port}{PathRoot}{_sessionToken}/{id}{GetUrlExtension(descriptor.Identity)}");
         var lease = _cache.AcquireLease(descriptor.Identity);
-        var registration = new MediaProxyRegistration(this, id, url, descriptor, lease);
-        _registrations[id] = registration;
-        LogMessage(MediaProxyLogLevel.Debug, $"登记媒体源 {id}：{Describe(descriptor)}");
-        return registration;
+        var committed = false;
+        try
+        {
+            var registration = new MediaProxyRegistration(this, id, url, descriptor, lease);
+            _registrations[id] = registration;
+            committed = true;
+            LogMessage(MediaProxyLogLevel.Debug, $"登记媒体源 {id}：{Describe(descriptor)}");
+            return registration;
+        }
+        finally
+        {
+            // 登记没建成时租约必须还回去：漏一个租约就会把整个缓存条目永久钉住（不可淘汰）.
+            if (!committed)
+            {
+                lease.Dispose();
+            }
+        }
     }
 
     /// <summary>
@@ -443,9 +570,59 @@ public sealed class MediaBufferProxy : IDisposable
     /// </summary>
     /// <param name="ownerKey">归属键.</param>
     /// <returns>释放条数.</returns>
-    public int ReleaseAllOwnedBy(string ownerKey)
+    public int ReleaseAllOwnedBy(string ownerKey) => ReleaseAllOwnedBy(ownerKey, null);
+
+    /// <summary>
+    /// 释放某个归属键下的登记，可以排除若干「刚登记、正在用」的 id.
+    /// <para>
+    /// 同一个归属键重复包装（换画质 / 换播放地址）时，旧的那些登记已经没有播放器在用，
+    /// 用排除表留住新登记、把旧的立刻放掉，避免同一集攒下多份租约.
+    /// </para>
+    /// </summary>
+    /// <param name="ownerKey">归属键.</param>
+    /// <param name="exceptIds">要保留的登记 id；为 null 表示不排除.</param>
+    /// <returns>释放条数.</returns>
+    public int ReleaseAllOwnedBy(string ownerKey, IReadOnlyCollection<string>? exceptIds)
     {
         if (string.IsNullOrEmpty(ownerKey))
+        {
+            return 0;
+        }
+
+        var keep = exceptIds is { Count: > 0 } ? new HashSet<string>(exceptIds, StringComparer.Ordinal) : null;
+        var count = 0;
+        foreach (var pair in _registrations)
+        {
+            if (!string.Equals(pair.Value.Source.OwnerKey, ownerKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (keep is not null && keep.Contains(pair.Key))
+            {
+                continue;
+            }
+
+            Release(pair.Key);
+            count++;
+        }
+
+        if (count > 0)
+        {
+            LogMessage(MediaProxyLogLevel.Debug, $"按归属键释放 {count} 条登记");
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// 释放归属键以 <paramref name="prefix"/> 开头的全部登记（拿不到 cid 时按 bvid 前缀释放）.
+    /// </summary>
+    /// <param name="prefix">归属键前缀，例如 <c>player:BV1xx:</c>.</param>
+    /// <returns>释放条数.</returns>
+    public int ReleaseAllOwnedByPrefix(string prefix)
+    {
+        if (string.IsNullOrEmpty(prefix))
         {
             return 0;
         }
@@ -453,7 +630,7 @@ public sealed class MediaBufferProxy : IDisposable
         var count = 0;
         foreach (var pair in _registrations)
         {
-            if (string.Equals(pair.Value.Source.OwnerKey, ownerKey, StringComparison.Ordinal))
+            if (pair.Value.Source.OwnerKey.StartsWith(prefix, StringComparison.Ordinal))
             {
                 Release(pair.Key);
                 count++;
@@ -462,7 +639,7 @@ public sealed class MediaBufferProxy : IDisposable
 
         if (count > 0)
         {
-            LogMessage(MediaProxyLogLevel.Debug, $"按归属键释放 {count} 条登记");
+            LogMessage(MediaProxyLogLevel.Debug, $"按归属键前缀释放 {count} 条登记");
         }
 
         return count;
@@ -491,34 +668,9 @@ public sealed class MediaBufferProxy : IDisposable
             return;
         }
 
-        try
-        {
-            _cts.Cancel();
-        }
-        catch
-        {
-        }
-
-        try
-        {
-            _listener?.Stop();
-            _listener?.Dispose();
-        }
-        catch
-        {
-        }
-
-        foreach (var id in _registrations.Keys.ToArray())
-        {
-            Release(id);
-        }
-
-        _blockFlights.Clear();
+        // 停止 = 释放全部登记（连带缓存租约）、断开在飞下载、清空缓存、等后台循环退出.
+        Stop();
         _upstream.Dispose();
-        _cts.Dispose();
-        AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
-        Interlocked.Exchange(ref _started, 0);
-        LogMessage(MediaProxyLogLevel.Information, "媒体代理已停止");
     }
 
     /// <summary>
@@ -586,20 +738,14 @@ public sealed class MediaBufferProxy : IDisposable
 
     private void OnProcessExit(object? sender, EventArgs e) => Dispose();
 
-    private async Task AcceptLoopAsync()
+    private async Task AcceptLoopAsync(TcpListener listener, CancellationToken token)
     {
-        var listener = _listener;
-        if (listener is null)
-        {
-            return;
-        }
-
-        while (!_cts.IsCancellationRequested)
+        while (!token.IsCancellationRequested)
         {
             TcpClient client;
             try
             {
-                client = await listener.AcceptTcpClientAsync(_cts.Token);
+                client = await listener.AcceptTcpClientAsync(token);
             }
             catch (OperationCanceledException)
             {
@@ -620,18 +766,21 @@ public sealed class MediaBufferProxy : IDisposable
         }
     }
 
-    private async Task JanitorLoopAsync()
+    private async Task JanitorLoopAsync(CancellationToken token)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(2));
+        var interval = _options.JanitorInterval > TimeSpan.Zero ? _options.JanitorInterval : TimeSpan.FromMinutes(1);
+        var idleLimit = _options.RegistrationIdleTimeout > TimeSpan.Zero ? _options.RegistrationIdleTimeout : TimeSpan.FromMinutes(3);
+        using var timer = new PeriodicTimer(interval);
         try
         {
-            while (await timer.WaitForNextTickAsync(_cts.Token))
+            while (await timer.WaitForNextTickAsync(token))
             {
-                var idleLimit = (long)_options.RegistrationIdleTimeout.TotalMilliseconds;
-                var now = Environment.TickCount64;
+                var now = NowTicks;
+                var idleTicks = idleLimit.Ticks;
                 foreach (var pair in _registrations)
                 {
-                    if (now - pair.Value.LastAccessTicks > idleLimit)
+                    // 只回收「空闲超时」的登记；租约本身由登记持有，释放登记就把租约一起还回去了.
+                    if (now - pair.Value.LastAccessTicks > idleTicks)
                     {
                         Release(pair.Key);
                         LogMessage(MediaProxyLogLevel.Debug, $"回收空闲登记 {pair.Key}");
@@ -640,6 +789,9 @@ public sealed class MediaBufferProxy : IDisposable
             }
         }
         catch (OperationCanceledException)
+        {
+        }
+        catch (ObjectDisposedException)
         {
         }
         catch (Exception ex)
@@ -657,7 +809,7 @@ public sealed class MediaBufferProxy : IDisposable
                 client.NoDelay = true;
                 var stream = client.GetStream();
                 RequestHead? head;
-                using (var headerCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token))
+                using (var headerCts = CancellationTokenSource.CreateLinkedTokenSource(ProxyToken))
                 {
                     headerCts.CancelAfter(_options.RequestHeaderTimeout);
                     head = await ReadRequestHeadAsync(stream, headerCts.Token);
@@ -669,7 +821,34 @@ public sealed class MediaBufferProxy : IDisposable
                 }
 
                 Interlocked.Increment(ref _requestCount);
-                await DispatchAsync(stream, head, _cts.Token);
+
+                // 请求方（播放器）中途断开时，在飞的上游块下载也要跟着断：
+                // 挂一个「读等 FIN」的哨兵，读到 0 字节就把本次请求的 token 取消掉，
+                // 于是块下载不会再把没人要的数据写进缓存.
+                using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ProxyToken);
+                var watcher = WatchClientAsync(stream, connectionCts);
+                try
+                {
+                    await DispatchAsync(stream, head, connectionCts.Token);
+                }
+                finally
+                {
+                    try
+                    {
+                        await connectionCts.CancelAsync();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                    }
+
+                    try
+                    {
+                        await watcher;
+                    }
+                    catch
+                    {
+                    }
+                }
             }
             catch (OperationCanceledException)
             {
@@ -684,6 +863,44 @@ public sealed class MediaBufferProxy : IDisposable
             {
                 LogMessage(MediaProxyLogLevel.Warning, "处理请求异常：" + ex.GetType().Name);
             }
+        }
+    }
+
+    /// <summary>
+    /// 请求方断连哨兵：连接是全双工的，客户端在这条连接上不会再发任何数据，
+    /// 所以这里有数据可读只有两种可能 —— 对端关闭（读到 0 字节）或非预期的管线化请求.
+    /// 读到 0 就把本次请求的 token 取消，让在飞的块下载立刻停下（取消后不写缓存）.
+    /// </summary>
+    private static async Task WatchClientAsync(NetworkStream stream, CancellationTokenSource connectionCts)
+    {
+        var buffer = new byte[1];
+        try
+        {
+            while (!connectionCts.IsCancellationRequested)
+            {
+                var read = await stream.ReadAsync(buffer, connectionCts.Token);
+                if (read <= 0)
+                {
+                    try
+                    {
+                        await connectionCts.CancelAsync();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                    }
+
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (IOException)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
@@ -878,6 +1095,11 @@ public sealed class MediaBufferProxy : IDisposable
 
     /// <summary>
     /// 取一个完整的块：内存命中直接给；否则走「同一块只下一次 flight」.
+    /// <para>
+    /// <paramref name="ct"/> 是请求方（播放器）的取消令牌：它一取消，这个等待者立刻退出，
+    /// 而且如果它是这条 flight 的最后一个等待者，上游下载会被一起取消 —— 半截块不会被写进缓存，
+    /// 下一次同一 range 的请求会重新开一条 flight 重新拉.
+    /// </para>
     /// </summary>
     private async Task<byte[]?> GetBlockAsync(MediaProxyRegistration registration, int blockIndex, CancellationToken ct)
     {
@@ -888,18 +1110,10 @@ public sealed class MediaBufferProxy : IDisposable
         }
 
         var key = string.Concat(registration.Id, "#", blockIndex.ToString(CultureInfo.InvariantCulture));
-        // Lazy<Task<T>> 在这里只当「同一个块只下一个 flight」的闸门：
-        // Value 拿到的是立刻丢到线程池跑的任务，工厂里没有任何同步上下文 / 主线程依赖，
-        // 所以 VSTHRD011 说的死锁条件不成立（见 vs-threading 文档：风险在于工厂需要主线程）.
-#pragma warning disable VSTHRD011 // Use AsyncLazy<T>
-        var lazy = _blockFlights.GetOrAdd(
-            key,
-            _ => new Lazy<Task<byte[]?>>(() => FetchBlockAsync(registration, blockIndex, key), LazyThreadSafetyMode.ExecutionAndPublication));
-#pragma warning restore VSTHRD011
-
+        var flight = JoinFlight(key, registration, blockIndex);
         try
         {
-            return await lazy.Value.WaitAsync(ct);
+            return await flight.Task.WaitAsync(ct);
         }
         catch (OperationCanceledException)
         {
@@ -910,46 +1124,84 @@ public sealed class MediaBufferProxy : IDisposable
             LogMessage(MediaProxyLogLevel.Warning, "取块异常：" + ex.GetType().Name);
             return null;
         }
-    }
-
-    private async Task<byte[]?> FetchBlockAsync(MediaProxyRegistration registration, int blockIndex, string flightKey)
-    {
-        try
-        {
-            if (registration.Length is not { } total)
-            {
-                return null;
-            }
-
-            var blockSize = _cache.BlockSize;
-            var blockStart = (long)blockIndex * blockSize;
-            if (blockStart >= total)
-            {
-                return null;
-            }
-
-            var blockLength = (int)Math.Min(blockSize, total - blockStart);
-            var data = await DownloadRangeAsync(registration, blockStart, blockLength, _cts.Token);
-            if (data is null)
-            {
-                return null;
-            }
-
-            if (data.Length != blockLength)
-            {
-                LogMessage(MediaProxyLogLevel.Warning, "上游返回长度不足，放弃该块（不缓存不完整数据）");
-                return null;
-            }
-
-            // 写缓存可能因为超预算失败；失败也照常返回数据，只是这次不缓存.
-            _ = registration.Lease.TryWriteBlock(blockIndex, data);
-            registration.Lease.MarkFetchedFromUpstream(data.Length);
-            return data;
-        }
         finally
         {
-            _blockFlights.TryRemove(flightKey, out _);
+            var canceled = flight.Leave();
+            // flight 结束（取消或完成）就从表里摘掉：摘掉后同 range 的新请求会重新开一条，
+            // 不会挂到一条已经作废的 flight 上.
+            if (canceled || flight.Task.IsCompleted)
+            {
+                RemoveFlight(key, flight);
+            }
+
+            if (canceled)
+            {
+                LogMessage(
+                    MediaProxyLogLevel.Debug,
+                    string.Create(CultureInfo.InvariantCulture, $"请求方已取消，断开在飞的上游下载（block={blockIndex}，不写缓存）"));
+            }
         }
+    }
+
+    /// <summary>
+    /// 加入（或新开）一条块下载 flight；撞上一条正在收尾（已取消）的 flight 时摘掉它重开.
+    /// </summary>
+    private BlockFlight JoinFlight(string key, MediaProxyRegistration registration, int blockIndex)
+    {
+        while (true)
+        {
+            var flight = _blockFlights.GetOrAdd(
+                key,
+                _ => new BlockFlight(flightToken => FetchBlockAsync(registration, blockIndex, flightToken), ProxyToken));
+            if (flight.TryJoin())
+            {
+                return flight;
+            }
+
+            RemoveFlight(key, flight);
+        }
+    }
+
+    /// <summary>
+    /// 只摘掉「表里这条 key 上正好是这个实例」的 flight，别误删后来新开的.
+    /// </summary>
+    private void RemoveFlight(string key, BlockFlight flight)
+        => ((ICollection<KeyValuePair<string, BlockFlight>>)_blockFlights).Remove(new KeyValuePair<string, BlockFlight>(key, flight));
+
+    private async Task<byte[]?> FetchBlockAsync(MediaProxyRegistration registration, int blockIndex, CancellationToken ct)
+    {
+        if (registration.Length is not { } total)
+        {
+            return null;
+        }
+
+        var blockSize = _cache.BlockSize;
+        var blockStart = (long)blockIndex * blockSize;
+        if (blockStart >= total)
+        {
+            return null;
+        }
+
+        var blockLength = (int)Math.Min(blockSize, total - blockStart);
+        var data = await DownloadRangeAsync(registration, blockStart, blockLength, ct);
+        if (data is null)
+        {
+            return null;
+        }
+
+        if (data.Length != blockLength)
+        {
+            LogMessage(MediaProxyLogLevel.Warning, "上游返回长度不足，放弃该块（不缓存不完整数据）");
+            return null;
+        }
+
+        // 取消与写入之间不能再有窗口：请求方已经走了就不许把数据写进缓存.
+        ct.ThrowIfCancellationRequested();
+
+        // 写缓存可能因为超预算失败；失败也照常返回数据，只是这次不缓存.
+        _ = registration.Lease.TryWriteBlock(blockIndex, data);
+        registration.Lease.MarkFetchedFromUpstream(data.Length);
+        return data;
     }
 
     private async Task<byte[]?> DownloadRangeAsync(MediaProxyRegistration registration, long start, int length, CancellationToken ct)
@@ -1149,7 +1401,7 @@ public sealed class MediaBufferProxy : IDisposable
             if (attempt > 0)
             {
                 Interlocked.Increment(ref _upstreamRetries);
-                await Task.Delay(TimeSpan.FromMilliseconds(200 * (1 << (attempt - 1))), _cts.Token);
+                await Task.Delay(TimeSpan.FromMilliseconds(200 * (1 << (attempt - 1))), ProxyToken);
             }
 
             var result = await ProbeOnceAsync(registration);
@@ -1170,7 +1422,7 @@ public sealed class MediaBufferProxy : IDisposable
         try
         {
             using var request = CreateUpstreamRequest(registration, "bytes=0-0");
-            using var timeout = CreateUpstreamTimeout(_cts.Token);
+            using var timeout = CreateUpstreamTimeout(ProxyToken);
             Interlocked.Increment(ref _upstreamRequests);
             using var response = await _upstream.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             if (IsRetryable(response.StatusCode))
@@ -1214,7 +1466,7 @@ public sealed class MediaBufferProxy : IDisposable
             LogMessage(MediaProxyLogLevel.Warning, "长度探测失败，上游状态：" + (int)response.StatusCode);
             return false;
         }
-        catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+        catch (OperationCanceledException) when (ProxyToken.IsCancellationRequested)
         {
             return false;
         }
@@ -1347,6 +1599,80 @@ public sealed class MediaBufferProxy : IDisposable
         }
 
         return new RequestHead(requestLine[0], requestLine[1], requestLine.Length > 2 ? requestLine[2] : "HTTP/1.1", headers);
+    }
+
+    /// <summary>
+    /// 一个块的在飞下载：多个请求共享同一条 flight；最后一个等待者离开时取消上游下载
+    /// （取消后不写缓存，下一次同一 range 的请求会重开一条 flight 重新拉）.
+    /// </summary>
+    private sealed class BlockFlight
+    {
+        private readonly CancellationTokenSource _cts;
+        private readonly object _gate = new();
+
+        private int _waiters;
+        private bool _closed;
+
+        public BlockFlight(Func<CancellationToken, Task<byte[]?>> body, CancellationToken proxyToken)
+        {
+            _cts = CancellationTokenSource.CreateLinkedTokenSource(proxyToken);
+            Task = body(_cts.Token);
+        }
+
+        public Task<byte[]?> Task { get; }
+
+        /// <summary>
+        /// 加一个等待者；这条 flight 已经在收尾（被取消）时返回 false，调用方应重开一条.
+        /// </summary>
+        public bool TryJoin()
+        {
+            lock (_gate)
+            {
+                if (_closed)
+                {
+                    return false;
+                }
+
+                _waiters++;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// 一个等待者离开；返回 true 表示它是最后一个走的，并且上游下载因此被取消.
+        /// </summary>
+        public bool Leave()
+        {
+            lock (_gate)
+            {
+                if (_waiters > 0)
+                {
+                    _waiters--;
+                }
+
+                // 还有人等、已经收尾、或者已经跑完（成功失败都算）→ 都不用取消.
+                if (_waiters > 0 || _closed || Task.IsCompleted)
+                {
+                    return false;
+                }
+
+                _closed = true;
+            }
+
+            Cancel();
+            return true;
+        }
+
+        public void Cancel()
+        {
+            try
+            {
+                _cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
     }
 
     /// <summary>

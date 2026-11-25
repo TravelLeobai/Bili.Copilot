@@ -1,10 +1,12 @@
 // Copyright (c) Bili Copilot. All rights reserved.
 
+using System.Globalization;
 using BiliCopilot.UI.Controls.Core;
 using BiliCopilot.UI.Forms;
 using BiliCopilot.UI.Models;
 using BiliCopilot.UI.Models.Constants;
 using BiliCopilot.UI.Services;
+using BiliCopilot.UI.Services.Media;
 using BiliCopilot.UI.Services.Sponsor;
 using BiliCopilot.UI.Resolvers;
 using BiliCopilot.UI.Toolkits;
@@ -16,6 +18,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Richasy.WinUIKernel.Share.ViewModels;
 using Richasy.BiliKernel.Models.Danmaku;
+using Richasy.BiliKernel.Models.Media;
 using WinUIEx;
 
 namespace BiliCopilot.UI.ViewModels.Core;
@@ -149,8 +152,66 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         _initCts = null;
         _lifetimeCts.Dispose();
 
+        // 播放器销毁 = 这一路播放结束：把代理登记和它的缓存租约一起放掉。
+        // 不释放的话，条目会一直被租约钉住（有租约的条目不允许淘汰），连播多个视频后
+        // 缓存写不进去、内存顶在容量上限.
+        ReleaseMediaProxyRegistration();
+
         this.Get<AppViewModel>().Players.Remove(this);
         Services.PlayerLifecycle.End($"PlayerVM#{LifecycleId}", "dispose", disposeWatch);
+    }
+
+    /// <summary>
+    /// 释放当前播放对应的媒体代理登记：按 <c>player:{bvid}:{cid}</c> 精确释放，
+    /// 拿不到 cid 时按 <c>player:{bvid}:</c> 前缀把整个视频的登记一起释放.
+    /// </summary>
+    private void ReleaseMediaProxyRegistration()
+    {
+        if (_snapshot is null)
+        {
+            return;
+        }
+
+        // 归属键必须和 Video/PgcMediaSourceResolver.Initialize 里的格式、取值顺序完全一致，
+        // 否则释放不到那条登记（只能等空闲回收兜底）.
+        string mediaId;
+        string cid;
+        switch (Connector)
+        {
+            case VideoConnectorViewModel videoConnector:
+                mediaId = _snapshot.Video?.Identifier.Id ?? string.Empty;
+                cid = videoConnector._part?.Identifier.Id ?? string.Empty;
+                break;
+            case PgcConnectorViewModel pgcConnector:
+                mediaId = _snapshot.Season?.Identifier.Id
+                    ?? pgcConnector._episode?.Identifier.Id
+                    ?? _snapshot.Episode?.Identifier.Id
+                    ?? string.Empty;
+                cid = pgcConnector._episode is null
+                    ? string.Empty
+                    : pgcConnector._episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString(CultureInfo.InvariantCulture);
+                break;
+            default:
+                mediaId = _snapshot.Video?.Identifier.Id
+                    ?? _snapshot.Season?.Identifier.Id
+                    ?? _snapshot.Episode?.Identifier.Id
+                    ?? string.Empty;
+                cid = _snapshot.PreferPart?.Identifier.Id ?? string.Empty;
+                break;
+        }
+
+        if (string.IsNullOrEmpty(mediaId))
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(cid))
+        {
+            MediaBufferProxyBridge.ReleaseOwnerPrefix($"player:{mediaId}:");
+            return;
+        }
+
+        MediaBufferProxyBridge.ReleaseOwner($"player:{mediaId}:{cid}");
     }
 
     [RelayCommand]

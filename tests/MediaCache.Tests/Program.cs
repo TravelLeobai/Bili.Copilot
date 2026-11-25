@@ -11,6 +11,8 @@ RegisterRangeTests();
 RegisterCacheTests();
 RegisterProxyTests();
 PrefetchTests.Register();
+ProxyLifecycleTests.Register();
+MediaCancelTests.Register();
 SegmentPlannerTests.Register();
 SponsorMuteTests.Register();
 FfmpegE2ETest.Register();

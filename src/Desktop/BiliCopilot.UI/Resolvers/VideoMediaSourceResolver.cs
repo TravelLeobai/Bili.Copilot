@@ -30,12 +30,23 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
 
     public void Initialize(MediaSnapshot snapshot, VideoPart part)
     {
+        // 换集 / 换源的第一站：先把上一路播放的代理登记与缓存租约放掉（归属键不同才释放；
+        // 同一集换画质由 TryWrap 里的「同键旧登记清理」负责）。
+        // 不释放的话，带租约的缓存条目不允许淘汰，连播多个视频后缓存写不进、内存顶在容量上限.
+        MediaBufferProxyBridge.ReleasePreviousOwner(BuildProxyOwnerKey(snapshot, part));
         _snapshot = snapshot;
         _part = part;
         _playbackInfo = default;
         _initTask?.TrySetCanceled();
         _initCts?.Cancel();
     }
+
+    /// <summary>
+    /// 媒体代理的归属键：稳定形如 <c>player:{bvid}:{cid}</c>。
+    /// 换集释放、播放器销毁释放、应用退出释放都用同一个格式，三处必须一致.
+    /// </summary>
+    private static string BuildProxyOwnerKey(MediaSnapshot snapshot, VideoPart? part)
+        => $"player:{snapshot.Video?.Identifier.Id}:{part?.Identifier.Id}";
 
     internal void ResetSnapshot(MediaSnapshot snapshot)
     {
@@ -173,7 +184,7 @@ internal sealed partial class VideoMediaSourceResolver(IPlayerService playerServ
             var primaryUrl = hasVideo ? videoUrl : audioUrl!;
             var secondaryUrl = hasVideo ? audioUrl : null;
             var proxyRequest = MediaBufferProxyBridge.CreateRequest(
-                ownerKey: $"{_snapshot.Video.Identifier.Id}:{_part.Identifier.Id}",
+                ownerKey: BuildProxyOwnerKey(_snapshot, _part),
                 bvid: _snapshot.Video.Identifier.Id,
                 cid: _part.Identifier.Id,
                 displayName: _snapshot.Video.Identifier.Title,

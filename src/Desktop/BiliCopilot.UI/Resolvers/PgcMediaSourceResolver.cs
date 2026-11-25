@@ -28,11 +28,27 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
 
     public void Initialize(MediaSnapshot snapshot, EpisodeInformation episode)
     {
+        // 换集第一站：先释放上一路播放的代理登记与缓存租约（格式与 GetSourceAsync 的 ownerKey 一致）.
+        MediaBufferProxyBridge.ReleasePreviousOwner(BuildProxyOwnerKey(snapshot, episode));
         _snapshot = snapshot;
         _episode = episode;
         _playbackInfo = default;
         _initTask?.TrySetCanceled();
         _initCts?.Cancel();
+    }
+
+    /// <summary>
+    /// 媒体代理的归属键：稳定形如 <c>player:{seasonId 或 epId}:{cid}</c>。
+    /// 番剧没有 bvid，用 seasonId / epId 当「视频 id」。
+    /// </summary>
+    private static string BuildProxyOwnerKey(MediaSnapshot snapshot, EpisodeInformation? episode)
+    {
+        var ownerId = snapshot.Season?.Identifier.Id
+            ?? episode?.Identifier.Id
+            ?? snapshot.Episode?.Identifier.Id
+            ?? string.Empty;
+        var cid = episode?.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid) ?? 0;
+        return $"player:{ownerId}:{cid.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
     }
 
     internal void ResetSnapshot(MediaSnapshot snapshot)
@@ -117,7 +133,7 @@ internal sealed partial class PgcMediaSourceResolver(IPlayerService playerServic
             var cid = _episode.GetExtensionIfNotNull<long>(EpisodeExtensionDataId.Cid).ToString(System.Globalization.CultureInfo.InvariantCulture);
             var ownerId = _snapshot.Season?.Identifier.Id ?? _episode.Identifier.Id;
             var proxyRequest = MediaBufferProxyBridge.CreateRequest(
-                ownerKey: $"{ownerId}:{cid}",
+                ownerKey: BuildProxyOwnerKey(_snapshot, _episode),
                 bvid: ownerId,
                 cid: cid,
                 displayName: title ?? string.Empty,
