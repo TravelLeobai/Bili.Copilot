@@ -124,6 +124,9 @@ public sealed partial class PlayerViewModel(DispatcherQueue queue, ILogger<Playe
         {
             Client.ErrorOccurred -= OnClientErrorOccurred;
             Client.CacheStateChanged -= OnClientCacheStateChanged;
+            // 句柄跟着 client 一起作废：不清掉的话下次会拿着旧 handle 去读属性.
+            _cacheBridge = null;
+            _cacheStateReader.Reset();
             try
             {
                 await Client.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));

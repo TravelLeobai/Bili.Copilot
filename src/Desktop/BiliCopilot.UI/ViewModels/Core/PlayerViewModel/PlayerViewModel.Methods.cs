@@ -122,6 +122,11 @@ public sealed partial class PlayerViewModel
             Services.PerfWidgetMountTrace.Mark("mpv-client-ready");
             Client.ErrorOccurred += OnClientErrorOccurred;
             Client.CacheStateChanged += OnClientCacheStateChanged;
+
+            // 这个分支会再跑一次就说明 client 是新建的（旧的被释放过），
+            // 属性桥里存的是旧 handle，必须作废重建，否则后面拿失效句柄去读属性.
+            _cacheBridge = null;
+
             SetSubtitleDelaySecondsCommand.Execute(SubtitleDelaySeconds);
 
             if (decodeType == PreferDecodeType.Auto)
@@ -201,43 +206,12 @@ public sealed partial class PlayerViewModel
                     }
                 }
 
-                var cacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 300d);
-                var cacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 360d);
-                var backCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, 0d);
-                await Client.SetDemuxerMaxBytesAsync($"{Convert.ToInt32(cacheSize)}MiB");
-                await Client.SetDemuxerReadheadSecondsAsync(Convert.ToInt32(cacheSeconds));
-                if (Convert.ToInt32(backCacheSize) > 0)
-                {
-                    await Client.SetDemuxerMaxBackBytesAsync($"{Convert.ToInt32(backCacheSize)}MiB");
-                }
-
-                var useCacheOnDisk = SettingsToolkit.ReadLocalSetting(SettingNames.CacheOnDisk, false);
-
-                // 直播不写磁盘缓存：mpv 对直播流建文件缓存会失败（日志里 Failed to create file cache），
-                // 失败后偶尔连视频轨都起不来.
-                if (IsLive && useCacheOnDisk)
-                {
-                    useCacheOnDisk = false;
-                    logger.LogInformation("直播已禁用磁盘缓存");
-                }
-
-                await Client.SetCacheOnDiskAsync(useCacheOnDisk);
-                if (useCacheOnDisk)
-                {
-                    var cacheDir = SettingsToolkit.ReadLocalSetting(SettingNames.CacheDir, string.Empty);
-                    if (!string.IsNullOrEmpty(cacheDir) && Directory.Exists(cacheDir))
-                    {
-                        try
-                        {
-                            await Client.SetCacheDirAsync(cacheDir);
-                        }
-                        catch
-                        {
-                        }
-                    }
-                }
+                // 缓冲参数不在这里下发：它现在由 ApplyCacheOptionsAsync 统一处理，
+                // 因为这一整段被「只有第一次创建 client」的 if 包着，同窗口换集复用播放器时根本不会重跑，
+                // 而且自定义 mpv.conf 的分支会把这一整段跳过。见 ApplyCacheOptionsAsync 的注释.
 
                 var profile = SettingsToolkit.ReadLocalSetting(SettingNames.MpvBuiltInProfile, MpvBuiltInProfile.HighQuality);
+
                 if (profile != MpvBuiltInProfile.HighQuality)
                 {
                     await Client.SetLoadAutoProfilesAsync(true);
@@ -272,6 +246,11 @@ public sealed partial class PlayerViewModel
                 await RestorePlaybackEnhancementsAsync();
             }
         }
+
+        // 缓冲参数在 if 外面：不管这次是刚建 client，还是同窗口换集复用现有播放器
+        // （PlayerViewModel.InitializeCoreAsync 里那条 reusePlayer 分支），都会重新下发一遍。
+        // 旧实现在 if 里面，换集时完全不重读设置.
+        await ApplyCacheOptionsAsync();
 
         if (_rightKeyLongPressTimer == null)
         {
@@ -481,7 +460,123 @@ public sealed partial class PlayerViewModel
         // 缓冲欠载 / 恢复也算稳定期：这段时间的「停滞」不是要抓的那一种.
         NotifyPlaybackStallSettling();
 #endif
+        // 事件在 mpv 的事件线程上：这里只把数值记到 reading（一次引用赋值，不加锁），
+        // 统计浮层按 1Hz 自己来读，不能在这里刷 UI，也不能每帧刷.
+        IReadOnlyList<Services.Mpv.MpvSeekableRangeSnapshot> ranges = e.SeekableRanges is null
+            ? Array.Empty<Services.Mpv.MpvSeekableRangeSnapshot>()
+            : e.SeekableRanges.Select(range => new Services.Mpv.MpvSeekableRangeSnapshot(range.Start, range.End)).ToList();
+        _cacheStateReader.RecordEvent(e.FwBytes, e.FileCacheBytes, e.BofCached, e.EofCached, ranges);
         CacheStateChanged?.Invoke(this, e);
+    }
+
+    /// <summary>
+    /// 把「缓冲」这一组 mpv 属性按当前设置下发一遍.
+    /// <para>
+    /// 与改动之前的区别（三个缺陷）：<br/>
+    /// 1. 不再被外层那个 <c>Client?.IsDisposed != false</c>（只有第一次创建 client 才成立）包住：
+    ///    每次初始化都调用，同窗口换集复用播放器时也会重新下发，改了设置换一集就生效；<br/>
+    /// 2. 三态语义：自动（不下发）/ 显式 0（下发 "0"）/ 用户值。旧实现把 0 当「没设置」跳过，
+    ///    于是用户关掉后向缓存也仍在用 mpv 默认的 50MiB；<br/>
+    /// 3. 用自定义 mpv.conf 时也会下发：本方法在 <c>SetConfigFileAsync</c> 之后执行，
+    ///    同名项以这里下发的值为准（旧实现整段被 else 跳过，内置缓冲设置对自定义用户完全失效）.
+    /// </para>
+    /// <para>
+    /// 下发通道是 <see cref="BiliCopilot.UI.Services.Mpv.MpvPropertyBridge"/>：内核的 MpvClient 没有
+    /// <c>cache-secs</c> / <c>demuxer-donate-buffer</c> / <c>demuxer-seekable-cache</c> 的 setter，
+    /// 只有直接按属性名下发才能让这几项生效。每一条成功/失败都会写日志（带属性名与值），验收时对日志即可.
+    /// </para>
+    /// </summary>
+    /// <returns><see cref="Task"/>.</returns>
+    internal Task ApplyCacheOptionsAsync()
+    {
+        var client = Client;
+        if (client is null || client.IsDisposed)
+        {
+            logger.LogDebug("跳过缓冲参数下发：mpv client 不可用");
+            return Task.CompletedTask;
+        }
+
+        _cacheBridge ??= Services.Mpv.MpvPropertyBridge.TryCreate(client, logger);
+        if (_cacheBridge is null)
+        {
+            logger.LogWarning("跳过缓冲参数下发：拿不到可用的 mpv 句柄（MpvClient.Handle）");
+            return Task.CompletedTask;
+        }
+
+        var decodeType = SettingsToolkit.ReadLocalSetting(SettingNames.PreferDecode, PreferDecodeType.Auto);
+        var configSource = decodeType == PreferDecodeType.Custom
+            ? Services.Mpv.MpvCacheConfigSource.CustomMpvConf
+            : Services.Mpv.MpvCacheConfigSource.BuiltIn;
+        var settings = Services.Mpv.MpvCacheSettingsFactory.Create(IsLive, configSource);
+
+        // 换集时先把上一条的缓冲实况清掉，别让统计面板继续显示上一集的数字.
+        _cacheStateReader.Reset();
+
+        var result = new Services.Mpv.MpvCacheOptionApplier(_cacheBridge).Apply(settings);
+
+        foreach (var property in result.SkippedAuto)
+        {
+            logger.LogInformation("缓冲参数按「自动」跳过：{Property}（不下发，跟随 mpv 默认）", property);
+        }
+
+        foreach (var attempt in result.Attempts)
+        {
+            if (attempt.State == Services.Mpv.MpvCacheAttemptState.Sent)
+            {
+                logger.LogInformation(
+                    "缓冲参数已下发：{Property}={Value}（配置来源={Source}）",
+                    attempt.Property,
+                    attempt.Value,
+                    configSource);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "缓冲参数下发失败：{Property}={Value}，mpv 返回 {Error}（配置来源={Source}）",
+                    attempt.Property,
+                    attempt.Value,
+                    attempt.Error,
+                    configSource);
+            }
+        }
+
+        logger.LogInformation(
+            "缓冲参数下发完成：成功 {Sent} 项、失败 {Failed} 项、按自动跳过 {Skipped} 项（配置来源={Source}，直播={IsLive}）",
+            result.SentCount,
+            result.FailedCount,
+            result.SkippedAuto.Count,
+            configSource,
+            IsLive);
+
+        LogCacheStateReadability();
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 探一下 <c>demuxer-cache-state</c> 到底能不能直接读字段，并写一行日志.
+    /// 本机实测：能读到 NodeMap 和键数，但内核的 MpvNodeList 只映射了 Num，
+    /// 字段值读不出来 —— 所以明细改走 CacheStateChanged 事件，这里把「降级」写明，不假装成功.
+    /// </summary>
+    private void LogCacheStateReadability()
+    {
+        if (_cacheBridge is null)
+        {
+            return;
+        }
+
+        var ok = _cacheBridge.TryProbeNode(Services.Mpv.MpvCachePropertyNames.DemuxerCacheState, out var entries);
+        if (ok)
+        {
+            logger.LogInformation(
+                "demuxer-cache-state 可读（NodeMap，{Count} 项），但字段值不可直接读取（CanReadNodeFields={CanRead}）；缓冲明细走 CacheStateChanged 事件",
+                entries,
+                _cacheBridge.CanReadNodeFields);
+        }
+        else
+        {
+            logger.LogWarning("demuxer-cache-state 读不到；缓冲明细只能等 CacheStateChanged 事件，实际值将显示为「不支持」");
+        }
     }
 
     private async void OnClientErrorOccurred(object? sender, MpvError e)

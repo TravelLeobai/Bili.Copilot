@@ -135,9 +135,14 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         PreferAudioChannelLayout = SettingsToolkit.ReadLocalSetting(SettingNames.PreferAudioChannelLayout, Richasy.MpvKernel.Core.Enums.AudioChannelLayoutType.Auto);
         MpvBuiltInProfile = SettingsToolkit.ReadLocalSetting(SettingNames.MpvBuiltInProfile, MpvBuiltInProfile.HighQuality);
         UseIntegrationWhenSinglePlayWindow = SettingsToolkit.ReadLocalSetting(SettingNames.UseIntegrationWhenSinglePlayWindow, true);
-        MaxCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, 300d); // Default to 300 MB
-        MaxBackCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, 0d); // Default to 0 MB
-        MaxCacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, 300d); // Default to 300 seconds
+        MaxCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSize, Services.Mpv.MpvCacheDefaults.ForwardMiB); // 默认 300 MiB
+        MaxBackCacheSize = SettingsToolkit.ReadLocalSetting(SettingNames.MaxBackCacheSize, Services.Mpv.MpvCacheDefaults.BackMiB); // 默认 0 MiB
+        // 预读秒数与播放器的默认值必须是同一个常量，否则「没改过设置」也会出现界面上看是 300、实际下发 360.
+        MaxCacheSeconds = SettingsToolkit.ReadLocalSetting(SettingNames.MaxCacheSeconds, Services.Mpv.MpvCacheDefaults.ReadAheadSeconds);
+        CacheAutoMode = SettingsToolkit.ReadLocalSetting(SettingNames.CacheAutoMode, Services.Mpv.MpvCacheDefaults.ForwardAuto);
+        CacheSecsLimit = SettingsToolkit.ReadLocalSetting(SettingNames.CacheSecsLimit, Services.Mpv.MpvCacheDefaults.CacheSecondsLimit);
+        DemuxerDonateBuffer = SettingsToolkit.ReadLocalSetting(SettingNames.DemuxerDonateBuffer, Services.Mpv.MpvCacheDefaults.DonateBuffer);
+        DemuxerSeekableCache = SettingsToolkit.ReadLocalSetting(SettingNames.DemuxerSeekableCache, Services.Mpv.MpvCacheDefaults.SeekableCache);
         HrSeek = SettingsToolkit.ReadLocalSetting(SettingNames.HrSeek, HrSeekType.Default);
         MaxVolume = SettingsToolkit.ReadLocalSetting(SettingNames.MaxVolume, 100d);
         AudioExclusiveEnabled = SettingsToolkit.ReadLocalSetting(SettingNames.AudioExclusiveEnabled, false);
@@ -320,6 +325,38 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
         SettingsToolkit.DeleteLocalSetting(SettingNames.CustomLibmpvPath);
         CanResetLibMpvPath = false;
         CheckRestartTip();
+    }
+
+    /// <summary>
+    /// 把「缓冲与缓存」这一组恢复默认值.
+    /// 只动缓冲相关的键：着色器、音量、mpv.conf、播放器其它设置都不碰.
+    /// 默认值全部取自 <c>Services.Mpv.MpvCacheDefaults</c>，与播放器下发的默认值同源.
+    /// </summary>
+    [RelayCommand]
+    private void ResetMpvCacheOptions()
+    {
+        MaxCacheSize = Services.Mpv.MpvCacheDefaults.ForwardMiB;
+        MaxBackCacheSize = Services.Mpv.MpvCacheDefaults.BackMiB;
+        MaxCacheSeconds = Services.Mpv.MpvCacheDefaults.ReadAheadSeconds;
+        CacheAutoMode = Services.Mpv.MpvCacheDefaults.ForwardAuto;
+        CacheSecsLimit = Services.Mpv.MpvCacheDefaults.CacheSecondsLimit;
+        DemuxerDonateBuffer = Services.Mpv.MpvCacheDefaults.DonateBuffer;
+        DemuxerSeekableCache = Services.Mpv.MpvCacheDefaults.SeekableCache;
+        CacheOnDisk = Services.Mpv.MpvCacheDefaults.CacheOnDisk;
+        SettingsToolkit.DeleteLocalSetting(SettingNames.CacheDir);
+        CacheDirDescription = "--demuxer-cache-dir";
+        HasCustomCacheDir = false;
+
+        // 上面每一项的 OnXxxChanged 只在「值真的变了」时才写设置，
+        // 所以这里再把默认值直接落一遍，保证界面上看着是默认、存储里也是默认.
+        SettingsToolkit.WriteLocalSetting(SettingNames.MaxCacheSize, MaxCacheSize);
+        SettingsToolkit.WriteLocalSetting(SettingNames.MaxBackCacheSize, MaxBackCacheSize);
+        SettingsToolkit.WriteLocalSetting(SettingNames.MaxCacheSeconds, MaxCacheSeconds);
+        SettingsToolkit.WriteLocalSetting(SettingNames.CacheAutoMode, CacheAutoMode);
+        SettingsToolkit.WriteLocalSetting(SettingNames.CacheSecsLimit, CacheSecsLimit);
+        SettingsToolkit.WriteLocalSetting(SettingNames.DemuxerDonateBuffer, DemuxerDonateBuffer);
+        SettingsToolkit.WriteLocalSetting(SettingNames.DemuxerSeekableCache, DemuxerSeekableCache);
+        SettingsToolkit.WriteLocalSetting(SettingNames.CacheOnDisk, CacheOnDisk);
     }
 
     [RelayCommand]
@@ -914,6 +951,25 @@ public sealed partial class SettingsPageViewModel : AISettingsViewModelBase
 
     partial void OnCacheOnDiskChanged(bool value)
         => SettingsToolkit.WriteLocalSetting(SettingNames.CacheOnDisk, value);
+
+    partial void OnCacheAutoModeChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.CacheAutoMode, value);
+
+    partial void OnCacheSecsLimitChanged(double value)
+    {
+        if (double.IsNaN(value))
+        {
+            return;
+        }
+
+        SettingsToolkit.WriteLocalSetting(SettingNames.CacheSecsLimit, value);
+    }
+
+    partial void OnDemuxerDonateBufferChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.DemuxerDonateBuffer, value);
+
+    partial void OnDemuxerSeekableCacheChanged(bool value)
+        => SettingsToolkit.WriteLocalSetting(SettingNames.DemuxerSeekableCache, value);
 
     partial void OnScrollAccelerateChanged(bool value)
     {
