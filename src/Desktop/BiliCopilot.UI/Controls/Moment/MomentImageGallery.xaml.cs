@@ -22,6 +22,16 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
     private const double MinTileEdge = 84d;
 
     /// <summary>
+    /// 加列的门槛：格子还得有这个宽度才值得多铺一列，否则只是把图挤小.
+    /// </summary>
+    private const double ComfortableTileEdge = 110d;
+
+    /// <summary>
+    /// 加列的上限：再多列一行就塞不下可看的图，纯属挤.
+    /// </summary>
+    private const int MaxExpandedColumns = 5;
+
+    /// <summary>
     /// 单图时的目标宽高比（16:9）。B 站动态里单图通常是宽幅，缩成方图会把上下裁掉.
     /// </summary>
     private const double SingleImageAspect = 9d / 16d;
@@ -69,7 +79,10 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
 
     /// <summary>
     /// 按可用宽度算列数与格子尺寸，写回 UniformGridLayout.
-    /// 规则：1 张铺满整行（16:9）；2、4 张用 2 列；其余最多 3 列；
+    /// 规则：1 张铺满整行（16:9）；2、4 张用 2 列；5~9 张先给 3 列；
+    /// 宽卡片（格子还能保持 <see cref="ComfortableTileEdge"/> 以上）时，
+    /// 5 张以上的动态会往上加列 —— 但只接受能整除图片数的列数，
+    /// 否则末行会剩孤零零一两个，比三列还难看.
     /// 格子小于 <see cref="MinTileEdge"/> 就减一列，直到 1 列.
     /// </summary>
     private void UpdateGridMetrics()
@@ -88,12 +101,18 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
             _ => 3,
         };
 
-        while (columns > 1 && ((width - (TileSpacing * (columns - 1))) / columns) < MinTileEdge)
+        // 卡片够宽时，5 张以上多铺几列（4 张固定 2×2，1/2 张不动）.
+        if (count > 4)
+        {
+            columns = GetExpandedColumns(width, count, columns);
+        }
+
+        while (columns > 1 && TileWidthFor(width, columns) < MinTileEdge)
         {
             columns--;
         }
 
-        var tileWidth = (width - (TileSpacing * (columns - 1))) / columns;
+        var tileWidth = TileWidthFor(width, columns);
         var tileHeight = count == 1 ? Math.Max(MinTileEdge, width * SingleImageAspect) : tileWidth;
 
         // 只在真的变了才写：这几个属性每变一次都会触发一次布局，
@@ -119,6 +138,38 @@ public sealed partial class MomentImageGallery : LayoutUserControlBase
             ImageLayout.MinItemHeight = tileHeight;
         }
     }
+
+    /// <summary>
+    /// 宽卡片上给 5 张以上的动态多铺几列。
+    /// 候选列数从 4 往上试到 <see cref="MaxExpandedColumns"/>，同时要求：
+    /// 格子不小于 <see cref="ComfortableTileEdge"/>；末行不能只剩一两个（至少占半行）。
+    /// 能整除图片数的列数优先 —— 8 张 → 4 列（2×2）比 8 张 → 5 列（5+3）好看.
+    /// </summary>
+    private static int GetExpandedColumns(double width, int count, int current)
+    {
+        var best = current;
+        var upper = Math.Min(count, MaxExpandedColumns);
+        for (var candidate = current + 1; candidate <= upper; candidate++)
+        {
+            if (TileWidthFor(width, candidate) < ComfortableTileEdge)
+            {
+                break;
+            }
+
+            var rows = (count + candidate - 1) / candidate;
+            var lastRow = count - (candidate * (rows - 1));
+            var isEven = count % candidate == 0;
+            if (isEven || lastRow >= (candidate + 1) / 2)
+            {
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    private static double TileWidthFor(double width, int columns)
+        => (width - (TileSpacing * (columns - 1))) / columns;
 
     private static bool NearlyEquals(double a, double b) => Math.Abs(a - b) < 0.5d;
 
